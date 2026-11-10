@@ -39,7 +39,7 @@ $('#f-url').addEventListener('submit', async (e) => {
     state.uploads = [];
     initVariant();
     // le vrai logo : affiché dans la vidéo, et ses couleurs servent de palette
-    state.logo = loadLogo(state.page.logos).then((img) => (img ? { img, colors: logoColors(img) } : null));
+    state.logo = loadLogo(state.page.logos).then((img) => (img ? { img, colors: logoColors(img), light: logoIsLight(img) } : null));
     renderType();
   } catch (err) {
     show('s-url', 1);
@@ -60,7 +60,7 @@ function renderType() {
   $$('.type .badge').forEach((b) => (b.hidden = b.parentElement.dataset.type !== p.guess.type));
   setType(p.guess.type);
   fail($('#e-type'), '');
-  fail($('#blocked'), p.blocked ? `This site refuses automated reading (error ${p.blocked}). ClipMotion will read a screenshot of the page instead. For an e-commerce ad, add your product photos below so the real product is shown.` : '');
+  fail($('#blocked'), p.blocked ? `This site is protected against automated reading (${p.blocked}), so its photos and price could not be imported. Add your product photos below: the ad will be built from them and from the product name.` : '');
   show('s-type', 3);
 }
 function setType(t) {
@@ -336,6 +336,18 @@ function logoColors(img) {
     const second = order.find((o) => o.w > order[0].w * 0.15 && Math.min(Math.abs(o.i - order[0].i), 24 - Math.abs(o.i - order[0].i)) >= 3);
     return second ? { primary: order[0].hex, accent: second.hex } : { primary: order[0].hex };
   } catch { return null; }
+}
+// Logo clair (blanc) : il lui faut une pastille sombre pour rester visible.
+function logoIsLight(img) {
+  try {
+    const n = 48, c = Object.assign(document.createElement('canvas'), { width: n, height: n });
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, n, n);
+    const d = g.getImageData(0, 0, n, n).data;
+    let sum = 0, count = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 3] > 128) { sum += 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2]; count++; }
+    return count > 0 && count < n * n * 0.98 && sum / count > 205;
+  } catch { return false; }
 }
 function loadVideoEl(blob) {
   return new Promise((res) => {
@@ -639,7 +651,7 @@ function makeRenderer(cv, job) {
   function logoTile(x, y, size) {
     ctx.save();
     ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = size * 0.3; ctx.shadowOffsetY = size * 0.08;
-    ctx.fillStyle = '#fff'; rr(x, y, size, size, size * 0.24); ctx.fill();
+    ctx.fillStyle = job.logoLight ? '#14121f' : '#fff'; rr(x, y, size, size, size * 0.24); ctx.fill();
     ctx.shadowColor = 'transparent';
     rr(x, y, size, size, size * 0.24); ctx.clip();
     const iw = logo.naturalWidth || size, ih = logo.naturalHeight || size, f = Math.min(size / iw, size / ih) * (Math.abs(iw - ih) < iw * 0.15 ? 1 : 0.82);
@@ -968,7 +980,7 @@ async function produce(ad) {
       Promise.all(scenes.map((s, i) => tick(clips[i] && needClip(s) ? fetchBlob(media(lite ? clips[i].lite : clips[i].url)) : Promise.resolve(null)))),
       Promise.all(scenes.map((s) => tick(loadVoice(actx, s.voiceover, plan.language)))),
       tick(site ? loadImage('/api/shot?u=' + encodeURIComponent(page.url)) : Promise.resolve(null)),
-      tick(state.logo.then((l) => l && l.img)),
+      tick(state.logo.then((l) => { job.logoLight = !!l?.light; return l && l.img; })),
       Promise.all(photoIds.map((i) => tick(loadImage(state.photoUrls[i])))),
       tick(Promise.all([document.fonts.load('800 60px Poppins'), document.fonts.load('600 30px Poppins')])),
     ]);

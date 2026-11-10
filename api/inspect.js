@@ -1,7 +1,10 @@
 // Étape 1 : récupère la page et en extrait le contenu utile + une première estimation SaaS / E-com.
 const { send, readJson, httpError, safeFetch, readCapped, handler } = require('../lib/util');
 
+const NAMED = { eacute: 'é', egrave: 'è', ecirc: 'ê', euml: 'ë', agrave: 'à', acirc: 'â', auml: 'ä', ccedil: 'ç', icirc: 'î', iuml: 'ï', ocirc: 'ô', ouml: 'ö', ugrave: 'ù', ucirc: 'û', uuml: 'ü', Eacute: 'É', Egrave: 'È', Agrave: 'À', Ccedil: 'Ç', szlig: 'ß', ntilde: 'ñ', aacute: 'á', iacute: 'í', oacute: 'ó', uacute: 'ú', euro: '€', pound: '£', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', laquo: '«', raquo: '»', hellip: '…', ndash: '–', mdash: '—', deg: '°', reg: '®', copy: '©', trade: '™', times: '×', middot: '·', bull: '•' };
 const decode = (s = '') => s
+  .replace(/&amp;(?=#?\w+;)/g, '&')
+  .replace(/&([a-zA-Z]+);/g, (m, n) => NAMED[n] ?? m)
   .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(+n))
   .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
   .replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
@@ -109,34 +112,40 @@ function extract(html, base) {
     if (OPT.test(name)) addOpt(name, attr(tag, 'value') || attr(tag, 'aria-label'));
   }
 
-  // Images : on réunit toutes les sources (données structurées, galerie zoom, liens, scripts),
-  // on retire les doublons de tailles différentes et on garde la version la plus grande.
-  const images = [], seen = new Map();
-  const JUNK = /sprite|pixel|tracking|1x1|spacer|placeholder|loader|spinner|logo|icon|favicon|payment|paypal|visa|mastercard|klarna|badge|flag|avatar|emoji|star|rating|trustpilot|gravatar/i;
-  const SIZE = /([_-])(\d{2,4}x\d{0,4}|x\d{2,4}|pico|icon|thumb|thumbnail|small|compact|medium|large|grande|master)(?=(?:@\dx)?\.[a-z]{3,4}$)/i;
-  const add = (u, big = false) => {
-    let h = abs(String(u || '').trim().replace(/\\u002F/gi, '/').replace(/\\\//g, '/').replace(/&amp;/g, '&'));
-    if (!h || !/^https?:/.test(h) || !/\.(jpe?g|png|webp|avif)(\?|$)/i.test(h) && !big) return;
-    if (/\.(svg|gif|ico)(\?|$)/i.test(h) || JUNK.test(h.split('?')[0].split('/').slice(-2).join('/'))) return;
+  // Images. Sur une fiche produit, on ne garde QUE les photos de ce produit :
+  //  - sources sûres : données structurées, variantes, image de partage, galerie zoom ;
+  //  - autres images de la page : seulement si leur nom de fichier porte la référence du produit.
+  // Les produits recommandés, bannières et menus sont donc écartés.
+  const JUNK = /sprite|pixel|tracking|1x1|spacer|placeholder|loader|spinner|logo|icon|favicon|payment|paypal|visa|mastercard|klarna|badge|flag|avatar|emoji|star|rating|trustpilot|gravatar|megamenu|banner|navmob|pushcontent/i;
+  const SIZE = /([_-])(\d{2,4}x\d{0,4}|x\d{2,4}|pico|icon|thumb|thumbnail|small|compact|medium|large|grande)(?=(?:@\dx)?\.[a-z]{3,4}$)/i;
+  const cands = [], seen = new Set();
+  const stemOf = (u) => { try { return decodeURIComponent(new URL(u).pathname.split('/').pop()).replace(/\.[a-z0-9]+$/i, '').toLowerCase(); } catch { return ''; } };
+  const add = (u, trusted = false) => {
+    const h = abs(decode(String(u || '').trim()).replace(/\\u002F/gi, '/').replace(/\\\//g, '/'));
+    if (!h || !/^https?:/.test(h) || (!trusted && !/\.(jpe?g|png|webp|avif)(\?|$)/i.test(h))) return;
+    if (/\.(svg|gif|ico)(\?|$)/i.test(h) || JUNK.test(h.split('?')[0].split('/').slice(-3).join('/'))) return;
     let url;
     try { url = new URL(h); } catch { return; }
     // version pleine taille : suffixe de taille retiré (Shopify, WooCommerce), largeur demandée relevée
     url.pathname = url.pathname.replace(SIZE, '');
-    for (const k of ['width', 'w', 'wid']) if (url.searchParams.has(k)) url.searchParams.set(k, '1200');
-    for (const k of ['height', 'h', 'hei', 'crop']) url.searchParams.delete(k);
+    for (const k of ['width', 'w', 'wid', 'sw']) if (url.searchParams.has(k)) url.searchParams.set(k, '1200');
+    for (const k of ['height', 'h', 'hei', 'sh', 'crop']) url.searchParams.delete(k);
     const key = (url.hostname + url.pathname).toLowerCase();
-    if (seen.has(key)) return;
-    seen.set(key, 1);
-    images.push(url.href);
+    if (seen.has(key)) { if (trusted) { const c = cands.find((x) => x.key === key); if (c) c.trusted = true; } return; }
+    seen.add(key);
+    cands.push({ url: url.href, key, trusted, stem: stemOf(url.href) });
   };
+  const isProduct = !!(prod || woo || metas['product:price:amount'] || metas['og:price:amount'] || metas['og:type'] === 'product');
   ldImages.forEach((u) => add(u, true));
   if (metas['og:image']) add(metas['og:image'], true);
-  if (metas['twitter:image']) add(metas['twitter:image'], true);
+  if (metas['twitter:image']) add(metas['twitter:image'], isProduct);
   const largest = (srcset) => srcset.split(',').map((x) => x.trim().split(/\s+/)).filter((x) => x[0]).sort((a, b) => (parseFloat(b[1]) || 0) - (parseFloat(a[1]) || 0))[0]?.[0];
-  // galerie : attributs « zoom » d'abord (ce sont les grandes images), puis les sources ordinaires
   const tags = html.match(/<(img|a|source|div|li|button)\b[^>]*>/gi) || [];
-  for (const tag of tags) for (const k of ['data-zoom-image', 'data-large_image', 'data-zoom', 'data-full', 'data-original', 'data-image', 'data-src-zoom', 'data-large', 'data-big']) { const v = attr(tag, k); if (v && !/^\{|^\[/.test(v)) add(v); }
+  // galerie zoom et galerie WooCommerce : ce sont les grandes photos du produit
+  for (const tag of tags) for (const k of ['data-zoom-image', 'data-large_image', 'data-zoom', 'data-src-zoom']) { const v = attr(tag, k); if (v && !/^\{|^\[/.test(v)) add(v, true); }
+  for (const m of html.matchAll(/woocommerce-product-gallery__image[^>]*>\s*<a[^>]+href\s*=\s*["']([^"']+)["']/gi)) add(m[1], true);
   for (const tag of tags) {
+    for (const k of ['data-full', 'data-original', 'data-image', 'data-large', 'data-big']) { const v = attr(tag, k); if (v && !/^\{|^\[/.test(v)) add(v); }
     if (/^<a\b/i.test(tag)) { const h = attr(tag, 'href'); if (/\.(jpe?g|png|webp|avif)(\?|$)/i.test(h)) add(h); continue; }
     if (!/^<(img|source)\b/i.test(tag)) continue;
     const w = parseInt(attr(tag, 'width'), 10);
@@ -145,17 +154,34 @@ function extract(html, base) {
     if (srcset) add(largest(srcset));
     add(attr(tag, 'data-src') || attr(tag, 'src'));
   }
-  // scripts (boutiques rendues en JavaScript) : images du même dossier que celles déjà reconnues comme produit
-  const known = new Set(images.slice(0, 6).map((u) => { const x = new URL(u); return x.hostname + x.pathname.split('/').slice(0, -1).join('/'); }));
+  // scripts (boutiques rendues en JavaScript)
   for (const m of html.matchAll(/(?:https?:)?(?:\\?\/){2}[^"'\s<>\\)]+?(?:\\?\/[^"'\s<>\\)]+?)*\.(?:jpe?g|png|webp|avif)(?:\?[^"'\s<>\\)]*)?/gi)) {
-    if (images.length >= 40) break;
-    try {
-      const x = new URL(abs(m[0].replace(/\\u002F/gi, '/').replace(/\\\//g, '/')));
-      const dir = x.hostname + x.pathname.split('/').slice(0, -1).join('/');
-      if (known.has(dir) || /\/(products?|catalog|media\/catalog)\//i.test(x.pathname)) add(x.href);
-    } catch { /* URL invalide */ }
+    if (cands.length >= 300) break;
+    add(m[0]);
   }
-  images.splice(24);
+
+  let images;
+  if (isProduct) {
+    // références du produit : SKU et identifiants de l'adresse, plus le radical des noms de fichiers sûrs
+    const keys = new Set();
+    const addKey = (k) => { k = String(k || '').toLowerCase().trim(); if (k.length >= 5 && !/^(image|images|product|produit|photo|default|master|picture)s?$/.test(k)) keys.add(k); };
+    for (const id of [prod?.sku, prod?.mpn, prod?.productID, prod?.gtin13, prod?.gtin, ...(new URL(base).pathname.match(/[a-z0-9]*\d{5,}[a-z0-9]*/gi) || [])]) {
+      if (!id) continue;
+      addKey(id);
+      (String(id).match(/\d{7,}/g) || []).forEach(addKey);
+    }
+    for (const c of cands.filter((x) => x.trusted)) {
+      const first = c.stem.split(/[-_ .]/)[0];
+      if (/\d/.test(first)) addKey(first);
+      addKey(c.stem.replace(/([-_ .](\d{1,2}|[a-z]|master|main|front|back|side|view\d*|model\d*|zoom|hd|ho|\d+x\d*))+$/g, ''));
+    }
+    const mine = (c) => c.trusted || [...keys].some((k) => c.stem.includes(k));
+    // même photo servie par deux chemins : un seul exemplaire
+    const names = new Set();
+    images = cands.filter(mine).filter((c) => !names.has(c.stem) && names.add(c.stem)).map((c) => c.url).slice(0, 24);
+  } else {
+    images = cands.map((c) => c.url).slice(0, 8);
+  }
 
   // logo : données structurées, puis image « logo » de la page, puis icône
   const logos = [];
@@ -241,7 +267,7 @@ async function shopify(page, html) {
     const key = (u) => { try { const x = new URL(u); return (x.hostname + x.pathname).toLowerCase(); } catch { return u; } };
     const mine = [...(p.images || []), ...(p.media || []).filter((x) => x.media_type === 'image').map((x) => x.src)].map(full).filter(Boolean);
     const seen = new Set();
-    page.images = [...mine, ...page.images].filter((u) => { const k = key(u); return !seen.has(k) && seen.add(k); }).slice(0, 24);
+    page.images = (mine.length ? mine : page.images).filter((u) => { const k = key(u); return !seen.has(k) && seen.add(k); }).slice(0, 24);
     page.source = 'shopify';
   } catch { /* fiche JSON indisponible : on garde ce que la page a donné */ }
 }
@@ -264,7 +290,7 @@ const REFUSED = [401, 403, 406, 429, 451, 503];
 async function fetchPage(url) {
   let last = null;
   for (const headers of [CHROME, SAFARI]) {
-    last = await safeFetch(url, { headers });
+    last = await safeFetch(url, { headers }, 9000);
     if (last.ok || !REFUSED.includes(last.status)) return last;
     await last.body?.cancel().catch(() => {});
     await new Promise((ok) => setTimeout(ok, 700));
@@ -298,12 +324,16 @@ module.exports = handler('POST', async (req, res) => {
     r = await fetchPage(url);
   } catch (e) {
     if (e.status) throw e;
+    if (e.name === 'TimeoutError') return send(res, 200, blockedPage(url, 'no answer'));
     throw httpError(502, 'Could not reach this site');
   }
   if (REFUSED.includes(r.status)) return send(res, 200, blockedPage(r.url || url, r.status));
   if (!r.ok) throw httpError(502, `The site answered ${r.status}`);
   if (!/html|text\/plain/i.test(r.headers.get('content-type') || 'text/html')) throw httpError(415, 'This address is not a web page');
-  const { buf } = await readCapped(r, 4e6);
+  // lecture du corps bornée dans le temps : certains anti-robots laissent la connexion ouverte sans rien envoyer
+  const body = await Promise.race([readCapped(r, 4e6), new Promise((ok) => setTimeout(() => ok(null), 12000))]);
+  if (!body) { r.body?.cancel().catch(() => {}); return send(res, 200, blockedPage(r.url || url, 'no answer')); }
+  const { buf } = body;
   const html = buf.toString('utf8');
   const page = extract(html, r.url || url);
   await shopify(page, html);

@@ -175,7 +175,7 @@ module.exports = handler('POST', async (req, res) => {
     const buf = await capture(p.url, 7).catch(() => null);
     if (buf) {
       llmImages.push({ index: -1, mime: 'image/jpeg', b64: buf.toString('base64') });
-      shotNote = `\nThe website could not be read automatically. The LAST attached image is a SCREENSHOT of the page (not a product photo${type === 'ecom' ? ', do not list it in "photos" and never use it as "photo"' : ''}): read the brand, product name, selling points and colours from it. Use only what you can actually read there.`;
+      shotNote = `\nThe website could not be read automatically. The LAST attached image is a SCREENSHOT of the page (not a product photo${type === 'ecom' ? ', do not list it in "photos" and never use it as "photo"' : ''}): read the brand, product name, selling points and colours from it. Use only what you can actually read there. If it shows an error, a captcha or an "access restricted" page, ignore it completely and rely on the title and the photos.`;
     }
   }
   const user = `Language for all on-screen and spoken copy: ${LANGS[p.lang] || 'English'}

@@ -154,10 +154,17 @@ function extract(html, base) {
     if (srcset) add(largest(srcset));
     add(attr(tag, 'data-src') || attr(tag, 'src'));
   }
-  // scripts (boutiques rendues en JavaScript)
-  for (const m of html.matchAll(/(?:https?:)?(?:\\?\/){2}[^"'\s<>\\)]+?(?:\\?\/[^"'\s<>\\)]+?)*\.(?:jpe?g|png|webp|avif)(?:\?[^"'\s<>\\)]*)?/gi)) {
+  // scripts (boutiques rendues en JavaScript). Parcours linéaire : on repère chaque extension d'image
+  // puis on remonte jusqu'au début de l'adresse (une expression régulière unique pouvait se bloquer sur de gros scripts).
+  const STOP = /["'\s<>()]/;
+  for (const m of html.matchAll(/\.(?:jpe?g|png|webp|avif)(?=["'\s<>()?\\]|&quot;)/gi)) {
     if (cands.length >= 300) break;
-    add(m[0]);
+    let a = m.index;
+    while (a > 0 && m.index - a < 600 && !STOP.test(html[a - 1])) a--;
+    let b = m.index + m[0].length;
+    if (html[b] === '?') while (b < html.length && b - m.index < 300 && !STOP.test(html[b]) && html[b] !== '\\') b++;
+    const raw = html.slice(a, b).replace(/^.*?((?:https?:)?(?:\\?\/){2})/, '$1');
+    if (/^(?:https?:)?(?:\\?\/){2}/.test(raw)) add(raw);
   }
 
   let images;
@@ -290,7 +297,9 @@ const REFUSED = [401, 403, 406, 429, 451, 503];
 async function fetchPage(url) {
   let last = null;
   for (const headers of [CHROME, SAFARI]) {
+    const t = Date.now();
     last = await safeFetch(url, { headers }, 9000);
+    console.log(`inspect ${new URL(url).hostname} -> ${last.status} in ${Date.now() - t} ms (${last.headers.get('content-length') || '?'} bytes, ${last.headers.get('content-type') || '?'})`);
     if (last.ok || !REFUSED.includes(last.status)) return last;
     last.body?.cancel().catch(() => {}); // sans attendre : un anti-robot peut retenir la réponse indéfiniment
     await new Promise((ok) => setTimeout(ok, 700));
@@ -337,7 +346,9 @@ module.exports = handler('POST', async (req, res) => {
   if (!body) { r.body?.cancel().catch(() => {}); return send(res, 200, blockedPage(r.url || url, 'no answer')); }
   const { buf } = body;
   const html = buf.toString('utf8');
+  const t1 = Date.now();
   const page = extract(html, r.url || url);
+  console.log(`inspect parsed ${html.length} chars in ${Date.now() - t1} ms, ${page.images.length} images`);
   await shopify(page, html);
   if (!page.title && !page.description && page.text.length < 40) throw httpError(422, 'Empty or protected page: nothing to analyse. You can still add photos by hand.');
   send(res, 200, page);

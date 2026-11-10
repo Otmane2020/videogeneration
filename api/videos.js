@@ -23,9 +23,9 @@ async function search(q) {
 }
 
 module.exports = handler('POST', async (req, res) => {
-  if (!process.env.PIXABAY_API_KEY) throw httpError(500, 'Clé Pixabay manquante');
+  if (!process.env.PIXABAY_API_KEY) throw httpError(500, 'Pixabay key missing');
   const { queries, fallback } = await readJson(req);
-  if (!Array.isArray(queries) || !queries.length || queries.length > 8) throw httpError(400, 'Requêtes invalides');
+  if (!Array.isArray(queries) || !queries.length || queries.length > 8) throw httpError(400, 'Invalid queries');
   const fb = String(fallback || 'technology').slice(0, 40);
   const results = await Promise.all(queries.map(async (raw) => {
     const q = String(raw || '').slice(0, 60).trim() || fb;

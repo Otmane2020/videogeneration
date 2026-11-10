@@ -1,8 +1,8 @@
 {
-  "name": "adreel",
+  "name": "clipmotion",
   "version": "1.0.0",
   "private": true,
-  "description": "URL -> inspection -> SaaS ou E-com -> pubs vidéo générées par IA",
+  "description": "Paste a link, get AI video ads for SaaS and e-commerce",
   "scripts": { "start": "node server.js", "dev": "node --watch server.js" },
   "engines": { "node": ">=20" }
 }

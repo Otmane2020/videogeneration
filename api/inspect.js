@@ -246,25 +246,68 @@ async function shopify(page, html) {
   } catch { /* fiche JSON indisponible : on garde ce que la page a donné */ }
 }
 
+// Requête telle qu'un navigateur l'envoie : beaucoup de boutiques refusent (403) les requêtes sans ces en-têtes.
+const CHROME = {
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'accept-language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+  'cache-control': 'no-cache', pragma: 'no-cache', 'upgrade-insecure-requests': '1',
+  'sec-ch-ua': '"Google Chrome";v="131", "Chromium";v="131", "Not_A Brand";v="24"', 'sec-ch-ua-mobile': '?0', 'sec-ch-ua-platform': '"Windows"',
+  'sec-fetch-dest': 'document', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-user': '?1',
+};
+const SAFARI = {
+  'user-agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Mobile/15E148 Safari/604.1',
+  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8', 'accept-language': 'fr-FR,fr;q=0.9',
+};
+const REFUSED = [401, 403, 406, 429, 451, 503];
+
+async function fetchPage(url) {
+  let last = null;
+  for (const headers of [CHROME, SAFARI]) {
+    last = await safeFetch(url, { headers });
+    if (last.ok || !REFUSED.includes(last.status)) return last;
+    await last.body?.cancel().catch(() => {});
+    await new Promise((ok) => setTimeout(ok, 700));
+  }
+  return last;
+}
+
+// Le site refuse la lecture automatique : on ne force pas le passage. On repart de l'adresse elle-même
+// (le nom du produit y figure souvent) ; l'étape suivante lit une capture d'écran de la page, et l'utilisateur ajoute ses photos.
+function blockedPage(url, status) {
+  const u = new URL(url), host = u.hostname.replace(/^www\./, '');
+  const slug = decodeURIComponent(u.pathname.split('/').filter(Boolean).pop() || '').replace(/\.(html?|php|aspx?)$/i, '').replace(/[-_+]+/g, ' ').replace(/\b[\dA-Z]*\d{5,}[\dA-Z]*\b/g, '').replace(/\s+/g, ' ').trim();
+  const title = slug.length > 3 ? slug.replace(/^./, (c) => c.toUpperCase()) : '';
+  const productLike = /\.html?$|\/(products?|produits?|p|item|dp|article)\//i.test(u.pathname) || slug.split(' ').length >= 3;
+  return {
+    url: u.href, host, siteName: host.split('.')[0].replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase()),
+    title, description: '', lang: (u.pathname.match(/^\/([a-z]{2})(?:[-_][a-zA-Z]{2})?\//) || [])[1] || (/\.fr$/.test(host) ? 'fr' : 'en'),
+    themeColor: '', icon: u.origin + '/favicon.ico', h1: title ? [title] : [], h2: [],
+    images: [], logos: [u.origin + '/apple-touch-icon.png', u.origin + '/favicon.ico'], product: null, prices: [], text: '',
+    blocked: status, guess: { type: productLike ? 'ecom' : 'saas', ecom: productLike ? 1 : 0, saas: productLike ? 0 : 1, confidence: 50 },
+  };
+}
+
 module.exports = handler('POST', async (req, res) => {
   let { url } = await readJson(req);
   url = String(url || '').trim();
-  if (!url) throw httpError(400, 'URL manquante');
+  if (!url) throw httpError(400, 'Missing URL');
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   let r;
   try {
-    r = await safeFetch(url, { headers: { accept: 'text/html,application/xhtml+xml', 'accept-language': 'fr,en;q=0.8' } });
+    r = await fetchPage(url);
   } catch (e) {
     if (e.status) throw e;
-    throw httpError(502, 'Impossible de joindre ce site');
+    throw httpError(502, 'Could not reach this site');
   }
-  if (!r.ok) throw httpError(502, `Le site a répondu ${r.status}`);
-  if (!/html|text\/plain/i.test(r.headers.get('content-type') || 'text/html')) throw httpError(415, "Cette URL n'est pas une page web");
+  if (REFUSED.includes(r.status)) return send(res, 200, blockedPage(r.url || url, r.status));
+  if (!r.ok) throw httpError(502, `The site answered ${r.status}`);
+  if (!/html|text\/plain/i.test(r.headers.get('content-type') || 'text/html')) throw httpError(415, 'This address is not a web page');
   const { buf } = await readCapped(r, 4e6);
   const html = buf.toString('utf8');
   const page = extract(html, r.url || url);
   await shopify(page, html);
-  if (!page.title && !page.description && page.text.length < 40) throw httpError(422, 'Page vide ou protégée : impossible de l’analyser');
+  if (!page.title && !page.description && page.text.length < 40) throw httpError(422, 'Empty or protected page: nothing to analyse. You can still add photos by hand.');
   send(res, 200, page);
 });
 module.exports.extract = extract;

@@ -14,7 +14,7 @@ const cache = new Map();
 const clean = (v, max) => String(v || '').replace(/[^\p{L}\p{N}\s,.'-]/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 
 module.exports = handler('POST', async (req, res) => {
-  if (!process.env.OPENROUTER_API_KEY) throw httpError(503, 'Décor IA non configuré');
+  if (!process.env.OPENROUTER_API_KEY) throw httpError(503, 'AI backdrop is not configured');
   const b = await readJson(req);
   const decor = MOODS[b.decor] ? b.decor : 'studio';
   const ratio = RATIOS[b.format] || '9:16';
@@ -28,13 +28,13 @@ Absolutely no product, no object, no furniture, no person, no text, no logo and 
     const r = await fetch('https://openrouter.ai/api/v1/chat/completions', {
       method: 'POST',
       signal: AbortSignal.timeout(50000),
-      headers: { authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, 'content-type': 'application/json', 'x-title': 'AdReel' },
+      headers: { authorization: `Bearer ${process.env.OPENROUTER_API_KEY}`, 'content-type': 'application/json', 'x-title': 'ClipMotion' },
       body: JSON.stringify({ model: process.env.OPENROUTER_IMAGE_MODEL || 'google/gemini-2.5-flash-image', modalities: ['image', 'text'], image_config: { aspect_ratio: ratio }, messages: [{ role: 'user', content: prompt }] }),
     });
     const j = await r.json().catch(() => ({}));
     const url = j.choices?.[0]?.message?.images?.[0]?.image_url?.url || '';
     const m = /^data:(image\/(?:png|jpeg|webp));base64,(.+)$/s.exec(url);
-    if (!r.ok || !m) throw httpError(502, 'Décor IA indisponible');
+    if (!r.ok || !m) throw httpError(502, 'AI backdrop unavailable');
     if (cache.size > 40) cache.clear();
     cache.set(key, { type: m[1], buf: Buffer.from(m[2], 'base64') });
   }

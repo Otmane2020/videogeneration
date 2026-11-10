@@ -1,40 +1,40 @@
-# AdReel
+# ClipMotion
 
-Appli mobile-first : **URL → inspection → SaaS ou E-com → pubs vidéo** avec voix off.
+Paste a link, get video ads. Mobile-first web app for **clipmotion.ai**: URL → scan → SaaS or e-commerce → three AI video ads with voice-over, captions and music.
 
-1. **URL** – on colle l'adresse du site ou de la fiche produit.
-2. **Inspection** – le serveur lit la page : titres, logo, et la fiche produit complète. Sources lues, dans l'ordre : JSON Shopify (`/products/<nom>.js`), variations WooCommerce, données structurées (Product / ProductGroup), galeries zoom, liens et scripts de la page. Toutes les photos sont ramenées en pleine taille et dédoublonnées ; couleurs, tailles et prix par variante sont proposés dans l'assistant.
-3. **SaaS ou E-com** – l'utilisateur confirme ; en e-commerce il peut ajouter ses propres photos.
-4. **Pubs** – l'IA écrit 3 pubs ; export MP4 image par image dans le navigateur (9:16, 1:1, 16:9, 720p/1080p, durée auto ou imposée à l'image près).
+1. **Link** – paste a website or product page.
+2. **Scan** – the server reads the page: copy, logo and the full product record. Sources, in order: Shopify product JSON (`/products/<handle>.js`), WooCommerce variation data, structured data (Product / ProductGroup), zoom galleries, links and inline scripts. Images are upgraded to full size and de-duplicated; colours, sizes and per-variant prices are offered in the wizard.
+3. **Setup** – confirm SaaS or e-commerce; for e-commerce pick the variant and the photos, or add your own.
+4. **Ads** – the AI writes three ads; the video is exported frame by frame to MP4 in the browser (9:16, 1:1, 16:9; 720p/1080p; auto length or an exact 10/15/20/30 s).
 
-**SaaS** : plans Pixabay + le vrai site dans un téléphone animé (incliné, rotation, zoom caméra).
-**E-commerce** : la pub est montée à partir des vraies photos du produit. L'IA choisit les photos utilisables ; le fond uni est retiré (le produit n'est jamais régénéré), puis le produit est posé sur un décor de studio adapté à la catégorie, avec gros plans, atouts vérifiés et prix (uniquement s'il figure dans les données de la fiche). Pixabay n'est qu'un appoint facultatif.
+**SaaS**: stock footage plus the real site inside a phone (one straight demo, one tilted view).
+**E-commerce**: built from the real product photos. The AI picks usable photos; the plain background is removed (the product is never regenerated) and the product is staged on a code-drawn studio set or an optional AI-generated backdrop, with close-ups, verified badges and the listed price. Stock footage is optional.
 
-Dans les deux cas : vrai logo et couleurs tirées du logo, transitions variées, voix off, sous-titres mot à mot, 30 mélodies synthétisées (`public/music.js`).
+Both: real logo and logo-derived palette, varied transitions, voice-over, word-by-word captions, 30 synthesized music tracks (`public/music.js`).
 
-| Service | Rôle |
+| Service | Role |
 | --- | --- |
-| OpenRouter (modèle gratuit avec vision) → Groq (gratuit, texte) → Gemini payant | analyse visuelle + script, du gratuit au payant. En e-commerce, la vision passe avant (contrôle des photos produit) |
-| OpenRouter (modèle image, payant, en option) | décor sur mesure derrière le produit détouré ; sinon décor de studio dessiné par le code, gratuit |
-| Pixabay | vidéos libres de droits |
-| Deepgram Aura | voix off |
-| [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, dans `public/vendor`) | encodage MP4 H.264 via WebCodecs |
-| mShots (WordPress.com) | capture d'écran mobile du site |
-| Poppins (OFL, dans `public/fonts`) | typographie des vidéos |
+| OpenRouter free vision model → Groq (free, text) → Vertex AI / Gemini → OpenRouter paid | visual analysis + script, cheapest first. For e-commerce a vision model goes first (product-photo check) |
+| OpenRouter image model (paid, optional) | custom backdrop behind the cut-out product |
+| Pixabay | stock footage |
+| Deepgram Aura | voice-over |
+| [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, vendored in `public/vendor`) | H.264 MP4 encoding through WebCodecs |
+| mShots (WordPress.com) | mobile screenshot of the site |
+| Poppins (OFL, in `public/fonts`) | video typography |
 
-## Page d'accueil et offres
+## Landing page and plans
 
-`public/index.html` contient la page d'accueil (présentation, tarifs, FAQ) et l'assistant. Les offres viennent de `/api/config` : `PLANS_JSON` pour les modifier, `CHECKOUT_PRO` / `CHECKOUT_BUSINESS` pour brancher des liens de paiement (sans lien, le bouton affiche « Bientôt disponible »). Les prix par défaut sont des exemples.
+`public/index.html` holds the landing page (pitch, pricing, FAQ) and the wizard. Plans come from `/api/config`: set `PLANS_JSON` to change them and `CHECKOUT_PRO` / `CHECKOUT_BUSINESS` to plug in payment links (without a link the button reads "Coming soon"). Default prices are placeholders.
 
-## Lancer
+## Run
 
 ```bash
-cp .env.example .env   # puis renseigner les clés
+cp .env.example .env   # then fill in the keys
 npm start              # http://localhost:3000
 ```
 
-Aucune dépendance npm (Node ≥ 20). Les clés restent côté serveur (`/api/*`), jamais dans le navigateur.
+No npm dependencies (Node ≥ 20). Keys stay on the server (`/api/*`), never in the browser.
 
-## Déployer sur Vercel
+## Deploy on Vercel
 
-`public/` est servi en statique et `api/*.js` en fonctions. Ajouter les 5 variables de `.env.example` dans *Settings → Environment Variables*.
+`public/` is served statically and `api/*.js` as functions. Add the variables from `.env.example` under *Settings → Environment Variables*.

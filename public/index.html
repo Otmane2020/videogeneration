@@ -1,93 +1,94 @@
 <!doctype html>
-<html lang="fr">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#06231b">
-<title>AdReel — une URL, des pubs vidéo</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f9d76'/><path d='M12 9l12 7-12 7z' fill='white'/></svg>">
+<meta name="theme-color" content="#07060f">
+<title>ClipMotion — Paste a link, get video ads</title>
+<meta name="description" content="ClipMotion turns your website or product page into ready-to-post video ads with voice-over, captions and music.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236a5cff'/><stop offset='.55' stop-color='%23c44dff'/><stop offset='1' stop-color='%23ff6b8b'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M12 9l12 7-12 7z' fill='white'/></svg>">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
 <main id="app">
   <header>
-    <a class="logo" href="/" aria-label="AdReel, accueil"><span class="mark"></span>AdReel</a>
-    <nav class="nav" aria-label="Navigation"><a href="#comment">Comment ça marche</a><a href="#tarifs">Tarifs</a><a href="#faq">FAQ</a><a class="pillbtn" href="#top">Essayer</a></nav>
-    <ol class="steps" aria-label="Étapes" hidden>
-      <li data-s="1">URL</li><li data-s="2">Inspection</li><li data-s="3">Type</li><li data-s="4">Pubs</li>
+    <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span>ClipMotion</a>
+    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a class="pillbtn" href="#top">Try it free</a></nav>
+    <ol class="steps" aria-label="Steps" hidden>
+      <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Ads</li>
     </ol>
   </header>
 
   <section id="s-url" class="view landing">
     <div class="hero" id="top">
       <div class="hero-copy">
-        <p class="eyebrow">Pubs vidéo par IA · SaaS et e-commerce</p>
-        <h1>Collez un lien.<br><em>Recevez vos pubs vidéo.</em></h1>
-        <p class="lead">AdReel lit votre site ou votre fiche produit, écrit le script, pose la voix off et monte trois pubs prêtes à publier sur Reels, TikTok et YouTube.</p>
+        <p class="eyebrow">AI video ads · SaaS &amp; e-commerce</p>
+        <h1>Paste a link.<br><em>Get video ads.</em></h1>
+        <p class="lead">ClipMotion reads your website or product page, writes the script, records the voice-over and edits three ads ready for Reels, TikTok and YouTube.</p>
         <form id="f-url" novalidate>
-          <label for="url" class="sr">Adresse du site ou de la fiche produit</label>
+          <label for="url" class="sr">Website or product page address</label>
           <div class="field">
-            <input id="url" name="url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="monsite.com/produit" required>
-            <button class="btn" type="submit">Créer mes pubs</button>
+            <input id="url" name="url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="yourstore.com/product" required>
+            <button class="btn" type="submit">Create my ads</button>
           </div>
         </form>
         <p class="error" id="e-url" role="alert" hidden></p>
-        <ul class="trust"><li>Sans inscription</li><li>Essai gratuit</li><li>MP4 jusqu’en 1080p</li></ul>
+        <ul class="trust"><li>No sign-up</li><li>Free to try</li><li>MP4 up to 1080p</li></ul>
       </div>
       <div class="hero-art" aria-hidden="true">
-        <div class="mock m1"><span class="bar"></span><i class="chip"></i><div class="prod"></div><b>Votre produit,</b><b class="alt">en vedette</b><small>voix off · sous-titres</small></div>
-        <div class="mock m2"><span class="bar"></span><i class="chip"></i><div class="screen"><u></u><u></u><u></u></div><b>Votre site</b><b class="alt">en démo</b></div>
+        <div class="mock m1"><span class="bar"></span><i class="chip"></i><div class="prod"></div><b>Your product,</b><b class="alt">front and centre</b><small>voice-over · captions</small></div>
+        <div class="mock m2"><span class="bar"></span><i class="chip"></i><div class="screen"><u></u><u></u><u></u></div><b>Your site</b><b class="alt">in a live demo</b></div>
       </div>
     </div>
 
-    <section class="block" id="comment">
-      <p class="eyebrow">Comment ça marche</p>
-      <h2>Trois étapes, zéro montage</h2>
+    <section class="block" id="how">
+      <p class="eyebrow">How it works</p>
+      <h2>Three steps, zero editing</h2>
       <ol class="how">
-        <li><span>1</span><h3>Collez votre lien</h3><p>Site SaaS ou fiche produit : AdReel récupère textes, photos, variantes, prix, logo et couleurs.</p></li>
-        <li><span>2</span><h3>Validez l’essentiel</h3><p>SaaS ou e-commerce, couleur et taille du produit, photos à utiliser. Deux touches suffisent.</p></li>
-        <li><span>3</span><h3>Téléchargez le MP4</h3><p>Trois angles de pub au choix, au format et à la durée voulus, avec musique et voix off.</p></li>
+        <li><span>1</span><h3>Paste your link</h3><p>A SaaS site or a product page: ClipMotion collects copy, photos, variants, price, logo and brand colours.</p></li>
+        <li><span>2</span><h3>Confirm the essentials</h3><p>SaaS or e-commerce, product colour and size, the photos to use. Two taps and you are done.</p></li>
+        <li><span>3</span><h3>Download the MP4</h3><p>Three ad angles to choose from, in the format and length you want, with music and voice-over.</p></li>
       </ol>
     </section>
 
     <section class="block">
-      <p class="eyebrow">Ce que vous obtenez</p>
-      <h2>Des pubs à votre image, pas des diaporamas</h2>
+      <p class="eyebrow">What you get</p>
+      <h2>Ads that look like your brand, not a slideshow</h2>
       <div class="bento">
-        <article class="wide"><h3>Votre vrai produit, jamais déformé</h3><p>En e-commerce, la pub part de vos photos. Le fond est retiré, le produit reste intact, puis il est mis en scène sur un décor de studio ou un décor sur mesure généré par IA.</p></article>
-        <article><h3>Votre site en démo</h3><p>En SaaS, la page d’accueil défile dans un téléphone, droit puis incliné.</p></article>
-        <article><h3>Logo et couleurs de marque</h3><p>Le logo est repris du site et ses couleurs habillent toute la vidéo.</p></article>
-        <article><h3>Voix off et sous-titres</h3><p>Une voix naturelle et des sous-titres mot à mot, dans la langue du site.</p></article>
-        <article><h3>30 musiques incluses</h3><p>Six ambiances, calées à la durée exacte, qui s’effacent sous la voix.</p></article>
-        <article class="wide"><h3>Le bon format, à l’image près</h3><p>9:16, 1:1 ou 16:9. 10, 15, 20 ou 30 secondes. 720p ou 1080p. Un vrai fichier MP4 à télécharger ou partager.</p></article>
+        <article class="wide"><h3>Your real product, never distorted</h3><p>For e-commerce, the ad starts from your own photos. The background is removed, the product stays untouched, then it is staged on a studio set or a custom AI-generated backdrop.</p></article>
+        <article><h3>Your site, demoed</h3><p>For SaaS, your home page scrolls inside a phone, straight then tilted.</p></article>
+        <article><h3>Logo and brand colours</h3><p>The logo is pulled from your site and its colours style the whole video.</p></article>
+        <article><h3>Voice-over and captions</h3><p>A natural voice and word-by-word captions, in your site’s language.</p></article>
+        <article><h3>30 music tracks included</h3><p>Six moods, fitted to the exact length, ducking under the voice.</p></article>
+        <article class="wide"><h3>The right format, to the frame</h3><p>9:16, 1:1 or 16:9. 10, 15, 20 or 30 seconds. 720p or 1080p. A real MP4 file to download or share.</p></article>
       </div>
     </section>
 
-    <section class="block" id="tarifs">
-      <p class="eyebrow">Tarifs</p>
-      <h2>Commencez gratuitement</h2>
+    <section class="block" id="pricing">
+      <p class="eyebrow">Pricing</p>
+      <h2>Start for free</h2>
       <div class="plans" id="plans"></div>
     </section>
 
     <section class="block" id="faq">
-      <p class="eyebrow">Questions fréquentes</p>
-      <h2>Avant de vous lancer</h2>
-      <details><summary>Faut-il créer un compte ?</summary><p>Non. Collez un lien et la première pub se monte tout de suite, dans votre navigateur.</p></details>
-      <details><summary>Mes photos produit sont-elles modifiées par l’IA ?</summary><p>Non. Seul le fond uni est retiré. Le produit n’est jamais régénéré : forme, logo et couleurs restent ceux de la photo.</p></details>
-      <details><summary>Que faire si mon site bloque la lecture automatique ?</summary><p>Ajoutez vos photos à la main à l’étape suivante : la pub se monte avec elles.</p></details>
-      <details><summary>D’où viennent les vidéos et la musique ?</summary><p>Les plans d’illustration viennent de Pixabay, sous sa licence. La musique est composée par l’application, sans droits à régler.</p></details>
+      <p class="eyebrow">FAQ</p>
+      <h2>Before you start</h2>
+      <details><summary>Do I need an account?</summary><p>No. Paste a link and your first ad is edited right away, in your browser.</p></details>
+      <details><summary>Does the AI change my product photos?</summary><p>No. Only the plain background is removed. The product is never regenerated: its shape, logo and colours stay exactly as photographed.</p></details>
+      <details><summary>What if my site blocks automated reading?</summary><p>Add your photos by hand in the next step and the ad is built from them.</p></details>
+      <details><summary>Where do the footage and music come from?</summary><p>Stock footage comes from Pixabay, under its licence. The music is composed by the app, with no rights to clear.</p></details>
     </section>
 
     <section class="cta-end">
-      <h2>Votre première pub dans quelques minutes</h2>
-      <a class="btn" href="#top" id="cta-end">Coller mon lien</a>
+      <h2>Your first ad in a few minutes</h2>
+      <a class="btn" href="#top" id="cta-end">Paste my link</a>
     </section>
-    <footer><span class="logo"><span class="mark"></span>AdReel</span><span>Pubs vidéo par IA pour SaaS et e-commerce</span></footer>
+    <footer><span class="logo"><span class="mark"></span>ClipMotion</span><span>clipmotion.ai · AI video ads for SaaS and e-commerce</span></footer>
   </section>
 
   <section id="s-inspect" class="view" hidden>
     <div class="scan"><div class="ring"></div></div>
-    <h2 id="scan-title">Inspection en cours…</h2>
+    <h2 id="scan-title">Scanning…</h2>
     <p class="lead" id="scan-sub"></p>
   </section>
 
@@ -100,21 +101,22 @@
         <p id="site-desc"></p>
       </div>
     </article>
-    <h3>Que vendez-vous ?</h3>
-    <div class="types" role="radiogroup" aria-label="Type d’activité">
-      <button type="button" role="radio" class="type" data-type="saas"><b>SaaS</b><span>Logiciel, appli, abonnement</span><i class="badge" hidden>Détecté</i></button>
-      <button type="button" role="radio" class="type" data-type="ecom"><b>E-commerce</b><span>Boutique, produits</span><i class="badge" hidden>Détecté</i></button>
+    <p class="notice" id="blocked" hidden></p>
+    <h3>What do you sell?</h3>
+    <div class="types" role="radiogroup" aria-label="Business type">
+      <button type="button" role="radio" class="type" data-type="saas"><b>SaaS</b><span>Software, app, subscription</span><i class="badge" hidden>Detected</i></button>
+      <button type="button" role="radio" class="type" data-type="ecom"><b>E-commerce</b><span>Store, products</span><i class="badge" hidden>Detected</i></button>
     </div>
     <div id="uploads" hidden>
       <div id="variants"></div>
-      <h3>Photos du produit</h3>
+      <h3>Product photos</h3>
       <p class="hint" id="up-hint"></p>
       <div class="photos" id="photos"></div>
-      <label class="btn ghost" for="files">Ajouter mes photos</label>
+      <label class="btn ghost" for="files">Add my photos</label>
       <input id="files" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
     </div>
-    <button class="btn" id="b-gen" type="button">Créer mes pubs</button>
-    <button class="link" type="button" data-back>Changer d’URL</button>
+    <button class="btn" id="b-gen" type="button">Create my ads</button>
+    <button class="link" type="button" data-back>Change link</button>
     <p class="error" id="e-type" role="alert" hidden></p>
   </section>
 
@@ -130,20 +132,20 @@
       <button type="button" role="radio" data-fmt="16:9" aria-checked="false">16:9 YouTube</button>
     </div>
     <div class="opts">
-      <div><label for="dur">Durée</label><select id="dur"><option value="0">Auto</option><option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select></div>
-      <div id="opt-bg"><label for="bgai">Décor</label><select id="bgai"><option value="0">Studio (gratuit)</option><option value="1">IA sur mesure (≈ 0,04 $)</option></select></div>
-      <div id="opt-stock"><label for="stock">Vidéos Pixabay</label><select id="stock"><option value="-1">Auto</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
-      <div><label for="res">Qualité</label><select id="res"><option value="720">720p</option><option value="1080">1080p</option></select></div>
+      <div><label for="dur">Length</label><select id="dur"><option value="0">Auto</option><option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select></div>
+      <div id="opt-bg"><label for="bgai">Backdrop</label><select id="bgai"><option value="0">Studio (free)</option><option value="1">Custom AI (≈ $0.04)</option></select></div>
+      <div id="opt-stock"><label for="stock">Stock clips</label><select id="stock"><option value="-1">Auto</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
+      <div><label for="res">Quality</label><select id="res"><option value="720">720p</option><option value="1080">1080p</option></select></div>
     </div>
     <div class="music">
-      <label for="music">Musique de fond</label>
+      <label for="music">Background music</label>
       <div class="row">
         <select id="music"></select>
-        <button class="btn ghost" id="b-listen" type="button">Écouter</button>
+        <button class="btn ghost" id="b-listen" type="button">Listen</button>
       </div>
     </div>
     <div id="ads"></div>
-    <button class="link" type="button" data-back>Nouvelle URL</button>
+    <button class="link" type="button" data-back>New link</button>
   </section>
 </main>
 
@@ -153,10 +155,10 @@
     <p id="st-status" role="status"></p>
     <div class="bar"><i id="st-bar"></i></div>
     <div class="actions" id="st-actions" hidden>
-      <a class="btn" id="b-dl" download>Télécharger</a>
-      <button class="btn ghost" id="b-share" type="button" hidden>Partager</button>
+      <a class="btn" id="b-dl" download>Download</a>
+      <button class="btn ghost" id="b-share" type="button" hidden>Share</button>
     </div>
-    <button class="link" id="b-close" type="button">Fermer</button>
+    <button class="link" id="b-close" type="button">Close</button>
   </div>
 </div>
 
@@ -166,7 +168,7 @@
     <p class="angle"></p>
     <ol class="scenes"></ol>
     <p class="cta"></p>
-    <button class="btn" type="button">Monter cette vidéo</button>
+    <button class="btn" type="button">Edit this video</button>
   </article>
 </template>
 <script src="/music.js" defer></script>

@@ -16,13 +16,13 @@ async function speak(model, text) {
 }
 
 module.exports = handler('POST', async (req, res) => {
-  if (!process.env.DEEPGRAM_API_KEY) throw httpError(500, 'Clé Deepgram manquante');
+  if (!process.env.DEEPGRAM_API_KEY) throw httpError(500, 'Deepgram key missing');
   const { text, lang } = await readJson(req);
   const t = String(text || '').trim().slice(0, 400);
-  if (!t) throw httpError(400, 'Texte manquant');
+  if (!t) throw httpError(400, 'Missing text');
   // Pas de voix pour cette langue : on préfère une pub muette à un accent étranger.
   const model = process.env.DEEPGRAM_VOICE || VOICES[lang];
-  if (!model) throw httpError(422, 'Langue non prise en charge par la voix off');
+  if (!model) throw httpError(422, 'Language not supported for voice-over');
   const r = await speak(model, t);
   if (!r.ok) {
     const j = await r.json().catch(() => ({}));

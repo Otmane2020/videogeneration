@@ -3,9 +3,9 @@
 const { send, handler } = require('../lib/util');
 
 const DEFAULT = [
-  { id: 'free', name: 'Découverte', price: '0 €', period: '', tag: 'Disponible', features: ['3 pubs par lien analysé', 'Formats 9:16, 1:1 et 16:9', 'Voix off, sous-titres et 30 musiques', 'Export MP4 jusqu’en 1080p'] },
-  { id: 'pro', name: 'Pro', price: '19 €', period: '/mois', tag: 'Bientôt', featured: true, features: ['Tout Découverte', 'Décors sur mesure générés par IA', 'Historique de vos pubs', 'Kit de marque enregistré'] },
-  { id: 'business', name: 'Business', price: '49 €', period: '/mois', tag: 'Bientôt', features: ['Tout Pro', 'Plusieurs marques', 'Génération en lot depuis un catalogue', 'Support prioritaire'] },
+  { id: 'free', name: 'Starter', price: '$0', period: '', tag: 'Available', features: ['3 ads per link', '9:16, 1:1 and 16:9 formats', 'Voice-over, captions and 30 music tracks', 'MP4 export up to 1080p'] },
+  { id: 'pro', name: 'Pro', price: '$19', period: '/month', tag: 'Soon', featured: true, features: ['Everything in Starter', 'Custom AI-generated backdrops', 'History of your ads', 'Saved brand kit'] },
+  { id: 'business', name: 'Business', price: '$49', period: '/month', tag: 'Soon', features: ['Everything in Pro', 'Multiple brands', 'Bulk generation from a catalogue', 'Priority support'] },
 ];
 const link = (v) => (/^https:\/\/[^\s"'<>]+$/.test(v || '') ? v : '');
 

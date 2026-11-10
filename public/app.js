@@ -7,7 +7,7 @@ const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 async function api(path, body) {
   const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Erreur ${r.status}`);
+  if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
   return r;
 }
 
@@ -29,8 +29,8 @@ $('#f-url').addEventListener('submit', async (e) => {
   e.preventDefault();
   const url = $('#url').value.trim();
   fail($('#e-url'), '');
-  if (!/^(https?:\/\/)?[^\s/.]+\.[^\s]{2,}$/i.test(url)) return fail($('#e-url'), 'Entrez une adresse valide, par exemple monsite.com');
-  $('#scan-title').textContent = 'Inspection en cours…';
+  if (!/^(https?:\/\/)?[^\s/.]+\.[^\s]{2,}$/i.test(url)) return fail($('#e-url'), 'Enter a valid address, for example yourstore.com');
+  $('#scan-title').textContent = 'Scanning your page…';
   $('#scan-sub').textContent = url.replace(/^https?:\/\//, '');
   show('s-inspect', 2);
   try {
@@ -60,6 +60,7 @@ function renderType() {
   $$('.type .badge').forEach((b) => (b.hidden = b.parentElement.dataset.type !== p.guess.type));
   setType(p.guess.type);
   fail($('#e-type'), '');
+  fail($('#blocked'), p.blocked ? `This site refuses automated reading (error ${p.blocked}). ClipMotion will read a screenshot of the page instead. For an e-commerce ad, add your product photos below so the real product is shown.` : '');
   show('s-type', 3);
 }
 function setType(t) {
@@ -118,7 +119,7 @@ function renderPhotos() {
     vbox.append(h, row);
   });
   const v = variantOf(), price = v?.price || pr?.price;
-  if (price) vbox.append(Object.assign(document.createElement('p'), { className: 'vprice', textContent: `${price} ${pr.currency || ''}`.trim() + (v && !v.available ? ' · en rupture' : '') }));
+  if (price) vbox.append(Object.assign(document.createElement('p'), { className: 'vprice', textContent: `${price} ${pr.currency || ''}`.trim() + (v && !v.available ? ' · out of stock' : '') }));
 
   const all = allPhotos(), box = $('#photos');
   box.textContent = '';
@@ -126,7 +127,7 @@ function renderPhotos() {
     const n = state.picked.indexOf(p.send);
     const b = Object.assign(document.createElement('button'), { type: 'button' });
     b.setAttribute('aria-pressed', String(n >= 0));
-    b.setAttribute('aria-label', n >= 0 ? `Photo ${n + 1}, retirer` : 'Ajouter cette photo');
+    b.setAttribute('aria-label', n >= 0 ? `Photo ${n + 1}, remove` : 'Add this photo');
     const im = new Image(); im.alt = ''; im.loading = 'lazy'; im.src = p.show; im.onerror = () => b.remove();
     b.append(im);
     if (n >= 0) b.append(Object.assign(document.createElement('b'), { textContent: n + 1 }));
@@ -138,8 +139,8 @@ function renderPhotos() {
     box.append(b);
   });
   $('#up-hint').textContent = all.length
-    ? `${all.length} photo(s) trouvée(s). Touchez pour choisir celles de la pub (${state.picked.length}/${MAX_PHOTOS}) ; la n° 1 est la photo principale.`
-    : 'Aucune photo trouvée sur la page : ajoutez les photos du produit.';
+    ? `${all.length} photo${all.length > 1 ? 's' : ''} found. Tap to choose the ones for the ad (${state.picked.length}/${MAX_PHOTOS}); no. 1 is the main photo.`
+    : 'No photo found on the page: add your product photos.';
 }
 $('#files').addEventListener('change', async (e) => {
   const files = [...e.target.files].slice(0, 5);
@@ -163,8 +164,8 @@ $('#files').addEventListener('change', async (e) => {
 
 $('#b-gen').addEventListener('click', async () => {
   const ecom = state.type === 'ecom';
-  $('#scan-title').textContent = ecom ? 'L’IA examine vos photos produit…' : 'L’IA regarde votre site…';
-  $('#scan-sub').textContent = ecom ? 'Choix des meilleures photos et écriture de 3 pubs' : 'Analyse des visuels et écriture de 3 pubs';
+  $('#scan-title').textContent = ecom ? 'Reviewing your product photos…' : 'Looking at your site…';
+  $('#scan-sub').textContent = ecom ? 'Picking the best photos and writing 3 ads' : 'Analysing the visuals and writing 3 ads';
   show('s-inspect', 3);
   try {
     const list = ecom ? photoList() : [];
@@ -183,14 +184,14 @@ $('#b-gen').addEventListener('click', async () => {
 });
 
 /* ---------- 4. pubs ---------- */
-const LABEL = { site: ' · site', product: ' · produit', detail: ' · gros plan' };
+const LABEL = { site: ' · site demo', product: ' · product', detail: ' · close-up' };
 function renderAds() {
   const plan = state.plan;
   $('#brand-name').textContent = plan.brand;
   $('#brand-sum').textContent = plan.summary || plan.tagline;
   $('#sw1').style.background = plan.palette.primary;
   $('#sw2').style.background = plan.palette.accent;
-  $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script : ${plan.engine}` + (plan.vision ? ` · ${plan.vision} visuel(s) analysé(s)` : '') + (plan.price ? ` · ${plan.price}` : '');
+  $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script: ${plan.engine}` + (plan.vision ? ` · ${plan.vision} image${plan.vision > 1 ? 's' : ''} analysed` : '') + (plan.price ? ` · ${plan.price}` : '');
   setMusic(plan.type === 'ecom' ? 'm6' : 'm1');
   $('#opt-stock').hidden = plan.type !== 'saas';
   $('#opt-bg').hidden = plan.type !== 'ecom';
@@ -232,7 +233,7 @@ const preview = { ctx: null, src: null };
 function stopPreview() {
   try { preview.src?.stop(); } catch {}
   preview.src = null;
-  $('#b-listen').textContent = 'Écouter';
+  $('#b-listen').textContent = 'Listen';
 }
 function setMusic(id) {
   stopPreview();
@@ -241,7 +242,7 @@ function setMusic(id) {
 }
 (function initMusic() {
   const sel = $('#music');
-  sel.append(new Option('Sans musique', ''));
+  sel.append(new Option('No music', ''));
   const groups = {};
   Music.PRESETS.forEach((p) => {
     const g = (groups[p.mood] ||= sel.appendChild(Object.assign(document.createElement('optgroup'), { label: p.mood })));
@@ -494,7 +495,7 @@ function makeRenderer(cv, job) {
     const src = sc.frame || (sc.video && sc.video.readyState >= 2 && sc.video.videoWidth ? sc.video : null);
     if (src) return coverDraw(src, src.videoWidth || src.width, src.videoHeight || src.height, 1.03 + 0.07 * k);
     const g = ctx.createLinearGradient(0, 0, W * (0.4 + 0.6 * k), H);
-    g.addColorStop(0, P); g.addColorStop(1, '#07140f');
+    g.addColorStop(0, P); g.addColorStop(1, '#0b0920');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
   // décor de studio : mur, sol, halo de lumière. Léger travelling avant pendant la scène.
@@ -705,7 +706,7 @@ function makeRenderer(cv, job) {
       const r = product(ph, box, local, clamp(local / sc.dur));
       if (plan.price) pill(plan.price, r.x + r.w * 0.85, r.y + r.h * 0.1, local - 0.3, 34);
     } else {
-      ctx.fillStyle = 'rgba(4,12,10,.66)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgba(8,6,18,.66)'; ctx.fillRect(0, 0, W, H);
       g = ctx.createLinearGradient(0, H * 0.35, 0, H);
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, P + 'cc');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
@@ -852,7 +853,7 @@ async function exportOffline(job, cv, draw, hasAudio) {
     if (sc.clip) sc.frame = await clipFrame(sc.clip, t - sc.start);
     draw(t);
     await vsrc.add(t, 1 / FPS);
-    if (f % 10 === 0) { status(`Rendu de la vidéo… ${Math.round((f / frames) * 100)} %`, (f / frames) * 100); await new Promise((r) => setTimeout(r)); }
+    if (f % 10 === 0) { status(`Rendering… ${Math.round((f / frames) * 100)}%`, (f / frames) * 100); await new Promise((r) => setTimeout(r)); }
   }
   await output.finalize();
   return new Blob([output.target.buffer], { type: 'video/mp4' });
@@ -916,7 +917,7 @@ async function exportRealtime(job, cv, draw) {
         if (prev && prev !== next) setTimeout(() => prev.pause(), 600);
         cur = idx;
       }
-      status(`Enregistrement… ${Math.ceil(job.total - now)} s`, (now / job.total) * 100);
+      status(`Recording… ${Math.ceil(job.total - now)} s`, (now / job.total) * 100);
       requestAnimationFrame(frame);
     })();
   });
@@ -955,7 +956,7 @@ async function produce(ad) {
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
-  const MSG = plan.type === 'ecom' ? 'Préparation des photos produit et de la voix off…' : 'Préparation des plans, du site et de la voix off…';
+  const MSG = plan.type === 'ecom' ? 'Preparing product photos and voice-over…' : 'Preparing footage, site capture and voice-over…';
   const tick = (p) => p.then((v) => { status(MSG, (++done / tasks) * 100); return v; }, () => { status(MSG, (++done / tasks) * 100); return null; });
   status(MSG, 0);
 
@@ -980,7 +981,7 @@ async function produce(ad) {
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
     // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
     if (best?.cut && $('#bgai').value === '1') {
-      status('Création du décor sur mesure…');
+      status('Creating the custom backdrop…');
       const key = state.fmt;
       plan.backdrops ||= {};
       plan.backdrops[key] ||= api('/api/backdrop', { decor: plan.decor, scene: plan.backdrop, category: plan.category, accent: plan.palette.accent, format: state.fmt })
@@ -1021,7 +1022,7 @@ async function produce(ad) {
       blob = await exportRealtime(job, cv, draw);
     }
     if (job.cancelled) return;
-    if (!blob) return status('Ce navigateur ne permet pas de créer la vidéo. Essayez avec Chrome ou Safari à jour.', 100);
+    if (!blob) return status('This browser cannot create the video. Try an up-to-date Chrome or Safari.', 100);
 
     const name = `${plan.brand}-${ad.angle}`.normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + (blob.type.includes('mp4') ? '.mp4' : '.webm');
     job.url = URL.createObjectURL(blob);
@@ -1031,14 +1032,14 @@ async function produce(ad) {
     $('#b-share').hidden = !navigator.canShare?.({ files: [file] });
     $('#b-share').onclick = () => navigator.share({ files: [file], title: plan.brand }).catch(() => {});
     $('#st-actions').hidden = false;
-    const notes = [`${+job.total.toFixed(1)} s`, `${cv.width}×${cv.height}`, `${(blob.size / 1e6).toFixed(1)} Mo`];
-    if (voices.every((v) => !v)) notes.push('sans voix off');
-    if (tl.rate > 1.02) notes.push(`voix accélérée ×${tl.rate.toFixed(2)}`);
+    const notes = [`${+job.total.toFixed(1)} s`, `${cv.width}×${cv.height}`, `${(blob.size / 1e6).toFixed(1)} MB`];
+    if (voices.every((v) => !v)) notes.push('no voice-over');
+    if (tl.rate > 1.02) notes.push(`voice sped up ×${tl.rate.toFixed(2)}`);
     if (track && job.musicBuf) notes.push(`♪ ${track.name}`);
-    status('Vidéo prête · ' + notes.join(' · '), 100);
+    status('Video ready · ' + notes.join(' · '), 100);
   } catch (err) {
     console.error(err);
-    if (!job.cancelled) status('Le montage a échoué. Réessayez.', 100);
+    if (!job.cancelled) status('Editing failed. Please try again.', 100);
   } finally {
     if (actx.state !== 'closed') actx.close().catch(() => {});
     scenes.forEach((s) => { s.clip?.iter?.return?.(); try { s.clip?.input.dispose(); } catch {} if (s.video) { s.video.pause(); URL.revokeObjectURL(s.video.src); } });
@@ -1071,9 +1072,9 @@ fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
     (p.features || []).forEach((f) => ul.append(Object.assign(document.createElement('li'), { textContent: f })));
     el.append(ul);
     // payer n'est proposé que si un lien de paiement est configuré
-    if (p.id === 'free') el.append(Object.assign(document.createElement('a'), { className: 'btn', href: '#top', textContent: 'Essayer gratuitement' }));
-    else if (p.checkout) el.append(Object.assign(document.createElement('a'), { className: 'btn', href: p.checkout, rel: 'noopener', textContent: `Choisir ${p.name}` }));
-    else el.append(Object.assign(document.createElement('button'), { className: 'btn ghost', type: 'button', disabled: true, textContent: 'Bientôt disponible' }));
+    if (p.id === 'free') el.append(Object.assign(document.createElement('a'), { className: 'btn', href: '#top', textContent: 'Try it free' }));
+    else if (p.checkout) el.append(Object.assign(document.createElement('a'), { className: 'btn', href: p.checkout, rel: 'noopener', textContent: `Choose ${p.name}` }));
+    else el.append(Object.assign(document.createElement('button'), { className: 'btn ghost', type: 'button', disabled: true, textContent: 'Coming soon' }));
     box.append(el);
   });
-}).catch(() => { $('#tarifs').hidden = true; });
+}).catch(() => { $('#pricing').hidden = true; });

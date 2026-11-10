@@ -24,4 +24,4 @@ http.createServer((req, res) => {
     res.writeHead(200, { 'content-type': TYPES[path.extname(file)] || 'application/octet-stream', 'cache-control': 'no-cache' });
     res.end(data);
   });
-}).listen(process.env.PORT || 3000, () => console.log(`AdReel → http://localhost:${process.env.PORT || 3000}`));
+}).listen(process.env.PORT || 3000, () => console.log(`ClipMotion → http://localhost:${process.env.PORT || 3000}`));

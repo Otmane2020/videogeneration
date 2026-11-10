@@ -4,34 +4,34 @@
 (() => {
   const SCALES = { maj: [0, 2, 4, 5, 7, 9, 11], min: [0, 2, 3, 5, 7, 8, 10] };
   const STYLES = {
-    corporate: { label: 'Entreprise', kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', bass: 'x.......x.....x.', arp: 8, pad: 1, lead: 0.5, stab: '', swing: 0, cut: 6000, wave: 'triangle' },
+    corporate: { label: 'Corporate', kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', bass: 'x.......x.....x.', arp: 8, pad: 1, lead: 0.5, stab: '', swing: 0, cut: 6000, wave: 'triangle' },
     pop: { label: 'Pop', kick: 'x.....x.x.....x.', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', bass: 'x.x.x.x.x.x.x.x.', arp: 0, pad: 0.6, lead: 1, stab: 'x..x..x...x..x..', swing: 0, cut: 9000, wave: 'triangle' },
     lofi: { label: 'Lo-fi', kick: 'x.....x...x.....', snare: '....x.......x...', hat: 'x.x.x.x.x.x.x.x.', bass: 'x.......x..x....', arp: 0, pad: 0.8, lead: 0.7, stab: 'x.....x.....x...', swing: 0.28, cut: 2600, wave: 'sine', seventh: true },
     house: { label: 'House', kick: 'x...x...x...x...', snare: '....x.......x...', hat: '..x...x...x...x.', bass: '..x...x...x...x.', arp: 16, pad: 0.5, lead: 0, stab: 'x..x....x..x....', swing: 0, cut: 8000, wave: 'sawtooth' },
-    ambient: { label: 'Ambiance', kick: '', snare: '', hat: '', bass: 'x...............', arp: 4, pad: 1.4, lead: 0.4, stab: '', swing: 0, cut: 3200, wave: 'sine', seventh: true },
-    trap: { label: 'Urbain', kick: 'x......x..x.....', snare: '........x.......', hat: 'x.x.x.xxx.x.x.xx', bass: 'x......x..x.....', arp: 0, pad: 0.7, lead: 0.8, stab: '', swing: 0, cut: 7000, wave: 'square', sub: true },
+    ambient: { label: 'Ambient', kick: '', snare: '', hat: '', bass: 'x...............', arp: 4, pad: 1.4, lead: 0.4, stab: '', swing: 0, cut: 3200, wave: 'sine', seventh: true },
+    trap: { label: 'Urban', kick: 'x......x..x.....', snare: '........x.......', hat: 'x.x.x.xxx.x.x.xx', bass: 'x......x..x.....', arp: 0, pad: 0.7, lead: 0.8, stab: '', swing: 0, cut: 7000, wave: 'square', sub: true },
   };
   // [nom, style, tempo, tonique (MIDI), gamme, progression (degrés), graine]
   const P = (name, style, bpm, root, scale, prog, seed) => ({ name, style, bpm, root, scale, prog, seed });
   const PRESETS = [
-    P('Lancement', 'corporate', 112, 60, 'maj', [0, 4, 5, 3], 1), P('Confiance', 'corporate', 104, 62, 'maj', [0, 3, 5, 4], 2),
-    P('Vision claire', 'corporate', 118, 65, 'maj', [0, 5, 3, 4], 3), P('Horizon', 'corporate', 100, 57, 'min', [0, 5, 2, 6], 4),
-    P('Start-up', 'corporate', 122, 64, 'maj', [3, 0, 4, 5], 5),
-    P('Plein soleil', 'pop', 120, 60, 'maj', [0, 4, 5, 3], 6), P('Bonne humeur', 'pop', 126, 67, 'maj', [0, 3, 4, 3], 7),
-    P('Coup de cœur', 'pop', 116, 62, 'maj', [5, 3, 0, 4], 8), P('Week-end', 'pop', 110, 65, 'maj', [0, 5, 3, 4], 9),
-    P('Nouveauté', 'pop', 128, 57, 'min', [0, 5, 2, 6], 10),
-    P('Café du matin', 'lofi', 78, 60, 'maj', [0, 5, 1, 4], 11), P('Pluie douce', 'lofi', 72, 57, 'min', [0, 3, 5, 4], 12),
-    P('Dimanche', 'lofi', 84, 65, 'maj', [1, 4, 0, 5], 13), P('Carnet de notes', 'lofi', 80, 62, 'min', [0, 5, 3, 6], 14),
-    P('Fin de journée', 'lofi', 88, 58, 'maj', [3, 4, 2, 5], 15),
-    P('Nuit blanche', 'house', 124, 57, 'min', [0, 5, 2, 6], 16), P('Rooftop', 'house', 122, 60, 'min', [0, 3, 6, 5], 17),
-    P('Défilé', 'house', 126, 62, 'min', [0, 6, 5, 3], 18), P('Plage', 'house', 120, 65, 'maj', [0, 4, 5, 3], 19),
-    P('Vitrine', 'house', 125, 59, 'min', [5, 6, 0, 0], 20),
-    P('Aurore', 'ambient', 70, 60, 'maj', [0, 3, 5, 4], 21), P('Grand large', 'ambient', 64, 57, 'min', [0, 5, 2, 6], 22),
-    P('Sérénité', 'ambient', 76, 65, 'maj', [0, 5, 3, 0], 23), P('Premium', 'ambient', 68, 62, 'min', [0, 3, 6, 5], 24),
-    P('Histoire', 'ambient', 80, 55, 'maj', [5, 3, 0, 4], 25),
-    P('Asphalte', 'trap', 140, 57, 'min', [0, 5, 3, 4], 26), P('Néons', 'trap', 134, 60, 'min', [0, 6, 5, 3], 27),
-    P('Streetwear', 'trap', 146, 55, 'min', [0, 0, 5, 6], 28), P('Minuit', 'trap', 130, 62, 'min', [0, 3, 5, 6], 29),
-    P('Édition limitée', 'trap', 150, 58, 'min', [5, 6, 0, 4], 30),
+    P('Launch Day', 'corporate', 112, 60, 'maj', [0, 4, 5, 3], 1), P('Trust', 'corporate', 104, 62, 'maj', [0, 3, 5, 4], 2),
+    P('Clear Vision', 'corporate', 118, 65, 'maj', [0, 5, 3, 4], 3), P('Horizon', 'corporate', 100, 57, 'min', [0, 5, 2, 6], 4),
+    P('Startup', 'corporate', 122, 64, 'maj', [3, 0, 4, 5], 5),
+    P('Sunny Side', 'pop', 120, 60, 'maj', [0, 4, 5, 3], 6), P('Good Mood', 'pop', 126, 67, 'maj', [0, 3, 4, 3], 7),
+    P('Crush', 'pop', 116, 62, 'maj', [5, 3, 0, 4], 8), P('Weekend', 'pop', 110, 65, 'maj', [0, 5, 3, 4], 9),
+    P('New Drop', 'pop', 128, 57, 'min', [0, 5, 2, 6], 10),
+    P('Morning Coffee', 'lofi', 78, 60, 'maj', [0, 5, 1, 4], 11), P('Soft Rain', 'lofi', 72, 57, 'min', [0, 3, 5, 4], 12),
+    P('Sunday', 'lofi', 84, 65, 'maj', [1, 4, 0, 5], 13), P('Notebook', 'lofi', 80, 62, 'min', [0, 5, 3, 6], 14),
+    P('Golden Hour', 'lofi', 88, 58, 'maj', [3, 4, 2, 5], 15),
+    P('All Nighter', 'house', 124, 57, 'min', [0, 5, 2, 6], 16), P('Rooftop', 'house', 122, 60, 'min', [0, 3, 6, 5], 17),
+    P('Runway', 'house', 126, 62, 'min', [0, 6, 5, 3], 18), P('Beach Club', 'house', 120, 65, 'maj', [0, 4, 5, 3], 19),
+    P('Showcase', 'house', 125, 59, 'min', [5, 6, 0, 0], 20),
+    P('Aurora', 'ambient', 70, 60, 'maj', [0, 3, 5, 4], 21), P('Open Sea', 'ambient', 64, 57, 'min', [0, 5, 2, 6], 22),
+    P('Serenity', 'ambient', 76, 65, 'maj', [0, 5, 3, 0], 23), P('Premium', 'ambient', 68, 62, 'min', [0, 3, 6, 5], 24),
+    P('Story', 'ambient', 80, 55, 'maj', [5, 3, 0, 4], 25),
+    P('Asphalt', 'trap', 140, 57, 'min', [0, 5, 3, 4], 26), P('Neon', 'trap', 134, 60, 'min', [0, 6, 5, 3], 27),
+    P('Streetwear', 'trap', 146, 55, 'min', [0, 0, 5, 6], 28), P('Midnight', 'trap', 130, 62, 'min', [0, 3, 5, 6], 29),
+    P('Limited Edition', 'trap', 150, 58, 'min', [5, 6, 0, 4], 30),
   ].map((p, i) => ({ ...p, id: 'm' + (i + 1), mood: STYLES[p.style].label }));
 
   const hz = (m) => 440 * Math.pow(2, (m - 69) / 12);

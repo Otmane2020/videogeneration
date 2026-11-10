@@ -193,3 +193,44 @@ h1 em, .price { background: var(--grad); -webkit-background-clip: text; backgrou
 .mock .screen u { background: #c44dff; }
 .mock b { background: #6a5cff; } .mock b.alt { background: #ff6b8b; color: #fff; }
 body { background: radial-gradient(90% 50% at 15% -5%, #3a2a8f66 0%, transparent 60%), radial-gradient(70% 40% at 95% 0%, #a13dff3d 0%, transparent 60%) fixed, #07060f; background-attachment: fixed; }
+
+/* ---------- assistant : carte de marque, intention, vue vidéo, éditeur ---------- */
+.brandcard { position: relative; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; padding: 28px 20px 22px; text-align: center; background: #0d0b1a; }
+.brandcard .glow { position: absolute; inset: -40% -20% auto; height: 220px; filter: blur(50px); opacity: .55; background: var(--grad); }
+.brandcard > :not(.glow) { position: relative; }
+.brandlogo { width: 92px; height: 92px; margin: 0 auto 14px; border-radius: 24px; background: #fff; display: grid; place-items: center; box-shadow: 0 16px 40px #0008; overflow: hidden; }
+.brandlogo.wide { width: 200px; height: 84px; }
+.brandlogo.dark { background: #14121f; }
+.brandlogo img { max-width: 78%; max-height: 70%; object-fit: contain; }
+.brandlogo span { font-size: 38px; font-weight: 800; color: #140f2e; }
+.brandcard p:last-of-type { color: var(--mute); font-size: 14px; margin-top: 8px; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+.swatches { display: flex; justify-content: center; gap: 8px; margin-top: 14px; }
+.swatches i { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #ffffff33; }
+.intents { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.intents button { text-align: left; padding: 14px; min-height: 84px; border-radius: 16px; border: 2px solid var(--line); background: var(--card); color: var(--text); font: inherit; cursor: pointer; }
+.intents b { display: block; font-size: 15px; margin-bottom: 3px; }
+.intents span { font-size: 12.5px; color: var(--mute); }
+.intents button[aria-checked="true"] { border-color: #a57bff; background: #1b1638; }
+#s-video .stage { display: grid; place-items: center; padding: 0; }
+#s-video .stage canvas, #s-video .stage video { max-width: 100%; max-height: 68dvh; border-radius: 18px; background: #000; box-shadow: 0 20px 70px #000a; }
+#st-status { margin-top: 14px; }
+#editor { margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--line); }
+.edscene { border: 1px solid var(--line); background: var(--card); border-radius: 16px; padding: 12px; margin-bottom: 10px; display: grid; grid-template-columns: 64px 1fr; gap: 10px; }
+.edscene .thumb { width: 64px; aspect-ratio: 9/14; border-radius: 10px; object-fit: cover; background: linear-gradient(160deg, #2a2360, #110f1f); border: 0; padding: 0; overflow: hidden; cursor: pointer; position: relative; color: #fff; font: inherit; font-size: 10px; }
+.edscene .thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.edscene .thumb[disabled] { cursor: default; }
+.edscene .thumb em { position: absolute; left: 0; right: 0; bottom: 0; padding: 3px 0; background: #000a; font-style: normal; text-align: center; }
+.edscene label { font-size: 11px; margin: 0 0 3px; text-transform: uppercase; letter-spacing: .06em; }
+.edscene input, .edscene textarea { width: 100%; font: inherit; font-size: 15px; padding: 9px 10px; border-radius: 10px; border: 1px solid var(--line); background: #0b0a16; color: var(--text); margin-bottom: 8px; resize: vertical; }
+dialog#picker { width: min(560px, 94vw); max-height: 88dvh; border: 1px solid var(--line); border-radius: 22px; background: #0d0b1a; color: var(--text); padding: 16px; }
+dialog#picker::backdrop { background: #000b; }
+.pk-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+.pk-head h3 { margin: 0; color: var(--text); font-size: 17px; } .pk-head .link { margin: 0; }
+#picker .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 10px; }
+#picker .row .btn { margin: 0; width: auto; padding: 0 18px; min-height: 50px; }
+#picker input { font-size: 16px; padding: 12px; }
+.pk-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.pk-grid button { padding: 0; border: 2px solid transparent; border-radius: 12px; overflow: hidden; aspect-ratio: 3/4; background: #16132a; cursor: pointer; position: relative; }
+.pk-grid button:hover, .pk-grid button:focus-visible { border-color: #a57bff; }
+.pk-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pk-grid b { position: absolute; top: 5px; right: 5px; font-size: 10px; padding: 2px 6px; border-radius: 6px; background: #000a; color: #fff; }

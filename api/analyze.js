@@ -6,7 +6,11 @@ const { capture } = require('./shot');
 const COMMON = `You are a senior performance-marketing creative director who writes short vertical video ads (TikTok / Reels / Shorts).
 Return ONLY a JSON object. Write headline, voiceover, tagline, cta, badge in the requested language; "query" is always English.
 Never invent prices, discounts, figures, materials, features or testimonials that are not in the page content. No hashtags, no emoji.
-The whole ad lasts about 20 seconds: each voiceover is ONE short spoken sentence of 5 to 9 words.`;
+The whole ad lasts about 20 seconds: each voiceover is ONE short spoken sentence of 5 to 9 words.
+For "queries" you act as a professional stock-footage researcher. Give 3 ENGLISH search queries per scene, from most specific to most generic, 1 to 3 words each.
+Think about what a camera can really film that evokes THIS business and THIS sentence: people, places, screens, gestures, objects of the trade.
+Example for an SEO software: ["google search laptop", "website analytics screen", "marketing team office"]. Example for a running shoe: ["runner tying shoes", "jogging city morning", "running track"].
+Never use abstract words (success, growth, innovation, solution), brand names, or words that only describe graphics (icon, animation, logo, infographic).`;
 
 const SHAPE_HEAD = `{
  "brand": string,                     // short brand name
@@ -19,12 +23,12 @@ const SAAS = `${COMMON}
 You receive the scraped content of a SaaS website plus some of its images. Look at the images to understand the product, the brand mood and its colours.
 Shape:
 ${SHAPE_HEAD}
- "ads": [                             // exactly 3 ads, each with a different angle
+ "ads": [                             // exactly 1 ad, built for the goal given below
   {"angle": string,                   // e.g. "Problem → solution", "Social proof", "Offer"
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook
      {"headline": string,             // on-screen text, max 6 words, punchy
       "voiceover": string,
-      "query": string,                // 1-3 ENGLISH words for matching stock footage (concrete, filmable: "woman laptop cafe")
+      "queries": [string, string, string],
       "visual": "footage"|"site"}     // stock footage, or a phone showing the real website
    ],
    "cta": string,                     // button label, max 4 words
@@ -43,7 +47,7 @@ ${SHAPE_HEAD}
  "decor": "studio"|"warm"|"dark"|"pastel",  // backdrop that suits the category: furniture/home → warm, watches/tech/luxury → dark, cosmetics/kids → pastel, otherwise studio
  "backdrop": string,                  // ENGLISH, max 25 words: a premium, cinematic ad setting tailored to this product (place, materials, light, mood). Describe the empty setting only, never the product
  "photos": [{"index": number, "kind": "packshot"|"lifestyle"|"other", "usable": boolean}],  // packshot = product alone on a plain background; lifestyle = product in a real setting; usable=false for banners, logos, text-only or unrelated images
- "ads": [                             // exactly 3 ads, each with a different angle
+ "ads": [                             // exactly 1 ad, built for the goal given below
   {"angle": string,
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook that already shows the product
      {"headline": string,             // on-screen text, max 6 words
@@ -51,7 +55,7 @@ ${SHAPE_HEAD}
       "visual": "product"|"detail"|"footage",  // product = the product presented on the backdrop; detail = slow close-up travelling over a photo; footage = stock video
       "photo": number,                // index of the usable photo to show (ignored for footage)
       "badge": string,                // optional: one verified fact from the page, max 4 words (material, size, warranty...), else ""
-      "query": string}                // only for footage: 1-3 ENGLISH words
+      "queries": [string, string, string]}
    ],
    "cta": string,                     // button label, max 4 words
    "ctaVoiceover": string}
@@ -63,6 +67,13 @@ const LANGS = { fr: 'French', en: 'English', es: 'Spanish', de: 'German', it: 'I
 const str = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
 const hex = (v, d) => (/^#[0-9a-f]{6}$/i.test(v || '') ? v.toLowerCase() : d);
 const DECORS = ['studio', 'warm', 'dark', 'pastel'];
+const GOALS = {
+  awareness: 'Brand awareness: make people remember the brand and what it stands for.',
+  launch: 'Product launch: present the product and its main benefits with energy.',
+  problem: 'Problem → solution: open on the customer\'s pain, then show how the product solves it.',
+  offer: 'Conversion: push the viewer to act now. Mention a price or an offer ONLY if it appears in the page content.',
+};
+const cleanQ = (v) => str(v, 50).replace(/[^\w\s-]/g, '').trim();
 
 // Charge les visuels pour la vision ; garde l'indice d'origine de chacun.
 async function loadImages(sources) {
@@ -93,7 +104,7 @@ function fallback(page, type, nPhotos) {
     brand: page.siteName, tagline: short(page.title || page.siteName), summary: str(page.description || page.title, 200),
     ads: angles.map((angle, a) => ({
       angle,
-      scenes: [0, 1, 2, 3].map((i) => ({ headline: short(pick(a + i)), voiceover: pick(a + i), query: q[(a + i) % 4], visual: visual(i), photo: nPhotos ? i % nPhotos : 0, badge: '' })),
+      scenes: [0, 1, 2, 3].map((i) => ({ headline: short(pick(a + i)), voiceover: pick(a + i), queries: [q[(a + i) % 4]], visual: visual(i), photo: nPhotos ? i % nPhotos : 0, badge: '' })),
       cta: type === 'ecom' ? (fr ? 'Acheter maintenant' : 'Shop now') : (fr ? 'Essayer gratuitement' : 'Try it free'),
       ctaVoiceover: fr ? `Découvrez ${page.siteName} dès aujourd’hui.` : `Discover ${page.siteName} today.`,
     })),
@@ -119,12 +130,12 @@ function normalize(d, page, type, seen) {
       return {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), visual, photo,
         badge: type === 'ecom' ? str(s.badge, 34) : '',
-        query: str(s.query, 50).replace(/[^\w\s-]/g, '') || (type === 'ecom' ? str(d.category, 30).replace(/[^\w\s-]/g, '') || 'shopping' : 'technology'),
+        queries: [...(Array.isArray(s.queries) ? s.queries : []), s.query].map(cleanQ).filter(Boolean).slice(0, 3),
       };
     }).filter((s) => s.headline),
     cta: str(ad.cta, 30) || fb.ads[0].cta,
     ctaVoiceover: str(ad.ctaVoiceover, 120) || fb.ads[0].ctaVoiceover,
-  })).filter((ad) => ad.scenes.length >= 2).slice(0, 3);
+  })).filter((ad) => ad.scenes.length >= 2).slice(0, 1);
 
   const useFb = !ads.length;
   if (useFb) fb.ads.forEach((ad) => ad.scenes.forEach((s) => { s.photo = type === 'ecom' && s.visual !== 'footage' ? usable[s.photo % usable.length].index : -1; }));
@@ -147,12 +158,13 @@ function normalize(d, page, type, seen) {
       primary: hex(d.palette?.primary, hex(page.themeColor, type === 'ecom' ? '#ff6b8b' : '#7c5cff')),
       accent: hex(d.palette?.accent, '#ffd166'),
     },
-    ads: useFb ? fb.ads : ads,
+    ads: useFb ? fb.ads.slice(0, 1) : ads,
   };
 }
 
 module.exports = handler('POST', async (req, res) => {
-  const { page, type, photos, variant } = await readJson(req);
+  const { page, type, photos, variant, intent } = await readJson(req);
+  const goal = GOALS[intent] || GOALS.launch;
   if (!page || typeof page !== 'object' || !page.url) throw httpError(400, 'Missing page scan');
   if (!['saas', 'ecom'].includes(type)) throw httpError(400, 'Invalid type');
   const pr = page.product && typeof page.product === 'object' ? page.product : null;
@@ -178,7 +190,8 @@ module.exports = handler('POST', async (req, res) => {
       shotNote = `\nThe website could not be read automatically. The LAST attached image is a SCREENSHOT of the page (not a product photo${type === 'ecom' ? ', do not list it in "photos" and never use it as "photo"' : ''}): read the brand, product name, selling points and colours from it. Use only what you can actually read there. If it shows an error, a captcha or an "access restricted" page, ignore it completely and rely on the title and the photos.`;
     }
   }
-  const user = `Language for all on-screen and spoken copy: ${LANGS[p.lang] || 'English'}
+  const user = `Goal of this ad: ${goal}
+Language for all on-screen and spoken copy: ${LANGS[p.lang] || 'English'}
 URL: ${p.url}
 Site name: ${p.siteName}
 Title: ${p.title}

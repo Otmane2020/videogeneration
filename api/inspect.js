@@ -190,15 +190,46 @@ function extract(html, base) {
     images = cands.map((c) => c.url).slice(0, 8);
   }
 
-  // logo : données structurées, puis image « logo » de la page, puis icône
+  // Logo. Du plus fiable au moins fiable : données structurées, balises dédiées, image ou SVG du lien d'accueil
+  // dans l'en-tête, image nommée « logo », puis seulement les icônes (favicon), marquées comme telles.
   const logos = [];
-  const addLogo = (u) => { const h = abs(u); if (h && /^https?:/.test(h) && !logos.includes(h)) logos.push(h); };
-  if (org) urls(org.logo).forEach(addLogo);
-  for (const tag of body.match(/<img\b[^>]*>/gi) || []) {
-    if (/logo/i.test(attr(tag, 'class') + ' ' + attr(tag, 'alt') + ' ' + attr(tag, 'id') + ' ' + attr(tag, 'src'))) { addLogo(attr(tag, 'src') || attr(tag, 'data-src')); break; }
+  const addLogo = (u, kind = 'logo') => {
+    const h = /^data:image\/svg\+xml/.test(u) ? u : abs(decode(String(u || '').trim()));
+    if (/alma|paypal|visa|mastercard|klarna|payment|paiement|trustpilot|partner|avis-verifies|google-play|app-store/i.test(h.startsWith('data:') ? '' : h.split('/').pop())) return;
+    if (h && (/^https?:/.test(h) || h.startsWith('data:')) && !logos.some((l) => l.url === h)) logos.push({ url: h, kind });
+  };
+  if (org) urls(org.logo).forEach((u) => addLogo(u));
+  for (const n of nodes) if (n.publisher?.logo) urls(n.publisher.logo).forEach((u) => addLogo(u));
+  if (metas['og:logo']) addLogo(metas['og:logo']);
+  for (const tag of html.match(/<(meta|link|img)\b[^>]*itemprop\s*=\s*["']?logo[^>]*>/gi) || []) addLogo(attr(tag, 'content') || attr(tag, 'href') || attr(tag, 'src'));
+  const hostName = new URL(base).hostname.replace(/^www\./, '').split('.')[0].toLowerCase();
+  const head = (html.match(/<(header|nav)\b[\s\S]*?<\/\1>/i) || [html.slice(0, 60000)])[0].slice(0, 60000);
+  // lien vers l'accueil dans l'en-tête : son image, ou son SVG en ligne, est le logo
+  for (const m of head.matchAll(/<a\b([^>]*)>([\s\S]{0,8000}?)<\/a>/gi)) {
+    const href = attr('<a ' + m[1] + '>', 'href');
+    let home = false;
+    try { const x = new URL(href || '#', base); home = x.hostname === new URL(base).hostname && /^\/([a-z]{2}([-_][a-zA-Z]{2})?\/?)?$/.test(x.pathname) && !!href && !href.startsWith('#'); } catch { /* lien invalide */ }
+    if (!home && !/logo|brand/i.test(m[1])) continue;
+    const img = m[2].match(/<img\b[^>]*>/i);
+    if (img) { const srcset = attr(img[0], 'srcset'); addLogo(attr(img[0], 'src') || attr(img[0], 'data-src') || (srcset && srcset.split(',')[0].trim().split(/\s+/)[0])); }
+    const svg = m[2].match(/<svg\b[\s\S]*?<\/svg>/i);
+    if (!img && svg && svg[0].length < 24000 && !/<use\b|<image\b|<script|<foreignObject/i.test(svg[0])) {
+      let code = svg[0].replace(/\s+/g, ' ');
+      if (!/xmlns=/.test(code)) code = code.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+      if (/currentColor/i.test(code)) code = code.replace('<svg', '<svg color="#111111"');
+      addLogo('data:image/svg+xml;charset=utf-8,' + encodeURIComponent(code));
+    }
+    if (logos.length >= 3) break;
   }
-  if (icon?.href) addLogo(icon.href);
-  addLogo('/favicon.ico');
+  for (const tag of html.match(/<img\b[^>]*>/gi) || []) {
+    const sig = attr(tag, 'class') + ' ' + attr(tag, 'alt') + ' ' + attr(tag, 'id') + ' ' + attr(tag, 'src');
+    if (/logo|brand/i.test(sig) || attr(tag, 'alt').toLowerCase().replace(/[^a-z0-9]/g, '') === hostName.replace(/[^a-z0-9]/g, '')) { addLogo(attr(tag, 'src') || attr(tag, 'data-src')); if (logos.length >= 4) break; }
+  }
+  // icônes : la plus grande d'abord
+  const icons = links.filter((l) => /icon/.test(l.rel) && l.href).map((l) => ({ ...l, size: l.rel.includes('apple-touch-icon') ? 180 : 0 }));
+  for (const tag of html.match(/<link\b[^>]*rel\s*=\s*["'][^"']*icon[^"']*["'][^>]*>/gi) || []) { const sz = parseInt(attr(tag, 'sizes'), 10); const l = icons.find((x) => x.href === attr(tag, 'href')); if (l && sz) l.size = Math.max(l.size, sz); }
+  icons.sort((a, b) => b.size - a.size).slice(0, 2).forEach((l) => addLogo(l.href, 'icon'));
+  addLogo('/favicon.ico', 'icon');
 
   const ld = [...html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).join(' ');
   const low = (html.slice(0, 600000) + ' ').toLowerCase();
@@ -238,7 +269,7 @@ function extract(html, base) {
     themeColor: /^#[0-9a-f]{3,8}$/i.test(metas['theme-color'] || '') ? metas['theme-color'] : '',
     icon: icon?.href ? abs(icon.href) : abs('/favicon.ico'),
     h1: heads(1).slice(0, 3), h2: heads(2).slice(0, 8),
-    images, logos: logos.slice(0, 4), product, prices, text,
+    images, logos: logos.slice(0, 6), product, prices, text,
     guess: { type: ecom > saas ? 'ecom' : 'saas', ecom, saas, confidence: Math.round((Math.max(ecom, saas) + 1) / (ecom + saas + 2) * 100) },
   };
 }
@@ -318,7 +349,7 @@ function blockedPage(url, status) {
     url: u.href, host, siteName: host.split('.')[0].replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase()),
     title, description: '', lang: (u.pathname.match(/^\/([a-z]{2})(?:[-_][a-zA-Z]{2})?\//) || [])[1] || (/\.fr$/.test(host) ? 'fr' : 'en'),
     themeColor: '', icon: u.origin + '/favicon.ico', h1: title ? [title] : [], h2: [],
-    images: [], logos: [u.origin + '/apple-touch-icon.png', u.origin + '/favicon.ico'], product: null, prices: [], text: '',
+    images: [], logos: [{ url: u.origin + '/apple-touch-icon.png', kind: 'icon' }, { url: u.origin + '/favicon.ico', kind: 'icon' }], product: null, prices: [], text: '',
     blocked: status, guess: { type: productLike ? 'ecom' : 'saas', ecom: productLike ? 1 : 0, saas: productLike ? 0 : 1, confidence: 50 },
   };
 }

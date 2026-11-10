@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [] };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 async function api(path, body) {
@@ -13,6 +13,9 @@ async function api(path, body) {
 
 function show(id, step) {
   $$('.view').forEach((v) => (v.hidden = v.id !== id));
+  // accueil : navigation du site ; assistant : étapes
+  $('.nav').hidden = step !== 1;
+  $('.steps').hidden = step === 1;
   $$('.steps li').forEach((li) => {
     li.classList.toggle('on', +li.dataset.s === step);
     li.classList.toggle('done', +li.dataset.s < step);
@@ -34,6 +37,7 @@ $('#f-url').addEventListener('submit', async (e) => {
     state.page = await (await api('/api/inspect', { url })).json();
     state.uploads.forEach((u) => URL.revokeObjectURL(u.url));
     state.uploads = [];
+    initVariant();
     // le vrai logo : affiché dans la vidéo, et ses couleurs servent de palette
     state.logo = loadLogo(state.page.logos).then((img) => (img ? { img, colors: logoColors(img) } : null));
     renderType();
@@ -66,17 +70,75 @@ function setType(t) {
 }
 $$('.type').forEach((b) => b.addEventListener('click', () => setType(b.dataset.type)));
 
-// Photos du produit : celles importées à la main d'abord, puis celles trouvées sur la page (5 au plus).
+/* ----- variantes (couleur, taille…) et choix des photos ----- */
+const MAX_PHOTOS = 5;
+const variantOf = () => (state.page.product?.variants || []).find((v) => Object.entries(state.variant).every(([k, val]) => v.options[k] === val)) || null;
+function initVariant() {
+  const pr = state.page.product, first = pr?.variants.find((v) => v.available) || pr?.variants[0];
+  state.variant = first ? { ...first.options } : {};
+  autoPick();
+}
+// toutes les photos disponibles : importées à la main d'abord, puis celles de la page
+function allPhotos() {
+  return [...state.uploads.map((u) => ({ show: u.url, send: u.data })), ...state.page.images.map((u) => ({ show: media(u), send: u }))];
+}
+// sélection par défaut : la photo de la variante choisie en tête, sans les photos des autres variantes
+function autoPick() {
+  const v = variantOf(), others = new Set((state.page.product?.variants || []).map((x) => x.image).filter((u) => u && u !== v?.image));
+  const list = allPhotos().map((p) => p.send);
+  state.picked = [...(v?.image && list.includes(v.image) ? [v.image] : []), ...list.filter((u) => u !== v?.image && !others.has(u))].slice(0, MAX_PHOTOS);
+}
 function photoList() {
-  return [...state.uploads.map((u) => ({ show: u.url, send: u.data })), ...state.page.images.map((u) => ({ show: media(u), send: u }))].slice(0, 5);
+  const by = new Map(allPhotos().map((p) => [p.send, p]));
+  return state.picked.map((k) => by.get(k)).filter(Boolean);
 }
 function renderPhotos() {
   if (!state.page) return;
-  const list = photoList(), box = $('#photos');
+  const pr = state.page.product, vbox = $('#variants');
+  vbox.textContent = '';
+  (pr?.options || []).forEach((o) => {
+    const h = document.createElement('h3');
+    h.textContent = o.name;
+    const row = Object.assign(document.createElement('div'), { className: 'chips' });
+    row.setAttribute('role', 'radiogroup');
+    row.setAttribute('aria-label', o.name);
+    o.values.forEach((val) => {
+      const b = Object.assign(document.createElement('button'), { type: 'button', textContent: val });
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(state.variant[o.name] === val));
+      // combinaison indisponible avec les autres choix en cours
+      const combo = { ...state.variant, [o.name]: val };
+      if (pr.variants.length && !pr.variants.some((v) => v.available && Object.entries(combo).every(([k, x]) => v.options[k] === x))) b.classList.add('off');
+      b.addEventListener('click', () => {
+        state.variant = state.variant[o.name] === val && !pr.variants.length ? Object.fromEntries(Object.entries(state.variant).filter(([k]) => k !== o.name)) : combo;
+        autoPick(); renderPhotos();
+      });
+      row.append(b);
+    });
+    vbox.append(h, row);
+  });
+  const v = variantOf(), price = v?.price || pr?.price;
+  if (price) vbox.append(Object.assign(document.createElement('p'), { className: 'vprice', textContent: `${price} ${pr.currency || ''}`.trim() + (v && !v.available ? ' · en rupture' : '') }));
+
+  const all = allPhotos(), box = $('#photos');
   box.textContent = '';
-  list.forEach((p) => { const im = new Image(); im.alt = ''; im.src = p.show; im.onerror = () => im.remove(); box.append(im); });
-  $('#up-hint').textContent = list.length
-    ? 'La pub est montée avec ces photos. Ajoutez les vôtres pour un meilleur résultat (fond uni de préférence).'
+  all.slice(0, 16).forEach((p) => {
+    const n = state.picked.indexOf(p.send);
+    const b = Object.assign(document.createElement('button'), { type: 'button' });
+    b.setAttribute('aria-pressed', String(n >= 0));
+    b.setAttribute('aria-label', n >= 0 ? `Photo ${n + 1}, retirer` : 'Ajouter cette photo');
+    const im = new Image(); im.alt = ''; im.loading = 'lazy'; im.src = p.show; im.onerror = () => b.remove();
+    b.append(im);
+    if (n >= 0) b.append(Object.assign(document.createElement('b'), { textContent: n + 1 }));
+    b.addEventListener('click', () => {
+      if (n >= 0) state.picked.splice(n, 1);
+      else if (state.picked.length < MAX_PHOTOS) state.picked.push(p.send);
+      renderPhotos();
+    });
+    box.append(b);
+  });
+  $('#up-hint').textContent = all.length
+    ? `${all.length} photo(s) trouvée(s). Touchez pour choisir celles de la pub (${state.picked.length}/${MAX_PHOTOS}) ; la n° 1 est la photo principale.`
     : 'Aucune photo trouvée sur la page : ajoutez les photos du produit.';
 }
 $('#files').addEventListener('change', async (e) => {
@@ -91,9 +153,11 @@ $('#files').addEventListener('change', async (e) => {
     const c = Object.assign(document.createElement('canvas'), { width: Math.round(im.naturalWidth * k), height: Math.round(im.naturalHeight * k) });
     const g = c.getContext('2d');
     g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
-    state.uploads.unshift({ url, data: c.toDataURL('image/jpeg', 0.82) });
+    const data = c.toDataURL('image/jpeg', 0.82);
+    state.uploads.unshift({ url, data });
+    state.picked = [data, ...state.picked].slice(0, MAX_PHOTOS);
   }
-  state.uploads.splice(5).forEach((u) => URL.revokeObjectURL(u.url));
+  state.uploads.splice(8).forEach((u) => URL.revokeObjectURL(u.url));
   renderPhotos();
 });
 
@@ -105,7 +169,10 @@ $('#b-gen').addEventListener('click', async () => {
   try {
     const list = ecom ? photoList() : [];
     state.photoUrls = list.map((p) => p.show);
-    state.plan = await (await api('/api/analyze', { page: state.page, type: state.type, photos: ecom ? list.map((p) => p.send) : undefined })).json();
+    // la variante choisie fixe le prix affiché et le texte de la pub
+    const v = ecom ? variantOf() : null;
+    const page = v?.price ? { ...state.page, product: { ...state.page.product, price: v.price } } : state.page;
+    state.plan = await (await api('/api/analyze', { page, type: state.type, photos: ecom ? list.map((p) => p.send) : undefined, variant: ecom && Object.keys(state.variant).length ? state.variant : undefined })).json();
     const brand = await state.logo;
     if (brand?.colors) Object.assign(state.plan.palette, brand.colors);
     renderAds();
@@ -988,3 +1055,25 @@ $('#b-close').addEventListener('click', () => {
   $('#studio').hidden = true;
   document.body.style.overflow = '';
 });
+
+/* ---------- page d'accueil : offres ---------- */
+$('#cta-end').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
+fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
+  const box = $('#plans');
+  plans.forEach((p) => {
+    const el = Object.assign(document.createElement('article'), { className: 'plan' + (p.featured ? ' featured' : '') });
+    const add = (tag, cls, text) => { const n = Object.assign(document.createElement(tag), { className: cls, textContent: text }); el.append(n); return n; };
+    if (p.tag) add('span', 'tag', p.tag);
+    add('h3', '', p.name);
+    const price = add('p', 'price', p.price || '');
+    if (p.period) price.append(Object.assign(document.createElement('small'), { textContent: p.period }));
+    const ul = document.createElement('ul');
+    (p.features || []).forEach((f) => ul.append(Object.assign(document.createElement('li'), { textContent: f })));
+    el.append(ul);
+    // payer n'est proposé que si un lien de paiement est configuré
+    if (p.id === 'free') el.append(Object.assign(document.createElement('a'), { className: 'btn', href: '#top', textContent: 'Essayer gratuitement' }));
+    else if (p.checkout) el.append(Object.assign(document.createElement('a'), { className: 'btn', href: p.checkout, rel: 'noopener', textContent: `Choisir ${p.name}` }));
+    else el.append(Object.assign(document.createElement('button'), { className: 'btn ghost', type: 'button', disabled: true, textContent: 'Bientôt disponible' }));
+    box.append(el);
+  });
+}).catch(() => { $('#tarifs').hidden = true; });

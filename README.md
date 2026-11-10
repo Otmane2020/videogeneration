@@ -3,7 +3,7 @@
 Appli mobile-first : **URL → inspection → SaaS ou E-com → pubs vidéo** avec voix off.
 
 1. **URL** – on colle l'adresse du site ou de la fiche produit.
-2. **Inspection** – le serveur lit la page : titres, images, logo, fiche produit structurée (nom, prix, photos).
+2. **Inspection** – le serveur lit la page : titres, logo, et la fiche produit complète. Sources lues, dans l'ordre : JSON Shopify (`/products/<nom>.js`), variations WooCommerce, données structurées (Product / ProductGroup), galeries zoom, liens et scripts de la page. Toutes les photos sont ramenées en pleine taille et dédoublonnées ; couleurs, tailles et prix par variante sont proposés dans l'assistant.
 3. **SaaS ou E-com** – l'utilisateur confirme ; en e-commerce il peut ajouter ses propres photos.
 4. **Pubs** – l'IA écrit 3 pubs ; export MP4 image par image dans le navigateur (9:16, 1:1, 16:9, 720p/1080p, durée auto ou imposée à l'image près).
 
@@ -21,6 +21,10 @@ Dans les deux cas : vrai logo et couleurs tirées du logo, transitions variées,
 | [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, dans `public/vendor`) | encodage MP4 H.264 via WebCodecs |
 | mShots (WordPress.com) | capture d'écran mobile du site |
 | Poppins (OFL, dans `public/fonts`) | typographie des vidéos |
+
+## Page d'accueil et offres
+
+`public/index.html` contient la page d'accueil (présentation, tarifs, FAQ) et l'assistant. Les offres viennent de `/api/config` : `PLANS_JSON` pour les modifier, `CHECKOUT_PRO` / `CHECKOUT_BUSINESS` pour brancher des liens de paiement (sans lien, le bouton affiche « Bientôt disponible »). Les prix par défaut sont des exemples.
 
 ## Lancer
 

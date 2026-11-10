@@ -10,7 +10,7 @@ try {
   }
 } catch { /* pas de .env */ }
 
-const api = Object.fromEntries(['inspect', 'analyze', 'videos', 'tts', 'media', 'shot', 'backdrop'].map((n) => [`/api/${n}`, require(`./api/${n}.js`)]));
+const api = Object.fromEntries(['inspect', 'analyze', 'videos', 'tts', 'media', 'shot', 'backdrop', 'config'].map((n) => [`/api/${n}`, require(`./api/${n}.js`)]));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.mjs': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2' };
 const PUBLIC = path.join(__dirname, 'public');
 

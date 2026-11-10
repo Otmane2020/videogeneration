@@ -12,20 +12,77 @@
 <main id="app">
   <header>
     <a class="logo" href="/" aria-label="AdReel, accueil"><span class="mark"></span>AdReel</a>
-    <ol class="steps" aria-label="Étapes">
+    <nav class="nav" aria-label="Navigation"><a href="#comment">Comment ça marche</a><a href="#tarifs">Tarifs</a><a href="#faq">FAQ</a><a class="pillbtn" href="#top">Essayer</a></nav>
+    <ol class="steps" aria-label="Étapes" hidden>
       <li data-s="1">URL</li><li data-s="2">Inspection</li><li data-s="3">Type</li><li data-s="4">Pubs</li>
     </ol>
   </header>
 
-  <section id="s-url" class="view">
-    <h1>Une URL.<br><em>Des pubs vidéo.</em></h1>
-    <p class="lead">Collez l’adresse de votre site. L’IA l’inspecte, comprend ce que vous vendez et monte vos pubs avec voix off.</p>
-    <form id="f-url" novalidate>
-      <label for="url">Adresse du site</label>
-      <input id="url" name="url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="monsite.com" required>
-      <button class="btn" type="submit">Inspecter le site</button>
-    </form>
-    <p class="error" id="e-url" role="alert" hidden></p>
+  <section id="s-url" class="view landing">
+    <div class="hero" id="top">
+      <div class="hero-copy">
+        <p class="eyebrow">Pubs vidéo par IA · SaaS et e-commerce</p>
+        <h1>Collez un lien.<br><em>Recevez vos pubs vidéo.</em></h1>
+        <p class="lead">AdReel lit votre site ou votre fiche produit, écrit le script, pose la voix off et monte trois pubs prêtes à publier sur Reels, TikTok et YouTube.</p>
+        <form id="f-url" novalidate>
+          <label for="url" class="sr">Adresse du site ou de la fiche produit</label>
+          <div class="field">
+            <input id="url" name="url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="monsite.com/produit" required>
+            <button class="btn" type="submit">Créer mes pubs</button>
+          </div>
+        </form>
+        <p class="error" id="e-url" role="alert" hidden></p>
+        <ul class="trust"><li>Sans inscription</li><li>Essai gratuit</li><li>MP4 jusqu’en 1080p</li></ul>
+      </div>
+      <div class="hero-art" aria-hidden="true">
+        <div class="mock m1"><span class="bar"></span><i class="chip"></i><div class="prod"></div><b>Votre produit,</b><b class="alt">en vedette</b><small>voix off · sous-titres</small></div>
+        <div class="mock m2"><span class="bar"></span><i class="chip"></i><div class="screen"><u></u><u></u><u></u></div><b>Votre site</b><b class="alt">en démo</b></div>
+      </div>
+    </div>
+
+    <section class="block" id="comment">
+      <p class="eyebrow">Comment ça marche</p>
+      <h2>Trois étapes, zéro montage</h2>
+      <ol class="how">
+        <li><span>1</span><h3>Collez votre lien</h3><p>Site SaaS ou fiche produit : AdReel récupère textes, photos, variantes, prix, logo et couleurs.</p></li>
+        <li><span>2</span><h3>Validez l’essentiel</h3><p>SaaS ou e-commerce, couleur et taille du produit, photos à utiliser. Deux touches suffisent.</p></li>
+        <li><span>3</span><h3>Téléchargez le MP4</h3><p>Trois angles de pub au choix, au format et à la durée voulus, avec musique et voix off.</p></li>
+      </ol>
+    </section>
+
+    <section class="block">
+      <p class="eyebrow">Ce que vous obtenez</p>
+      <h2>Des pubs à votre image, pas des diaporamas</h2>
+      <div class="bento">
+        <article class="wide"><h3>Votre vrai produit, jamais déformé</h3><p>En e-commerce, la pub part de vos photos. Le fond est retiré, le produit reste intact, puis il est mis en scène sur un décor de studio ou un décor sur mesure généré par IA.</p></article>
+        <article><h3>Votre site en démo</h3><p>En SaaS, la page d’accueil défile dans un téléphone, droit puis incliné.</p></article>
+        <article><h3>Logo et couleurs de marque</h3><p>Le logo est repris du site et ses couleurs habillent toute la vidéo.</p></article>
+        <article><h3>Voix off et sous-titres</h3><p>Une voix naturelle et des sous-titres mot à mot, dans la langue du site.</p></article>
+        <article><h3>30 musiques incluses</h3><p>Six ambiances, calées à la durée exacte, qui s’effacent sous la voix.</p></article>
+        <article class="wide"><h3>Le bon format, à l’image près</h3><p>9:16, 1:1 ou 16:9. 10, 15, 20 ou 30 secondes. 720p ou 1080p. Un vrai fichier MP4 à télécharger ou partager.</p></article>
+      </div>
+    </section>
+
+    <section class="block" id="tarifs">
+      <p class="eyebrow">Tarifs</p>
+      <h2>Commencez gratuitement</h2>
+      <div class="plans" id="plans"></div>
+    </section>
+
+    <section class="block" id="faq">
+      <p class="eyebrow">Questions fréquentes</p>
+      <h2>Avant de vous lancer</h2>
+      <details><summary>Faut-il créer un compte ?</summary><p>Non. Collez un lien et la première pub se monte tout de suite, dans votre navigateur.</p></details>
+      <details><summary>Mes photos produit sont-elles modifiées par l’IA ?</summary><p>Non. Seul le fond uni est retiré. Le produit n’est jamais régénéré : forme, logo et couleurs restent ceux de la photo.</p></details>
+      <details><summary>Que faire si mon site bloque la lecture automatique ?</summary><p>Ajoutez vos photos à la main à l’étape suivante : la pub se monte avec elles.</p></details>
+      <details><summary>D’où viennent les vidéos et la musique ?</summary><p>Les plans d’illustration viennent de Pixabay, sous sa licence. La musique est composée par l’application, sans droits à régler.</p></details>
+    </section>
+
+    <section class="cta-end">
+      <h2>Votre première pub dans quelques minutes</h2>
+      <a class="btn" href="#top" id="cta-end">Coller mon lien</a>
+    </section>
+    <footer><span class="logo"><span class="mark"></span>AdReel</span><span>Pubs vidéo par IA pour SaaS et e-commerce</span></footer>
   </section>
 
   <section id="s-inspect" class="view" hidden>
@@ -49,6 +106,7 @@
       <button type="button" role="radio" class="type" data-type="ecom"><b>E-commerce</b><span>Boutique, produits</span><i class="badge" hidden>Détecté</i></button>
     </div>
     <div id="uploads" hidden>
+      <div id="variants"></div>
       <h3>Photos du produit</h3>
       <p class="hint" id="up-hint"></p>
       <div class="photos" id="photos"></div>

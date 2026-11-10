@@ -496,8 +496,7 @@ function makeRenderer(cv, job) {
     ctx.restore();
   }
 
-  // Le vrai site dans un téléphone. Trois mises en scène : incliné puis redressé et zoom caméra,
-  // balancement en biais, gros plan qui recule.
+  // Le vrai site dans un téléphone, deux mises en scène : démo droite, puis vue inclinée.
   function phone(box, local, dur, variant) {
     let h = Math.min(box.h, 760), w = h * 0.5;
     if (w > box.w) { w = box.w; h = Math.min(box.h, w * 2); }
@@ -505,15 +504,13 @@ function makeRenderer(cv, job) {
     const p = clamp(local / dur), enter = easeOut((local - 0.05) / 0.6);
     let rot = 0, shx = 0, shy = 0, sc = 1, dy = 0;
     if (variant === 0) {
-      const a = easeInOut((p - 0.08) / 0.4);
-      shx = lerp(0.5, 0, a); shy = lerp(-0.3, 0, a); rot = lerp(-0.1, 0, a);
-      sc = lerp(0.78, 1, a) * (1 + 0.3 * easeInOut((p - 0.5) / 0.5));
-      dy = -h * 0.08 * easeInOut((p - 0.5) / 0.5);
-    } else if (variant === 1) {
-      rot = lerp(-0.22, 0.1, easeInOut(p)); sc = 1.02 + 0.1 * p;
+      // démo : téléphone bien droit, la page défile, léger zoom caméra
+      sc = 1 + 0.07 * easeInOut(p);
     } else {
-      const a = easeOut(p / 0.65);
-      sc = lerp(1.75, 1, a); dy = lerp(h * 0.42, 0, a); rot = lerp(0.07, 0, a);
+      // vue inclinée avec relief, qui pivote doucement
+      const a = easeInOut(p);
+      shx = lerp(0.46, 0.3, a); shy = lerp(-0.27, -0.17, a); rot = lerp(-0.1, -0.04, a);
+      sc = lerp(0.8, 0.9, a);
     }
     const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
     const x = cx - w / 2, y = cy - h / 2, b = Math.max(8, w * 0.03), r = w * 0.11;
@@ -846,16 +843,19 @@ async function produce(ad) {
   $('#studio').hidden = false;
   document.body.style.overflow = 'hidden';
 
-  const scenes = (job.scenes = [...ad.scenes.map((s) => ({ ...s })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
+  // formats courts : moins de scènes, pour que chacune reste lisible
+  const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
+  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
   // SaaS : nombre de scènes en vidéo Pixabay choisi par l'utilisateur ; les autres montrent le site
   const stock = plan.type === 'saas' ? +$('#stock').value : -1;
   if (stock >= 0) {
-    const order = [0, 3, 2, 1, 4].filter((i) => i < ad.scenes.length).slice(0, stock);
-    ad.scenes.forEach((_, i) => { scenes[i].visual = order.includes(i) ? 'footage' : 'site'; });
+    const order = [0, 3, 2, 1, 4].filter((i) => i < keep).slice(0, stock);
+    scenes.forEach((s, i) => { if (!s.kind) s.visual = order.includes(i) ? 'footage' : 'site'; });
   }
+  // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
-  scenes.forEach((s) => { if (s.visual === 'site') s.variant = site++ % 3; });
-  const needClip = (s) => s.visual === 'footage' || (s.visual === 'site' && stock !== 0);
+  scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
+  const needClip = (s) => s.visual === 'footage' || s.visual === 'site';
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
@@ -893,7 +893,7 @@ async function produce(ad) {
     const first = blobs.findIndex(Boolean);
     if (offline) {
       const opened = await Promise.all(blobs.map((b) => (b ? openClip(job.MB, b, cv.width, cv.height) : null)));
-      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[first] || null : needClip(s) ? opened[i] : null; });
+      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[first] || null : opened[i]; });
     }
     scenes.forEach((s, i) => {
       s.voice = voices[i];

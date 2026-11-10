@@ -64,6 +64,13 @@
       <button type="button" role="radio" data-fmt="1:1" aria-checked="false">1:1 Feed</button>
       <button type="button" role="radio" data-fmt="16:9" aria-checked="false">16:9 YouTube</button>
     </div>
+    <div class="music">
+      <label for="music">Musique de fond</label>
+      <div class="row">
+        <select id="music"></select>
+        <button class="btn ghost" id="b-listen" type="button">Écouter</button>
+      </div>
+    </div>
     <div id="ads"></div>
     <button class="link" type="button" data-back>Nouvelle URL</button>
   </section>
@@ -91,6 +98,7 @@
     <button class="btn" type="button">Monter cette vidéo</button>
   </article>
 </template>
+<script src="/music.js" defer></script>
 <script src="/app.js" defer></script>
 </body>
 </html>

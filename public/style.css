@@ -63,6 +63,10 @@ input::placeholder { color: #4f7467; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); margin-bottom: 16px; }
 .seg button { padding: 10px 4px; min-height: 44px; border: 0; border-radius: 10px; background: none; color: var(--mute); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .seg button[aria-checked="true"] { background: var(--green); color: #fff; }
+.music { margin-bottom: 16px; }
+.music .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.music select { width: 100%; min-height: 50px; padding: 0 12px; font: inherit; font-size: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
+.music .btn { margin: 0; width: auto; min-height: 50px; padding: 0 18px; font-size: 15px; }
 .ad { border: 1px solid var(--line); background: var(--card); border-radius: var(--r); padding: 14px; margin-bottom: 14px; }
 .thumbs { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 12px; }
 .thumbs img, .thumbs i { width: 100%; aspect-ratio: 9/14; object-fit: cover; border-radius: 8px; background: linear-gradient(160deg, #134a39, #0a211a); display: block; }

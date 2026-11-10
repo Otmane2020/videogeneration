@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '' };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 async function api(path, body) {
@@ -81,6 +81,7 @@ function renderAds() {
   $('#sw1').style.background = plan.palette.primary;
   $('#sw2').style.background = plan.palette.accent;
   $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script : ${plan.engine}` + (plan.vision ? ` · ${plan.vision} visuel(s) analysé(s)` : '');
+  setMusic(plan.type === 'ecom' ? 'm6' : 'm1');
   const box = $('#ads');
   box.textContent = '';
   plan.ads.forEach((ad) => {
@@ -119,6 +120,61 @@ $$('.seg button').forEach((b) => b.addEventListener('click', () => {
   state.fmt = b.dataset.fmt;
   $$('.seg button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
 }));
+
+/* ---------- musique ---------- */
+const preview = { ctx: null, src: null };
+function stopPreview() {
+  try { preview.src?.stop(); } catch {}
+  preview.src = null;
+  $('#b-listen').textContent = 'Écouter';
+}
+function setMusic(id) {
+  stopPreview();
+  state.music = id;
+  $('#music').value = id;
+}
+(function initMusic() {
+  const sel = $('#music');
+  sel.append(new Option('Sans musique', ''));
+  const groups = {};
+  Music.PRESETS.forEach((p) => {
+    const g = (groups[p.mood] ||= sel.appendChild(Object.assign(document.createElement('optgroup'), { label: p.mood })));
+    g.append(new Option(`${p.name} · ${p.bpm} bpm`, p.id));
+  });
+  sel.addEventListener('change', () => setMusic(sel.value));
+  $('#b-listen').addEventListener('click', async () => {
+    if (preview.src) return stopPreview();
+    const p = Music.byId(state.music);
+    if (!p) return;
+    preview.ctx ||= new (window.AudioContext || window.webkitAudioContext)();
+    await preview.ctx.resume().catch(() => {});
+    $('#b-listen').textContent = '…';
+    const buf = await Music.render(p, 12, preview.ctx.sampleRate);
+    if (state.music !== p.id) return stopPreview();
+    const src = (preview.src = preview.ctx.createBufferSource());
+    src.buffer = buf; src.connect(preview.ctx.destination);
+    src.onended = () => { if (preview.src === src) stopPreview(); };
+    src.start();
+    $('#b-listen').textContent = 'Stop';
+  });
+})();
+// musique + voix : la musique baisse automatiquement pendant que la voix parle
+function mixAudio(ctx, out, job, t0 = 0) {
+  job.scenes.forEach((s) => {
+    if (!s.voice) return;
+    const n = ctx.createBufferSource();
+    n.buffer = s.voice; n.connect(out); n.start(t0 + s.start + 0.3);
+  });
+  if (!job.musicBuf) return;
+  const g = ctx.createGain(), n = ctx.createBufferSource();
+  g.gain.setValueAtTime(0.6, t0);
+  job.scenes.forEach((s) => {
+    if (!s.voice) return;
+    g.gain.setTargetAtTime(0.2, t0 + s.start + 0.15, 0.08);
+    g.gain.setTargetAtTime(0.6, t0 + s.start + 0.3 + s.voice.duration, 0.18);
+  });
+  n.buffer = job.musicBuf; n.connect(g); g.connect(out); n.start(t0);
+}
 
 /* ---------- chargement des médias ---------- */
 // Un plan différent par scène ; en vertical on préfère les vidéos tournées en vertical.
@@ -405,7 +461,7 @@ async function exportOffline(job, cv, draw, voices) {
   const format = new MB.Mp4OutputFormat({ fastStart: 'in-memory' });
   const vcodec = await MB.getFirstEncodableVideoCodec(['avc', 'vp9', 'av1'].filter((c) => format.getSupportedCodecs().includes(c)), { width: cv.width, height: cv.height });
   if (!vcodec) return null;
-  const acodec = voices.some(Boolean) ? await MB.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 1, sampleRate: 48000 }) : null;
+  const acodec = voices.some(Boolean) || job.musicBuf ? await MB.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000 }) : null;
   const output = new MB.Output({ format, target: new MB.BufferTarget() });
   job.output = output;
   const vsrc = new MB.CanvasSource(cv, { codec: vcodec, bitrate: 5e6, keyFrameInterval: 2 });
@@ -415,12 +471,8 @@ async function exportOffline(job, cv, draw, voices) {
   await output.start();
 
   if (asrc) {
-    const off = new OfflineAudioContext(1, Math.ceil(job.total * 48000), 48000);
-    job.scenes.forEach((s) => {
-      if (!s.voice) return;
-      const n = off.createBufferSource();
-      n.buffer = s.voice; n.connect(off.destination); n.start(s.start + 0.3);
-    });
+    const off = new OfflineAudioContext(2, Math.ceil(job.total * 48000), 48000);
+    mixAudio(off, off.destination, job);
     await asrc.add(await off.startRendering());
   }
 
@@ -481,12 +533,7 @@ async function exportRealtime(job, cv, draw, voices) {
   rec.ondataavailable = (e) => e.data.size && chunks.push(e.data);
   draw(0);
   if (scenes[0].video) await scenes[0].video.play().catch(() => {});
-  const a0 = actx.currentTime + 0.1;
-  scenes.forEach((s) => {
-    if (!s.voice) return;
-    const n = actx.createBufferSource();
-    n.buffer = s.voice; n.connect(dest); n.start(a0 + s.start + 0.3);
-  });
+  mixAudio(actx, dest, job, actx.currentTime + 0.1);
   rec.start(500);
   const t0 = performance.now() + 100;
   let cur = 0;
@@ -512,6 +559,7 @@ async function exportRealtime(job, cv, draw, voices) {
 
 async function produce(ad) {
   const plan = state.plan, page = state.page;
+  stopPreview();
   const AC = window.AudioContext || window.webkitAudioContext;
   const actx = new AC(); // créé dans le geste utilisateur (iOS)
   const job = (state.job = { cancelled: false, actx, plan, host: page.host });
@@ -563,6 +611,8 @@ async function produce(ad) {
       t += s.dur;
     });
     job.total = t;
+    const track = Music.byId(state.music);
+    job.musicBuf = track ? await Music.render(track, t).catch(() => null) : null;
     const draw = makeRenderer(cv, job);
 
     let blob = offline ? await exportOffline(job, cv, draw, voices) : null;
@@ -584,7 +634,7 @@ async function produce(ad) {
     $('#b-share').hidden = !navigator.canShare?.({ files: [file] });
     $('#b-share').onclick = () => navigator.share({ files: [file], title: plan.brand }).catch(() => {});
     $('#st-actions').hidden = false;
-    status(`Vidéo prête · ${Math.round(job.total)} s · ${(blob.size / 1e6).toFixed(1)} Mo` + (silent ? ' · sans voix off' : ''), 100);
+    status(`Vidéo prête · ${Math.round(job.total)} s · ${(blob.size / 1e6).toFixed(1)} Mo` + (silent ? ' · sans voix off' : '') + (track && job.musicBuf ? ` · ♪ ${track.name}` : ''), 100);
   } catch (err) {
     console.error(err);
     if (!job.cancelled) status('Le montage a échoué. Réessayez.', 100);

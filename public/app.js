@@ -126,6 +126,7 @@ function renderAds() {
   $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script : ${plan.engine}` + (plan.vision ? ` · ${plan.vision} visuel(s) analysé(s)` : '') + (plan.price ? ` · ${plan.price}` : '');
   setMusic(plan.type === 'ecom' ? 'm6' : 'm1');
   $('#opt-stock').hidden = plan.type !== 'saas';
+  $('#opt-bg').hidden = plan.type !== 'ecom';
   $('#stock').value = '-1';
   const box = $('#ads');
   box.textContent = '';
@@ -291,10 +292,12 @@ async function loadVoice(actx, text, lang) {
 // Détourage fidèle : on retire uniquement le fond uni (blanc, gris…) relié aux bords de la photo.
 // Le produit lui-même n'est jamais modifié ni régénéré. Renvoie null si le fond n'est pas uni.
 function cutout(img) {
-  const k = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
+  // on travaille à la résolution d'origine (2000 px au plus) : aucun rééchantillonnage, donc aucune perte de netteté
+  const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
   const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
   const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
   const g = c.getContext('2d', { willReadFrequently: true });
+  g.imageSmoothingQuality = 'high';
   g.drawImage(img, 0, 0, w, h);
   let px;
   try { px = g.getImageData(0, 0, w, h); } catch { return null; }
@@ -318,11 +321,18 @@ function cutout(img) {
   let kept = 0;
   for (let i = 0; i < w * h; i++) {
     if (bg[i]) d[i * 4 + 3] = 0;
-    else {
-      kept++;
-      const x = i % w; // bord adouci
-      if (bg[i - w] || bg[i + w] || (x > 0 && bg[i - 1]) || (x < w - 1 && bg[i + 1])) d[i * 4 + 3] = 150;
-    }
+    else kept++;
+  }
+  // bord : transparence proportionnelle à l'écart avec le fond, et couleur débarrassée du liseré du fond
+  const bgc = [r, gr, b];
+  for (let i = 0; i < w * h; i++) {
+    if (bg[i]) continue;
+    const x = i % w;
+    if (!(bg[i - w] || bg[i + w] || (x > 0 && bg[i - 1]) || (x < w - 1 && bg[i + 1]))) continue;
+    const dist = Math.abs(d[i * 4] - r) + Math.abs(d[i * 4 + 1] - gr) + Math.abs(d[i * 4 + 2] - b);
+    const a = Math.max(0.35, Math.min(1, (dist - 40) / 140));
+    for (let ch = 0; ch < 3; ch++) d[i * 4 + ch] = Math.max(0, Math.min(255, (d[i * 4 + ch] - (1 - a) * bgc[ch]) / a));
+    d[i * 4 + 3] = Math.round(a * 255);
   }
   if (kept < w * h * 0.04 || kept > w * h * 0.93) return null;
   g.putImageData(px, 0, 0);
@@ -392,7 +402,7 @@ function makeRenderer(cv, job) {
   const S = job.scale, main = cv.getContext('2d');
   const [W, H] = job.size;
   const layer = Object.assign(document.createElement('canvas'), { width: cv.width, height: cv.height });
-  const tmp = document.createElement('canvas');
+  const tmp = document.createElement('canvas'), refl = document.createElement('canvas');
   let ctx = main;
   const { scenes, plan, shot, logo } = job;
   const P = plan.palette.primary, A = plan.palette.accent;
@@ -445,6 +455,7 @@ function makeRenderer(cv, job) {
   function background(sc, k) {
     const ph = sc.ph;
     if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.75 + 0.3 * k, lerp(0.3, 0.7, easeInOut(k)), lerp(0.38, 0.62, easeInOut(k)));
+    if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
     footage(sc, k);
   }
@@ -461,7 +472,25 @@ function makeRenderer(cv, job) {
     const w = c.width * f * z, h = c.height * f * z;
     const x = box.x + (box.w - w) / 2 + (k - 0.5) * 16, y = box.y + box.h - h - box.h * 0.03 + (1 - e) * 40;
     ctx.save();
+    ctx.imageSmoothingQuality = 'high';
     ctx.globalAlpha = clamp((local - 0.05) / 0.3);
+    if (job.backdrop) {
+      // halo de lumière derrière le produit et reflet sur le sol brillant
+      const gl = ctx.createRadialGradient(x + w / 2, y + h * 0.5, 0, x + w / 2, y + h * 0.5, Math.max(w, h) * 0.75);
+      gl.addColorStop(0, A + '40'); gl.addColorStop(1, A + '00');
+      ctx.fillStyle = gl; ctx.fillRect(x - w, y - h * 0.5, w * 3, h * 2);
+      const rh = Math.min(h * 0.4, H - (y + h));
+      if (rh > 20) {
+        refl.width = Math.ceil(w * S); refl.height = Math.ceil(rh * S);
+        const t = refl.getContext('2d');
+        t.save(); t.translate(0, h * S); t.scale(1, -1); t.drawImage(c, 0, 0, refl.width, h * S); t.restore();
+        t.globalCompositeOperation = 'destination-in';
+        const fade = t.createLinearGradient(0, 0, 0, refl.height);
+        fade.addColorStop(0, 'rgba(0,0,0,.3)'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+        t.fillStyle = fade; t.fillRect(0, 0, refl.width, refl.height);
+        ctx.drawImage(refl, x, y + h - 3, w, rh);
+      }
+    }
     // ombre de contact au sol
     const sh = ctx.createRadialGradient(0, 0, 0, 0, 0, w * 0.55);
     sh.addColorStop(0, 'rgba(0,0,0,.34)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
@@ -882,6 +911,16 @@ async function produce(ad) {
     const byId = new Map();
     photos.forEach((img, n) => { if (img) byId.set(photoIds[n], { img, cut: cutout(img) }); });
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
+    // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
+    if (best?.cut && $('#bgai').value === '1') {
+      status('Création du décor sur mesure…');
+      const key = state.fmt;
+      plan.backdrops ||= {};
+      plan.backdrops[key] ||= api('/api/backdrop', { decor: plan.decor, scene: plan.backdrop, category: plan.category, accent: plan.palette.accent, format: state.fmt })
+        .then((r) => r.blob()).then((b) => loadImage(URL.createObjectURL(b))).catch(() => null);
+      job.backdrop = await plan.backdrops[key];
+      if (!job.backdrop) delete plan.backdrops[key];
+    }
     scenes.forEach((s) => {
       if (s.kind === 'cta') s.ph = best;
       else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;

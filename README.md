@@ -14,7 +14,8 @@ Dans les deux cas : vrai logo et couleurs tirées du logo, transitions variées,
 
 | Service | Rôle |
 | --- | --- |
-| OpenRouter (Gemini) → Gemini → Groq | analyse visuelle + script, avec bascule automatique (Groq : texte seul par défaut) |
+| OpenRouter (modèle gratuit avec vision) → Groq (gratuit, texte) → Gemini payant | analyse visuelle + script, du gratuit au payant. En e-commerce, la vision passe avant (contrôle des photos produit) |
+| OpenRouter (modèle image, payant, en option) | décor sur mesure derrière le produit détouré ; sinon décor de studio dessiné par le code, gratuit |
 | Pixabay | vidéos libres de droits |
 | Deepgram Aura | voix off |
 | [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, dans `public/vendor`) | encodage MP4 H.264 via WebCodecs |

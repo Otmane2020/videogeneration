@@ -63,7 +63,7 @@ input::placeholder { color: #4f7467; }
 .seg { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; padding: 4px; border-radius: 14px; background: var(--card); border: 1px solid var(--line); margin-bottom: 16px; }
 .seg button { padding: 10px 4px; min-height: 44px; border: 0; border-radius: 10px; background: none; color: var(--mute); font: inherit; font-size: 13px; font-weight: 600; cursor: pointer; }
 .seg button[aria-checked="true"] { background: var(--green); color: #fff; }
-.opts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 12px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(90px, 1fr)); gap: 8px; margin-bottom: 12px; }
 .opts select, .music select { width: 100%; min-height: 50px; padding: 0 12px; font: inherit; font-size: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
 .hint { font-size: 13px; color: var(--mute); margin-bottom: 10px; }
 .photos { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; margin-bottom: 4px; }

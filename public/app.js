@@ -125,6 +125,8 @@ function renderAds() {
   $('#sw2').style.background = plan.palette.accent;
   $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script : ${plan.engine}` + (plan.vision ? ` · ${plan.vision} visuel(s) analysé(s)` : '') + (plan.price ? ` · ${plan.price}` : '');
   setMusic(plan.type === 'ecom' ? 'm6' : 'm1');
+  $('#opt-stock').hidden = plan.type !== 'saas';
+  $('#stock').value = '-1';
   const box = $('#ads');
   box.textContent = '';
   plan.ads.forEach((ad) => {
@@ -845,9 +847,15 @@ async function produce(ad) {
   document.body.style.overflow = 'hidden';
 
   const scenes = (job.scenes = [...ad.scenes.map((s) => ({ ...s })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
+  // SaaS : nombre de scènes en vidéo Pixabay choisi par l'utilisateur ; les autres montrent le site
+  const stock = plan.type === 'saas' ? +$('#stock').value : -1;
+  if (stock >= 0) {
+    const order = [0, 3, 2, 1, 4].filter((i) => i < ad.scenes.length).slice(0, stock);
+    ad.scenes.forEach((_, i) => { scenes[i].visual = order.includes(i) ? 'footage' : 'site'; });
+  }
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') s.variant = site++ % 3; });
-  const needClip = (s) => s.visual === 'footage' || s.visual === 'site';
+  const needClip = (s) => s.visual === 'footage' || (s.visual === 'site' && stock !== 0);
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
@@ -885,7 +893,7 @@ async function produce(ad) {
     const first = blobs.findIndex(Boolean);
     if (offline) {
       const opened = await Promise.all(blobs.map((b) => (b ? openClip(job.MB, b, cv.width, cv.height) : null)));
-      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[first] || null : opened[i]; });
+      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[first] || null : needClip(s) ? opened[i] : null; });
     }
     scenes.forEach((s, i) => {
       s.voice = voices[i];

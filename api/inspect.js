@@ -292,7 +292,7 @@ async function fetchPage(url) {
   for (const headers of [CHROME, SAFARI]) {
     last = await safeFetch(url, { headers }, 9000);
     if (last.ok || !REFUSED.includes(last.status)) return last;
-    await last.body?.cancel().catch(() => {});
+    last.body?.cancel().catch(() => {}); // sans attendre : un anti-robot peut retenir la réponse indéfiniment
     await new Promise((ok) => setTimeout(ok, 700));
   }
   return last;
@@ -321,7 +321,9 @@ module.exports = handler('POST', async (req, res) => {
   if (!/^https?:\/\//i.test(url)) url = 'https://' + url;
   let r;
   try {
-    r = await fetchPage(url);
+    // limite stricte : au-delà, on traite le site comme protégé plutôt que de laisser l'utilisateur attendre
+    r = await Promise.race([fetchPage(url), new Promise((ok) => setTimeout(() => ok(null), 14000))]);
+    if (!r) return send(res, 200, blockedPage(url, 'no answer'));
   } catch (e) {
     if (e.status) throw e;
     if (e.name === 'TimeoutError') return send(res, 200, blockedPage(url, 'no answer'));

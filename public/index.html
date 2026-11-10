@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#06231b">
+<title>AdReel — une URL, des pubs vidéo</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%230f9d76'/><path d='M12 9l12 7-12 7z' fill='white'/></svg>">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<main id="app">
+  <header>
+    <a class="logo" href="/" aria-label="AdReel, accueil"><span class="mark"></span>AdReel</a>
+    <ol class="steps" aria-label="Étapes">
+      <li data-s="1">URL</li><li data-s="2">Inspection</li><li data-s="3">Type</li><li data-s="4">Pubs</li>
+    </ol>
+  </header>
+
+  <section id="s-url" class="view">
+    <h1>Une URL.<br><em>Des pubs vidéo.</em></h1>
+    <p class="lead">Collez l’adresse de votre site. L’IA l’inspecte, comprend ce que vous vendez et monte vos pubs avec voix off.</p>
+    <form id="f-url" novalidate>
+      <label for="url">Adresse du site</label>
+      <input id="url" name="url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="monsite.com" required>
+      <button class="btn" type="submit">Inspecter le site</button>
+    </form>
+    <p class="error" id="e-url" role="alert" hidden></p>
+  </section>
+
+  <section id="s-inspect" class="view" hidden>
+    <div class="scan"><div class="ring"></div></div>
+    <h2 id="scan-title">Inspection en cours…</h2>
+    <p class="lead" id="scan-sub"></p>
+  </section>
+
+  <section id="s-type" class="view" hidden>
+    <article class="site">
+      <img id="site-img" alt="" hidden>
+      <div class="site-body">
+        <p class="host" id="site-host"></p>
+        <h2 id="site-title"></h2>
+        <p id="site-desc"></p>
+      </div>
+    </article>
+    <h3>Que vendez-vous ?</h3>
+    <div class="types" role="radiogroup" aria-label="Type d’activité">
+      <button type="button" role="radio" class="type" data-type="saas"><b>SaaS</b><span>Logiciel, appli, abonnement</span><i class="badge" hidden>Détecté</i></button>
+      <button type="button" role="radio" class="type" data-type="ecom"><b>E-commerce</b><span>Boutique, produits</span><i class="badge" hidden>Détecté</i></button>
+    </div>
+    <button class="btn" id="b-gen" type="button">Créer mes pubs</button>
+    <button class="link" type="button" data-back>Changer d’URL</button>
+    <p class="error" id="e-type" role="alert" hidden></p>
+  </section>
+
+  <section id="s-ads" class="view" hidden>
+    <div class="brand">
+      <span class="sw" id="sw1"></span><span class="sw" id="sw2"></span>
+      <div><h2 id="brand-name"></h2><p id="brand-sum"></p></div>
+    </div>
+    <p class="meta" id="engine"></p>
+    <div class="seg" role="radiogroup" aria-label="Format">
+      <button type="button" role="radio" data-fmt="9:16" aria-checked="true">9:16 Reels</button>
+      <button type="button" role="radio" data-fmt="1:1" aria-checked="false">1:1 Feed</button>
+      <button type="button" role="radio" data-fmt="16:9" aria-checked="false">16:9 YouTube</button>
+    </div>
+    <div id="ads"></div>
+    <button class="link" type="button" data-back>Nouvelle URL</button>
+  </section>
+</main>
+
+<div id="studio" hidden>
+  <div class="stage"><canvas id="cv" width="720" height="1280"></canvas><video id="result" controls playsinline hidden></video></div>
+  <div class="panel">
+    <p id="st-status" role="status"></p>
+    <div class="bar"><i id="st-bar"></i></div>
+    <div class="actions" id="st-actions" hidden>
+      <a class="btn" id="b-dl" download>Télécharger</a>
+      <button class="btn ghost" id="b-share" type="button" hidden>Partager</button>
+    </div>
+    <button class="link" id="b-close" type="button">Fermer</button>
+  </div>
+</div>
+
+<template id="t-ad">
+  <article class="ad">
+    <div class="thumbs"></div>
+    <p class="angle"></p>
+    <ol class="scenes"></ol>
+    <p class="cta"></p>
+    <button class="btn" type="button">Monter cette vidéo</button>
+  </article>
+</template>
+<script src="/app.js" defer></script>
+</body>
+</html>

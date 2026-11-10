@@ -18,12 +18,13 @@ Return ONLY a JSON object with this exact shape:
      {"headline": string,             // on-screen text, max 6 words, punchy, no emoji
       "voiceover": string,            // one spoken sentence, 8-16 words, natural
       "query": string,                // 1-3 ENGLISH words to find matching stock footage (concrete, filmable: "woman laptop cafe")
-      "showProduct": boolean}         // true when the product photo should be on screen (e-commerce only)
+      "visual": "footage"|"site"|"product"}  // what is on screen: stock footage, a phone showing the real website, or the product photo
    ],
    "cta": string,                     // button label, max 4 words
    "ctaVoiceover": string}            // closing spoken line, max 12 words
  ]
 }
+Visual rules: scene 1 is always "footage". SaaS: use "site" for 1 or 2 scenes where the product is shown or explained, never "product". E-commerce: use "product" for 1 or 2 scenes, and "site" for at most 1.
 Rules: write headline, voiceover, tagline, cta in the requested language; "query" is always English. Never invent prices, discounts, figures or testimonials that are not in the page content. No hashtags, no emoji.`;
 
 const LANGS = { fr: 'French', en: 'English', es: 'Spanish', de: 'German', it: 'Italian', nl: 'Dutch', pt: 'Portuguese', ar: 'Arabic', ja: 'Japanese' };
@@ -57,7 +58,7 @@ function fallback(page, type) {
     palette: {},
     ads: angles.map((angle, a) => ({
       angle, hook: '',
-      scenes: [0, 1, 2, 3].map((i) => ({ headline: short(pick(a + i)), voiceover: pick(a + i), query: q[(a + i) % 4], showProduct: type === 'ecom' && i === 1 })),
+      scenes: [0, 1, 2, 3].map((i) => ({ headline: short(pick(a + i)), voiceover: pick(a + i), query: q[(a + i) % 4], visual: i === 1 ? (type === 'ecom' ? 'product' : 'site') : i === 2 && type === 'ecom' ? 'site' : 'footage' })),
       cta: type === 'ecom' ? (fr ? 'Acheter maintenant' : 'Shop now') : (fr ? 'Essayer gratuitement' : 'Try it free'),
       ctaVoiceover: fr ? `Découvrez ${page.siteName} dès aujourd’hui.` : `Discover ${page.siteName} today.`,
     })),
@@ -72,7 +73,7 @@ function normalize(d, page, type) {
     scenes: (Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s) => ({
       headline: str(s.headline, 60), voiceover: str(s.voiceover, 220),
       query: str(s.query, 50).replace(/[^\w\s-]/g, '') || (type === 'ecom' ? 'shopping' : 'technology'),
-      showProduct: type === 'ecom' && !!s.showProduct,
+      visual: s.visual === 'site' || (s.visual === 'product' && type === 'ecom') ? s.visual : 'footage',
     })).filter((s) => s.headline),
     cta: str(ad.cta, 30) || fb.ads[0].cta,
     ctaVoiceover: str(ad.ctaVoiceover, 140) || fb.ads[0].ctaVoiceover,

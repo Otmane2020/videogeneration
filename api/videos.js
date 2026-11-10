@@ -15,7 +15,7 @@ async function search(q) {
   const v = (j.hits || []).filter((h) => h.duration >= 4).map((h) => {
     const f = h.videos || {};
     const pick = [f.small, f.medium, f.tiny].find((x) => x?.url) || {};
-    return { id: h.id, url: pick.url, w: pick.width, h: pick.height, thumb: pick.thumbnail || f.tiny?.thumbnail || '', duration: h.duration, author: h.user };
+    return { id: h.id, url: pick.url, lite: f.tiny?.url || pick.url, w: pick.width, h: pick.height, thumb: pick.thumbnail || f.tiny?.thumbnail || '', duration: h.duration, author: h.user };
   }).filter((x) => x.url);
   if (cache.size > 500) cache.clear();
   cache.set(key, { t: Date.now(), v });

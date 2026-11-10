@@ -9,7 +9,7 @@ Appli mobile-first : **URL → inspection → SaaS ou E-com → pubs vidéo** av
 
 | Service | Rôle |
 | --- | --- |
-| OpenRouter (Gemini) → Gemini → Groq (Llama Vision) | analyse visuelle + script, avec bascule automatique |
+| OpenRouter (Gemini) → Gemini → Groq | analyse visuelle + script, avec bascule automatique (Groq : texte seul par défaut) |
 | Pixabay | vidéos libres de droits |
 | Deepgram Aura | voix off |
 

@@ -285,6 +285,7 @@ function makeRenderer(cv, job) {
     ctx.font = `500 32px ${FONT}`;
     const k2 = easeOut((local - 0.2) / 0.45);
     ctx.globalAlpha = k2 * 0.9;
+    y += 14;
     wrap(ctx, plan.tagline, W - pad * 2, 2).forEach((l) => { y += 46; ctx.fillText(l, W / 2, y); });
 
     const k3 = backOut((local - 0.45) / 0.45);

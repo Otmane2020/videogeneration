@@ -13,9 +13,9 @@ module.exports = handler('GET', async (req, res) => {
   const type = (r.headers.get('content-type') || '').split(';')[0];
   const len = Number(r.headers.get('content-length') || 0);
   // Vidéo : Pixabay uniquement. Images : tout site public, 8 Mo max.
-  const ok = r.status < 400 && ((isPixabay && /^(video|image)\//.test(type)) || (/^image\/(jpeg|png|webp|gif|avif|x-icon|vnd\.microsoft\.icon)$/.test(type) && len <= 8e6));
+  const ok = r.status < 400 && ((isPixabay && /^(video|image)\//.test(type)) || (/^image\/(jpeg|png|webp|gif|avif|svg\+xml|x-icon|vnd\.microsoft\.icon)$/.test(type) && len <= 8e6));
   if (!ok) { r.body?.cancel().catch(() => {}); throw httpError(415, 'Média non autorisé'); }
-  const out = { 'content-type': type, 'cache-control': 'public, max-age=86400', 'x-content-type-options': 'nosniff' };
+  const out = { 'content-type': type, 'cache-control': 'public, max-age=86400', 'x-content-type-options': 'nosniff', 'content-security-policy': "sandbox; default-src 'none'; style-src 'unsafe-inline'" };
   for (const h of ['content-length', 'content-range', 'accept-ranges']) if (r.headers.get(h)) out[h] = r.headers.get(h);
   res.writeHead(r.status, out);
   Readable.fromWeb(r.body).on('error', () => res.destroy()).pipe(res);

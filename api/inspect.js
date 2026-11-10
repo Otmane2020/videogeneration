@@ -26,11 +26,42 @@ function extract(html, base) {
   const body = html.replace(/<(script|style|noscript|svg|template)\b[\s\S]*?<\/\1>/gi, ' ');
   const text = clean(body).slice(0, 5000);
 
+  // données structurées : fiche produit et logo de la marque
+  const nodes = [];
+  const walk = (n) => {
+    if (Array.isArray(n)) return n.forEach(walk);
+    if (!n || typeof n !== 'object') return;
+    nodes.push(n);
+    if (n['@graph']) walk(n['@graph']);
+  };
+  for (const m of html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    try { walk(JSON.parse(m[1].trim())); } catch { /* JSON-LD invalide */ }
+  }
+  const isType = (n, t) => [].concat(n['@type'] || []).some((x) => String(x).toLowerCase() === t);
+  const urls = (v) => [].concat(v || []).map((x) => (typeof x === 'string' ? x : x && (x.url || x.contentUrl))).filter(Boolean);
+  const prod = nodes.find((n) => isType(n, 'product'));
+  const org = nodes.find((n) => n.logo && (isType(n, 'organization') || isType(n, 'brand') || isType(n, 'website') || isType(n, 'onlinestore')));
+  let product = null;
+  if (prod) {
+    const offer = [].concat(prod.offers || [])[0] || {};
+    const price = offer.price ?? offer.lowPrice ?? offer.priceSpecification?.price;
+    product = {
+      name: clean(String(prod.name || '')).slice(0, 160),
+      description: clean(String(prod.description || '')).slice(0, 600),
+      brand: clean(String((prod.brand && (prod.brand.name || prod.brand)) || '')).slice(0, 60),
+      price: price != null && /^[\d.,\s]+$/.test(String(price)) ? String(price).trim() : '',
+      currency: /^[A-Z]{3}$/.test(offer.priceCurrency || '') ? offer.priceCurrency : '',
+    };
+  } else if (metas['product:price:amount'] || metas['og:price:amount']) {
+    product = { name: '', description: '', brand: '', price: metas['product:price:amount'] || metas['og:price:amount'], currency: metas['product:price:currency'] || metas['og:price:currency'] || '' };
+  }
+
   const images = [];
   const add = (u) => {
     const h = abs(u);
     if (h && /^https?:/.test(h) && !/\.(svg|gif|ico)(\?|$)/i.test(h) && !/sprite|pixel|tracking|1x1|spacer/i.test(h) && !images.includes(h)) images.push(h);
   };
+  if (prod) urls(prod.image).slice(0, 6).forEach(add);
   if (metas['og:image']) add(metas['og:image']);
   if (metas['twitter:image']) add(metas['twitter:image']);
   for (const tag of body.match(/<img\b[^>]*>/gi) || []) {
@@ -40,6 +71,16 @@ function extract(html, base) {
     add(attr(tag, 'src') || attr(tag, 'data-src') || (srcset && srcset.split(',').pop().trim().split(/\s+/)[0]));
     if (images.length >= 8) break;
   }
+
+  // logo : données structurées, puis image « logo » de la page, puis icône
+  const logos = [];
+  const addLogo = (u) => { const h = abs(u); if (h && /^https?:/.test(h) && !logos.includes(h)) logos.push(h); };
+  if (org) urls(org.logo).forEach(addLogo);
+  for (const tag of body.match(/<img\b[^>]*>/gi) || []) {
+    if (/logo/i.test(attr(tag, 'class') + ' ' + attr(tag, 'alt') + ' ' + attr(tag, 'id') + ' ' + attr(tag, 'src'))) { addLogo(attr(tag, 'src') || attr(tag, 'data-src')); break; }
+  }
+  if (icon?.href) addLogo(icon.href);
+  addLogo('/favicon.ico');
 
   const ld = [...html.matchAll(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)].map((m) => m[1]).join(' ');
   const low = (html.slice(0, 600000) + ' ').toLowerCase();
@@ -66,7 +107,7 @@ function extract(html, base) {
     themeColor: /^#[0-9a-f]{3,8}$/i.test(metas['theme-color'] || '') ? metas['theme-color'] : '',
     icon: icon?.href ? abs(icon.href) : abs('/favicon.ico'),
     h1: heads(1).slice(0, 3), h2: heads(2).slice(0, 8),
-    images, prices, text,
+    images, logos: logos.slice(0, 4), product, prices, text,
     guess: { type: ecom > saas ? 'ecom' : 'saas', ecom, saas, confidence: Math.round((Math.max(ecom, saas) + 1) / (ecom + saas + 2) * 100) },
   };
 }

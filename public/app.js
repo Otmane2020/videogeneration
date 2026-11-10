@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '' };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 async function api(path, body) {
@@ -32,6 +32,10 @@ $('#f-url').addEventListener('submit', async (e) => {
   show('s-inspect', 2);
   try {
     state.page = await (await api('/api/inspect', { url })).json();
+    state.uploads.forEach((u) => URL.revokeObjectURL(u.url));
+    state.uploads = [];
+    // le vrai logo : affiché dans la vidéo, et ses couleurs servent de palette
+    state.logo = loadLogo(state.page.logos).then((img) => (img ? { img, colors: logoColors(img) } : null));
     renderType();
   } catch (err) {
     show('s-url', 1);
@@ -44,7 +48,7 @@ $$('[data-back]').forEach((b) => b.addEventListener('click', () => show('s-url',
 function renderType() {
   const p = state.page;
   $('#site-host').textContent = p.host;
-  $('#site-title').textContent = p.title || p.siteName;
+  $('#site-title').textContent = p.product?.name || p.title || p.siteName;
   $('#site-desc').textContent = p.description || p.h1[0] || '';
   const img = $('#site-img');
   img.hidden = !p.images[0];
@@ -57,15 +61,53 @@ function renderType() {
 function setType(t) {
   state.type = t;
   $$('.type').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.type === t)));
+  $('#uploads').hidden = t !== 'ecom';
+  renderPhotos();
 }
 $$('.type').forEach((b) => b.addEventListener('click', () => setType(b.dataset.type)));
 
+// Photos du produit : celles importées à la main d'abord, puis celles trouvées sur la page (5 au plus).
+function photoList() {
+  return [...state.uploads.map((u) => ({ show: u.url, send: u.data })), ...state.page.images.map((u) => ({ show: media(u), send: u }))].slice(0, 5);
+}
+function renderPhotos() {
+  if (!state.page) return;
+  const list = photoList(), box = $('#photos');
+  box.textContent = '';
+  list.forEach((p) => { const im = new Image(); im.alt = ''; im.src = p.show; im.onerror = () => im.remove(); box.append(im); });
+  $('#up-hint').textContent = list.length
+    ? 'La pub est montée avec ces photos. Ajoutez les vôtres pour un meilleur résultat (fond uni de préférence).'
+    : 'Aucune photo trouvée sur la page : ajoutez les photos du produit.';
+}
+$('#files').addEventListener('change', async (e) => {
+  const files = [...e.target.files].slice(0, 5);
+  e.target.value = '';
+  for (const f of files) {
+    const url = URL.createObjectURL(f);
+    const im = await loadImage(url);
+    if (!im) { URL.revokeObjectURL(url); continue; }
+    // copie réduite pour l'analyse par l'IA
+    const k = Math.min(1, 768 / Math.max(im.naturalWidth, im.naturalHeight));
+    const c = Object.assign(document.createElement('canvas'), { width: Math.round(im.naturalWidth * k), height: Math.round(im.naturalHeight * k) });
+    const g = c.getContext('2d');
+    g.fillStyle = '#fff'; g.fillRect(0, 0, c.width, c.height); g.drawImage(im, 0, 0, c.width, c.height);
+    state.uploads.unshift({ url, data: c.toDataURL('image/jpeg', 0.82) });
+  }
+  state.uploads.splice(5).forEach((u) => URL.revokeObjectURL(u.url));
+  renderPhotos();
+});
+
 $('#b-gen').addEventListener('click', async () => {
-  $('#scan-title').textContent = 'L’IA regarde votre site…';
-  $('#scan-sub').textContent = 'Analyse des visuels et écriture de 3 pubs';
+  const ecom = state.type === 'ecom';
+  $('#scan-title').textContent = ecom ? 'L’IA examine vos photos produit…' : 'L’IA regarde votre site…';
+  $('#scan-sub').textContent = ecom ? 'Choix des meilleures photos et écriture de 3 pubs' : 'Analyse des visuels et écriture de 3 pubs';
   show('s-inspect', 3);
   try {
-    state.plan = await (await api('/api/analyze', { page: state.page, type: state.type })).json();
+    const list = ecom ? photoList() : [];
+    state.photoUrls = list.map((p) => p.show);
+    state.plan = await (await api('/api/analyze', { page: state.page, type: state.type, photos: ecom ? list.map((p) => p.send) : undefined })).json();
+    const brand = await state.logo;
+    if (brand?.colors) Object.assign(state.plan.palette, brand.colors);
     renderAds();
   } catch (err) {
     show('s-type', 3);
@@ -74,13 +116,14 @@ $('#b-gen').addEventListener('click', async () => {
 });
 
 /* ---------- 4. pubs ---------- */
+const LABEL = { site: ' · site', product: ' · produit', detail: ' · gros plan' };
 function renderAds() {
   const plan = state.plan;
   $('#brand-name').textContent = plan.brand;
   $('#brand-sum').textContent = plan.summary || plan.tagline;
   $('#sw1').style.background = plan.palette.primary;
   $('#sw2').style.background = plan.palette.accent;
-  $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script : ${plan.engine}` + (plan.vision ? ` · ${plan.vision} visuel(s) analysé(s)` : '');
+  $('#engine').textContent = `${plan.type === 'ecom' ? 'E-commerce' : 'SaaS'} · Script : ${plan.engine}` + (plan.vision ? ` · ${plan.vision} visuel(s) analysé(s)` : '') + (plan.price ? ` · ${plan.price}` : '');
   setMusic(plan.type === 'ecom' ? 'm6' : 'm1');
   const box = $('#ads');
   box.textContent = '';
@@ -89,7 +132,7 @@ function renderAds() {
     $('.angle', n).textContent = ad.angle;
     ad.scenes.forEach((s) => {
       const li = document.createElement('li');
-      li.textContent = s.headline + (s.visual === 'site' ? ' · site' : s.visual === 'product' ? ' · produit' : '');
+      li.textContent = s.headline + (LABEL[s.visual] || '');
       const sm = document.createElement('small');
       sm.textContent = s.voiceover;
       if (s.voiceover !== s.headline) li.append(sm);
@@ -97,22 +140,15 @@ function renderAds() {
     });
     $('.cta', n).textContent = ad.cta;
     const thumbs = $('.thumbs', n);
-    ad.scenes.slice(0, 4).forEach(() => thumbs.append(document.createElement('i')));
+    const put = (i, src) => { const im = new Image(); im.alt = ''; im.onload = () => thumbs.children[i]?.replaceWith(im); im.src = src; };
+    ad.scenes.slice(0, 4).forEach((s, i) => { thumbs.append(document.createElement('i')); if (s.photo >= 0 && state.photoUrls[s.photo]) put(i, state.photoUrls[s.photo]); });
     $('.btn', n).addEventListener('click', () => produce(ad));
     box.append(n);
-    // Pixabay : on cherche les plans tout de suite pour afficher un aperçu
-    ad.clips = api('/api/videos', { queries: ad.scenes.map((s) => s.query), fallback: plan.type === 'ecom' ? 'shopping' : 'technology' })
-      .then((r) => r.json())
-      .then(({ results }) => results)
+    // Pixabay ne sert qu'aux scènes « vidéo » : s'il échoue, la pub se monte quand même
+    ad.clips = api('/api/videos', { queries: ad.scenes.map((s) => s.query), fallback: plan.type === 'ecom' ? 'lifestyle' : 'technology' })
+      .then((r) => r.json()).then(({ results }) => results)
       .catch(() => ad.scenes.map(() => []));
-    ad.clips.then((lists) => pickClips(lists, false).slice(0, 4).forEach((c, i) => {
-      if (!c?.thumb) return;
-      const im = new Image();
-      im.alt = '';
-      im.loading = 'lazy';
-      im.onload = () => thumbs.children[i]?.replaceWith(im);
-      im.src = c.thumb;
-    }));
+    ad.clips.then((lists) => pickClips(lists, false).slice(0, 4).forEach((c, i) => { if (c?.thumb && !(ad.scenes[i].photo >= 0)) put(i, c.thumb); }));
   });
   show('s-ads', 4);
 }
@@ -160,10 +196,11 @@ function setMusic(id) {
 })();
 // musique + voix : la musique baisse automatiquement pendant que la voix parle
 function mixAudio(ctx, out, job, t0 = 0) {
+  const rate = job.rate || 1;
   job.scenes.forEach((s) => {
     if (!s.voice) return;
     const n = ctx.createBufferSource();
-    n.buffer = s.voice; n.connect(out); n.start(t0 + s.start + 0.3);
+    n.buffer = s.voice; n.playbackRate.value = rate; n.connect(out); n.start(t0 + s.start + 0.3);
   });
   if (!job.musicBuf) return;
   const g = ctx.createGain(), n = ctx.createBufferSource();
@@ -171,7 +208,7 @@ function mixAudio(ctx, out, job, t0 = 0) {
   job.scenes.forEach((s) => {
     if (!s.voice) return;
     g.gain.setTargetAtTime(0.2, t0 + s.start + 0.15, 0.08);
-    g.gain.setTargetAtTime(0.6, t0 + s.start + 0.3 + s.voice.duration, 0.18);
+    g.gain.setTargetAtTime(0.6, t0 + s.start + 0.3 + s.voice.duration / rate, 0.18);
   });
   n.buffer = job.musicBuf; n.connect(g); g.connect(out); n.start(t0);
 }
@@ -192,12 +229,43 @@ const fetchBlob = async (url) => {
   if (!r.ok) throw new Error(String(r.status));
   return r.blob();
 };
-const loadImage = (src) => new Promise((res) => {
-  const im = new Image();
-  im.onload = () => res(im.naturalWidth > 80 ? im : null);
-  im.onerror = () => res(null);
-  im.src = src;
-});
+function loadImage(src, min = 80) {
+  return new Promise((res) => {
+    const im = new Image();
+    im.onload = () => res(im.naturalWidth >= min ? im : null);
+    im.onerror = () => res(null);
+    im.src = src;
+  });
+}
+async function loadLogo(urls) {
+  for (const u of urls || []) {
+    const im = await loadImage(media(u), 24);
+    if (im) return im;
+  }
+  return null;
+}
+// Couleurs dominantes du logo (teintes vives uniquement) : principale + secondaire si le logo en a deux.
+function logoColors(img) {
+  try {
+    const n = 64, c = Object.assign(document.createElement('canvas'), { width: n, height: n });
+    const g = c.getContext('2d', { willReadFrequently: true });
+    g.drawImage(img, 0, 0, n, n);
+    const d = g.getImageData(0, 0, n, n).data, bins = Array.from({ length: 24 }, () => [0, 0, 0, 0]);
+    for (let i = 0; i < d.length; i += 4) {
+      if (d[i + 3] < 128) continue;
+      const r = d[i] / 255, gr = d[i + 1] / 255, b = d[i + 2] / 255, mx = Math.max(r, gr, b), mn = Math.min(r, gr, b), l = (mx + mn) / 2, dl = mx - mn;
+      const sat = dl === 0 ? 0 : dl / (1 - Math.abs(2 * l - 1));
+      if (sat < 0.3 || l > 0.9 || l < 0.12) continue; // blanc, noir, gris : ignorés
+      const h = (mx === r ? ((gr - b) / dl + 6) % 6 : mx === gr ? (b - r) / dl + 2 : (r - gr) / dl + 4) * 4;
+      const bin = bins[Math.floor(h) % 24];
+      bin[0] += sat; bin[1] += d[i] * sat; bin[2] += d[i + 1] * sat; bin[3] += d[i + 2] * sat;
+    }
+    const order = bins.map((b, i) => ({ i, w: b[0], hex: '#' + [1, 2, 3].map((k) => Math.round(b[k] / (b[0] || 1)).toString(16).padStart(2, '0')).join('') })).sort((a, b) => b.w - a.w);
+    if (order[0].w < 12) return null; // logo monochrome : on garde la palette proposée par l'IA
+    const second = order.find((o) => o.w > order[0].w * 0.15 && Math.min(Math.abs(o.i - order[0].i), 24 - Math.abs(o.i - order[0].i)) >= 3);
+    return second ? { primary: order[0].hex, accent: second.hex } : { primary: order[0].hex };
+  } catch { return null; }
+}
 function loadVideoEl(blob) {
   return new Promise((res) => {
     const v = document.createElement('video');
@@ -218,20 +286,69 @@ async function loadVoice(actx, text, lang) {
   } catch { return null; }
 }
 
+// Détourage fidèle : on retire uniquement le fond uni (blanc, gris…) relié aux bords de la photo.
+// Le produit lui-même n'est jamais modifié ni régénéré. Renvoie null si le fond n'est pas uni.
+function cutout(img) {
+  const k = Math.min(1, 900 / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
+  const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0, w, h);
+  let px;
+  try { px = g.getImageData(0, 0, w, h); } catch { return null; }
+  const d = px.data, border = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
+  let r = 0, gr = 0, b = 0, clear = 0;
+  for (const i of border) { r += d[i * 4]; gr += d[i * 4 + 1]; b += d[i * 4 + 2]; if (d[i * 4 + 3] < 40) clear++; }
+  if (clear > border.length * 0.6) return trim(c, d, w, h); // PNG déjà détouré
+  r /= border.length; gr /= border.length; b /= border.length;
+  const far = (i, t) => Math.abs(d[i * 4] - r) + Math.abs(d[i * 4 + 1] - gr) + Math.abs(d[i * 4 + 2] - b) > t;
+  if (border.filter((i) => far(i, 60)).length > border.length * 0.12) return null; // fond non uni : photo d'ambiance
+  const bg = new Uint8Array(w * h), stack = [];
+  for (const i of border) if (!far(i, 54) && !bg[i]) { bg[i] = 1; stack.push(i); }
+  while (stack.length) {
+    const i = stack.pop(), x = i % w;
+    for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) {
+      if (j >= 0 && j < w * h && !bg[j] && !far(j, 54)) { bg[j] = 1; stack.push(j); }
+    }
+  }
+  let kept = 0;
+  for (let i = 0; i < w * h; i++) {
+    if (bg[i]) d[i * 4 + 3] = 0;
+    else {
+      kept++;
+      const x = i % w; // bord adouci
+      if (bg[i - w] || bg[i + w] || (x > 0 && bg[i - 1]) || (x < w - 1 && bg[i + 1])) d[i * 4 + 3] = 150;
+    }
+  }
+  if (kept < w * h * 0.04 || kept > w * h * 0.93) return null;
+  g.putImageData(px, 0, 0);
+  return trim(c, d, w, h);
+}
+function trim(c, d, w, h) {
+  let x0 = w, y0 = h, x1 = 0, y1 = 0;
+  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
+    if (d[(y * w + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 - x0 < 20 || y1 - y0 < 20) return null;
+  const out = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 4, height: y1 - y0 + 4 });
+  out.getContext('2d').drawImage(c, x0 - 2, y0 - 2, out.width, out.height, 0, 0, out.width, out.height);
+  return out;
+}
+
 /* ---------- dessin ---------- */
 const clamp = (x) => Math.max(0, Math.min(1, x));
+const lerp = (a, b, k) => a + (b - a) * k;
 const easeOut = (x) => 1 - Math.pow(1 - clamp(x), 3);
 const easeInOut = (x) => { x = clamp(x); return x < 0.5 ? 2 * x * x : 1 - Math.pow(-2 * x + 2, 2) / 2; };
 const backOut = (x) => { x = clamp(x); return 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2); };
 const FONT = 'Poppins, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+const mix = (hex, to, k) => { const a = rgb(hex), b = rgb(to); return `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], k))).join(',')})`; };
 function onColor(hex) {
-  const n = parseInt(hex.slice(1), 16);
-  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) > 160 ? '#101010' : '#ffffff';
-}
-function rr(ctx, x, y, w, h, r) {
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(x, y, w, h, r);
-  else { ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r); ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath(); }
+  const [r, g, b] = rgb(hex);
+  return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#101010' : '#ffffff';
 }
 function wrap(ctx, text, maxW, maxLines) {
   const lines = [];
@@ -245,12 +362,12 @@ function wrap(ctx, text, maxW, maxLines) {
   return lines;
 }
 // Sous-titres mot à mot : la voix ne fournit pas de minutage, on le répartit selon la longueur des mots.
-function karaoke(text, speech) {
+function karaoke(text, speech, lead) {
   const words = text.split(/\s+/).filter(Boolean);
   const weight = words.map((w) => w.length + 2 + (/[.,!?;:]$/.test(w) ? 3 : 0));
   const sum = weight.reduce((a, b) => a + b, 0) || 1;
   let acc = 0;
-  const timed = words.map((w, i) => { const t0 = 0.3 + (acc / sum) * speech; acc += weight[i]; return { w, t0, t1: 0.3 + (acc / sum) * speech }; });
+  const timed = words.map((w, i) => { const t0 = lead + (acc / sum) * speech; acc += weight[i]; return { w, t0, t1: lead + (acc / sum) * speech }; });
   const chunks = [];
   let cur = [];
   for (const x of timed) {
@@ -261,10 +378,21 @@ function karaoke(text, speech) {
   return chunks;
 }
 
+const DECOR = {
+  studio: { wall: ['#f6f6f4', '#e3e3df'], floor: ['#d9d9d4', '#bfbfb9'], light: 'rgba(255,255,255,.9)' },
+  warm: { wall: ['#f1e4d2', '#e2cbae'], floor: ['#bd946a', '#8c6845'], light: 'rgba(255,244,226,.85)' },
+  dark: { wall: ['#2a2c33', '#17181c'], floor: ['#121317', '#060709'], light: 'rgba(255,255,255,.16)' },
+};
+const TRANSITIONS = ['fade', 'slideL', 'zoom', 'slideU', 'wipe'];
+const TRANS = 0.5;
+
 function makeRenderer(cv, job) {
-  const ctx = cv.getContext('2d');
-  const W = cv.width, H = cv.height;
-  const { scenes, plan, product, shot } = job;
+  const S = job.scale, main = cv.getContext('2d');
+  const [W, H] = job.size;
+  const layer = Object.assign(document.createElement('canvas'), { width: cv.width, height: cv.height });
+  const tmp = document.createElement('canvas');
+  let ctx = main;
+  const { scenes, plan, shot, logo } = job;
   const P = plan.palette.primary, A = plan.palette.accent;
   const wide = W > H, square = W === H;
   const pad = wide ? 64 : 44;
@@ -272,74 +400,176 @@ function makeRenderer(cv, job) {
   const headSize = wide ? 56 : square ? 52 : 62;
   const lh = headSize * 1.3;
   const bottom = H - (wide ? 70 : square ? 64 : H * 0.115);
+  const decor = plan.decor === 'pastel'
+    ? { wall: [mix(P, '#ffffff', 0.86), mix(P, '#ffffff', 0.7)], floor: [mix(P, '#ffffff', 0.58), mix(P, '#ffffff', 0.4)], light: 'rgba(255,255,255,.8)' }
+    : DECOR[plan.decor] || DECOR.studio;
 
-  function background(sc, k, alpha) {
-    ctx.globalAlpha = alpha;
+  const rr = (x, y, w, h, r) => { ctx.beginPath(); ctx.roundRect(x, y, w, h, r); };
+  const coverDraw = (src, sw, sh, zoom, fx = 0.5, fy = 0.5) => {
+    const s = Math.max(W / sw, H / sh) * zoom;
+    ctx.drawImage(src, clamp(fx) * (W - sw * s), clamp(fy) * (H - sh * s), sw * s, sh * s);
+  };
+
+  /* ----- fonds ----- */
+  function footage(sc, k) {
     const src = sc.frame || (sc.video && sc.video.readyState >= 2 && sc.video.videoWidth ? sc.video : null);
-    if (src) {
-      const sw = src.videoWidth || src.width, sh = src.videoHeight || src.height;
-      const s = Math.max(W / sw, H / sh) * (1.03 + 0.07 * k);
-      ctx.drawImage(src, (W - sw * s) / 2, (H - sh * s) / 2, sw * s, sh * s);
-    } else {
-      const g = ctx.createLinearGradient(0, 0, W * (0.4 + 0.6 * k), H);
-      g.addColorStop(0, P); g.addColorStop(1, '#07140f');
-      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (src) return coverDraw(src, src.videoWidth || src.width, src.videoHeight || src.height, 1.03 + 0.07 * k);
+    const g = ctx.createLinearGradient(0, 0, W * (0.4 + 0.6 * k), H);
+    g.addColorStop(0, P); g.addColorStop(1, '#07140f');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  // décor de studio : mur, sol, halo de lumière. Léger travelling avant pendant la scène.
+  function studio(k) {
+    const hz = H * (wide ? 0.66 : 0.6), z = 1 + 0.05 * k;
+    ctx.save();
+    ctx.translate(W / 2, hz); ctx.scale(z, z); ctx.translate(-W / 2, -hz);
+    let g = ctx.createLinearGradient(0, 0, 0, hz);
+    g.addColorStop(0, decor.wall[0]); g.addColorStop(1, decor.wall[1]);
+    ctx.fillStyle = g; ctx.fillRect(-40, -40, W + 80, hz + 40);
+    g = ctx.createLinearGradient(0, hz, 0, H);
+    g.addColorStop(0, decor.floor[0]); g.addColorStop(1, decor.floor[1]);
+    ctx.fillStyle = g; ctx.fillRect(-40, hz, W + 80, H - hz + 40);
+    const lx = W * (0.5 + 0.06 * (k - 0.5));
+    g = ctx.createRadialGradient(lx, hz * 0.62, 10, lx, hz * 0.62, Math.max(W, H) * 0.62);
+    g.addColorStop(0, decor.light); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(-40, -40, W + 80, H + 80);
+    if (plan.decor === 'dark') {
+      g = ctx.createRadialGradient(W * 0.5, hz, 0, W * 0.5, hz, W * 0.7);
+      g.addColorStop(0, A + '55'); g.addColorStop(1, A + '00');
+      ctx.fillStyle = g; ctx.fillRect(0, hz - H * 0.3, W, H * 0.6);
     }
-    ctx.globalAlpha = 1;
+    ctx.restore();
+  }
+  function background(sc, k) {
+    const ph = sc.ph;
+    if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.75 + 0.3 * k, lerp(0.3, 0.7, easeInOut(k)), lerp(0.38, 0.62, easeInOut(k)));
+    if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
+    footage(sc, k);
   }
 
-  // zone libre pour le visuel (téléphone ou produit) : au-dessus du texte, ou à droite en 16:9
+  /* ----- visuels ----- */
+  // zone libre pour le visuel : au-dessus du texte, ou à droite en 16:9
   const heroBox = (textTop) => (wide
-    ? { x: W * 0.58, y: 70, w: W * 0.42 - pad, h: H - 140 }
-    : { x: pad, y: 118, w: W - pad * 2, h: textTop - 118 - 28 });
+    ? { x: W * 0.56, y: 84, w: W * 0.44 - pad, h: H - 150 }
+    : { x: pad, y: 122, w: W - pad * 2, h: textTop - 122 - 30 });
 
-  function productCard(box, local) {
-    const size = Math.min(box.w, box.h, 460) * backOut((local - 0.15) / 0.5);
-    if (size <= 4) return;
-    const cx = box.x + box.w / 2, cy = box.y + box.h / 2 + Math.sin(local * 1.6) * 6;
+  function product(ph, box, local, k) {
+    const c = ph.cut, f = Math.min(box.w / c.width, box.h / c.height) * 0.94;
+    const e = backOut((local - 0.1) / 0.6), z = (1 + 0.08 * k) * (0.86 + 0.14 * e);
+    const w = c.width * f * z, h = c.height * f * z;
+    const x = box.x + (box.w - w) / 2 + (k - 0.5) * 16, y = box.y + box.h - h - box.h * 0.03 + (1 - e) * 40;
     ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 40; ctx.shadowOffsetY = 16;
-    ctx.fillStyle = '#fff';
-    rr(ctx, cx - size / 2, cy - size / 2, size, size, size * 0.08); ctx.fill();
+    ctx.globalAlpha = clamp((local - 0.05) / 0.3);
+    // ombre de contact au sol
+    const sh = ctx.createRadialGradient(0, 0, 0, 0, 0, w * 0.55);
+    sh.addColorStop(0, 'rgba(0,0,0,.34)'); sh.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.save(); ctx.translate(x + w / 2, y + h - 2); ctx.scale(1, 0.13); ctx.fillStyle = sh; ctx.beginPath(); ctx.arc(0, 0, w * 0.55, 0, 7); ctx.fill(); ctx.restore();
+    // reflet de lumière qui balaie le produit, limité à sa silhouette
+    const sweep = (local - 0.9) / 0.9;
+    if (sweep > 0 && sweep < 1) {
+      tmp.width = Math.ceil(w * S); tmp.height = Math.ceil(h * S);
+      const t = tmp.getContext('2d');
+      t.drawImage(c, 0, 0, tmp.width, tmp.height);
+      t.globalCompositeOperation = 'source-atop';
+      const gx = lerp(-0.4, 1.2, sweep) * tmp.width, g = t.createLinearGradient(gx, 0, gx + tmp.width * 0.3, tmp.height * 0.3);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.4)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      t.fillStyle = g; t.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(tmp, x, y, w, h);
+    } else ctx.drawImage(c, x, y, w, h);
     ctx.restore();
+    return { x, y, w, h };
+  }
+  function pill(text, cx, cy, local, size = 26) {
+    const k = backOut((local - 0.9) / 0.45);
+    if (k <= 0 || !text) return;
     ctx.save();
-    rr(ctx, cx - size / 2, cy - size / 2, size, size, size * 0.08); ctx.clip();
-    const iw = product.naturalWidth, ih = product.naturalHeight, f = Math.max(size / iw, size / ih);
-    ctx.drawImage(product, cx - iw * f / 2, cy - ih * f / 2, iw * f, ih * f);
+    ctx.font = `600 ${size}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    const w = ctx.measureText(text).width + size * 2.1, h = size * 2;
+    ctx.translate(clamp((cx - w / 2 - pad) / (W - w - pad * 2)) * (W - w - pad * 2) + pad + w / 2, cy); ctx.scale(k, k);
+    ctx.shadowColor = 'rgba(0,0,0,.3)'; ctx.shadowBlur = 18; ctx.shadowOffsetY = 6;
+    ctx.fillStyle = '#fff'; rr(-w / 2, -h / 2, w, h, h / 2); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    ctx.fillStyle = P; ctx.beginPath(); ctx.arc(-w / 2 + size * 0.8, 0, size * 0.22, 0, 7); ctx.fill();
+    ctx.fillStyle = '#111'; ctx.fillText(text, size * 0.45, 1);
     ctx.restore();
   }
 
-  // le vrai site, dans un téléphone, qui défile doucement
-  function phone(box, local, dur) {
+  // Le vrai site dans un téléphone. Trois mises en scène : incliné puis redressé et zoom caméra,
+  // balancement en biais, gros plan qui recule.
+  function phone(box, local, dur, variant) {
     let h = Math.min(box.h, 760), w = h * 0.5;
     if (w > box.w) { w = box.w; h = Math.min(box.h, w * 2); }
-    if (square) { w = Math.min(box.w, 400); h = box.h; }
     if (h < 150) return;
-    const k = easeOut((local - 0.1) / 0.55);
-    const x = box.x + (box.w - w) / 2, y = box.y + (box.h - h) / 2 + (1 - k) * 80;
-    const b = Math.max(8, w * 0.03), r = w * 0.1;
+    const p = clamp(local / dur), enter = easeOut((local - 0.05) / 0.6);
+    let rot = 0, shx = 0, shy = 0, sc = 1, dy = 0;
+    if (variant === 0) {
+      const a = easeInOut((p - 0.08) / 0.4);
+      shx = lerp(0.5, 0, a); shy = lerp(-0.3, 0, a); rot = lerp(-0.1, 0, a);
+      sc = lerp(0.78, 1, a) * (1 + 0.3 * easeInOut((p - 0.5) / 0.5));
+      dy = -h * 0.08 * easeInOut((p - 0.5) / 0.5);
+    } else if (variant === 1) {
+      rot = lerp(-0.22, 0.1, easeInOut(p)); sc = 1.02 + 0.1 * p;
+    } else {
+      const a = easeOut(p / 0.65);
+      sc = lerp(1.75, 1, a); dy = lerp(h * 0.42, 0, a); rot = lerp(0.07, 0, a);
+    }
+    const cx = box.x + box.w / 2, cy = box.y + box.h / 2;
+    const x = cx - w / 2, y = cy - h / 2, b = Math.max(8, w * 0.03), r = w * 0.11;
     ctx.save();
-    ctx.globalAlpha = k;
-    ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 20;
-    ctx.fillStyle = '#0b0b0d';
-    rr(ctx, x, y, w, h, r); ctx.fill();
+    ctx.globalAlpha = enter;
+    ctx.translate(cx, cy + dy + (1 - enter) * 120);
+    ctx.transform(1, shy, shx, 1, 0, 0); ctx.rotate(rot); ctx.scale(sc, sc);
+    ctx.translate(-cx, -cy);
+    // tranche du téléphone (donne le relief quand il est incliné)
+    const depth = Math.round(Math.abs(shx) * 34);
+    for (let i = depth; i > 0; i--) { ctx.fillStyle = '#2a2b30'; rr(x - i * 0.9, y + i * 0.55, w, h, r); ctx.fill(); }
+    ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 22;
+    ctx.fillStyle = '#0b0b0d'; rr(x, y, w, h, r); ctx.fill();
     ctx.shadowColor = 'transparent';
-    rr(ctx, x + b, y + b, w - b * 2, h - b * 2, r - b); ctx.clip();
-    const sw = w - b * 2, sh = h - b * 2, f = sw / shot.naturalWidth, full = shot.naturalHeight * f;
-    const travel = Math.max(0, Math.min(full - sh, sh * 0.9));
+    ctx.save();
+    rr(x + b, y + b, w - b * 2, h - b * 2, r - b); ctx.clip();
+    const sw = w - b * 2, sh = h - b * 2, full = shot.naturalHeight * (sw / shot.naturalWidth);
     ctx.fillStyle = '#fff'; ctx.fillRect(x + b, y + b, sw, sh);
-    ctx.drawImage(shot, x + b, y + b - travel * easeInOut((local - 0.9) / Math.max(dur - 1.6, 1)), sw, full);
+    ctx.drawImage(shot, x + b, y + b - Math.max(0, Math.min(full - sh, sh * 1.1)) * easeInOut((local - 0.7) / Math.max(dur - 1.2, 1)), sw, full);
+    // reflet de l'écran
+    const gl = ctx.createLinearGradient(x, y, x + w, y + h * 0.6);
+    gl.addColorStop(0, 'rgba(255,255,255,.14)'); gl.addColorStop(0.45, 'rgba(255,255,255,0)');
+    ctx.fillStyle = gl; ctx.fillRect(x, y, w, h);
     ctx.restore();
-    if (!square) { ctx.globalAlpha = k; ctx.fillStyle = '#0b0b0d'; rr(ctx, x + w / 2 - w * 0.14, y + b + 8, w * 0.28, Math.max(10, w * 0.055), 20); ctx.fill(); ctx.globalAlpha = 1; }
+    ctx.fillStyle = '#0b0b0d'; rr(cx - w * 0.14, y + b + 8, w * 0.28, Math.max(10, w * 0.055), 20); ctx.fill();
+    ctx.restore();
   }
 
-  function scene(sc, local) {
-    const hero = (sc.visual === 'site' && shot) || (sc.visual === 'product' && product);
-    let g = ctx.createLinearGradient(0, 0, 0, H);
-    g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(0.3, `rgba(0,0,0,${hero ? 0.45 : 0.05})`); g.addColorStop(0.55, `rgba(0,0,0,${hero ? 0.5 : 0.25})`); g.addColorStop(1, 'rgba(0,0,0,.9)');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+  function logoTile(x, y, size) {
+    ctx.save();
+    ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = size * 0.3; ctx.shadowOffsetY = size * 0.08;
+    ctx.fillStyle = '#fff'; rr(x, y, size, size, size * 0.24); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    rr(x, y, size, size, size * 0.24); ctx.clip();
+    const iw = logo.naturalWidth || size, ih = logo.naturalHeight || size, f = Math.min(size / iw, size / ih) * (Math.abs(iw - ih) < iw * 0.15 ? 1 : 0.82);
+    ctx.drawImage(logo, x + (size - iw * f) / 2, y + (size - ih * f) / 2, iw * f, ih * f);
+    ctx.restore();
+  }
 
+  /* ----- scènes ----- */
+  function scene(sc, local) {
+    const k = clamp(local / sc.dur), ph = sc.ph;
+    const onDecor = sc.visual === 'product' && ph && ph.cut;
+    const hero = (sc.visual === 'site' && shot) || onDecor;
+    let g = ctx.createLinearGradient(0, 0, 0, H);
+    if (onDecor) { g.addColorStop(0, 'rgba(0,0,0,.32)'); g.addColorStop(0.2, 'rgba(0,0,0,0)'); g.addColorStop(0.62, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.72)'); }
+    else { g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(0.3, `rgba(0,0,0,${hero ? 0.45 : 0.05})`); g.addColorStop(0.55, `rgba(0,0,0,${hero ? 0.5 : 0.25})`); g.addColorStop(1, 'rgba(0,0,0,.9)'); }
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+
+    ctx.font = `800 ${headSize}px ${FONT}`;
+    const lines = wrap(ctx, sc.headline, textW - 36, 3);
+    const top = bottom - 64 - lines.length * lh;
+    const box = heroBox(top);
+    if (sc.visual === 'site' && shot) phone(box, local, sc.dur, sc.variant);
+    if (onDecor) { const r = product(ph, box, local, k); pill(sc.badge, r.x + r.w * 0.82, Math.max(box.y + 30, r.y + r.h * 0.12), local); }
+    else if (sc.badge) pill(sc.badge, W / 2, wide ? H * 0.3 : H * 0.36, local, 30);
+
+    ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
     // sous-titre mot à mot
     const chunk = sc.words.find((c) => local < c[c.length - 1].t1 + 0.25) || null;
     if (chunk && local >= chunk[0].t0 - 0.15) {
@@ -347,72 +577,76 @@ function makeRenderer(cv, job) {
       let x = pad;
       ctx.lineJoin = 'round'; ctx.lineWidth = 8; ctx.strokeStyle = 'rgba(0,0,0,.75)';
       for (const wd of chunk) {
-        const on = local >= wd.t0 && local < wd.t1;
         ctx.strokeText(wd.w, x, bottom);
-        ctx.fillStyle = on ? A : local >= wd.t1 ? '#fff' : 'rgba(255,255,255,.6)';
+        ctx.fillStyle = local >= wd.t0 && local < wd.t1 ? A : local >= wd.t1 ? '#fff' : 'rgba(255,255,255,.6)';
         ctx.fillText(wd.w, x, bottom);
         x += ctx.measureText(wd.w + ' ').width;
       }
     }
-
     // titre en bandeaux de couleur
     ctx.font = `800 ${headSize}px ${FONT}`;
-    const lines = wrap(ctx, sc.headline, textW - 36, 3);
-    const top = bottom - 64 - lines.length * lh;
     lines.forEach((l, i) => {
-      const k = easeOut((local - 0.12 - i * 0.13) / 0.4);
-      if (k <= 0) return;
-      const y = top + i * lh + (1 - k) * 34, last = i === lines.length - 1;
-      ctx.globalAlpha = k;
+      const e = easeOut((local - 0.12 - i * 0.13) / 0.4);
+      if (e <= 0) return;
+      const y = top + i * lh + (1 - e) * 34, last = i === lines.length - 1;
+      ctx.globalAlpha = e;
       ctx.fillStyle = last ? A : P;
-      rr(ctx, pad - 6, y, ctx.measureText(l).width + 36, lh - 8, 12); ctx.fill();
+      rr(pad - 6, y, ctx.measureText(l).width + 36, lh - 8, 12); ctx.fill();
       ctx.fillStyle = onColor(last ? A : P);
       ctx.fillText(l, pad + 12, y + headSize * 0.99);
       ctx.globalAlpha = 1;
     });
-
-    if (hero) (sc.visual === 'site' ? phone : productCard)(heroBox(top), local, sc.dur);
   }
 
   function cta(sc, local) {
-    ctx.fillStyle = 'rgba(4,12,10,.66)'; ctx.fillRect(0, 0, W, H);
-    const g = ctx.createLinearGradient(0, H * 0.35, 0, H);
-    g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, P + 'cc');
-    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    const ph = sc.ph, ecom = plan.type === 'ecom' && ph;
+    const cx = ecom && wide ? W * 0.7 : W / 2, maxW = ecom && wide ? W * 0.5 : W - pad * 2;
+    let g;
+    if (ecom && ph.cut) {
+      g = ctx.createLinearGradient(0, H * (wide ? 0 : 0.36), 0, H);
+      g.addColorStop(0, wide ? 'rgba(8,10,12,.5)' : 'rgba(8,10,12,0)'); g.addColorStop(wide ? 1 : 0.42, 'rgba(8,10,12,.9)'); g.addColorStop(1, 'rgba(8,10,12,.96)');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      const box = wide ? { x: pad, y: 90, w: W * 0.42, h: H - 190 } : { x: pad, y: 110, w: W - pad * 2, h: H * 0.5 - 130 };
+      const r = product(ph, box, local, clamp(local / sc.dur));
+      if (plan.price) pill(plan.price, r.x + r.w * 0.85, r.y + r.h * 0.1, local - 0.3, 34);
+    } else {
+      ctx.fillStyle = 'rgba(4,12,10,.66)'; ctx.fillRect(0, 0, W, H);
+      g = ctx.createLinearGradient(0, H * 0.35, 0, H);
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, P + 'cc');
+      ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+      if (plan.price) pill(plan.price, W / 2, H * 0.2, local - 0.3, 34);
+    }
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
-    const withProduct = product && plan.type === 'ecom' && !wide;
-    let y = H * (withProduct ? 0.58 : 0.45);
-    if (withProduct) { const s = Math.min(W, H) * 0.36; productCard({ x: W / 2 - s / 2, y: y - s - 110, w: s, h: s }, local + 0.15); }
-
+    let y = H * (ecom && ph.cut && !wide ? 0.63 : 0.46);
     const k1 = easeOut(local / 0.45);
-    let size = wide ? 92 : 84;
+    if (logo) { const s = 104 * backOut(local / 0.5); if (s > 2) logoTile(cx - s / 2, y - 200 - (s - 104) / 2, s); }
+    let size = wide ? 88 : 80;
     ctx.font = `800 ${size}px ${FONT}`;
     const bw = ctx.measureText(plan.brand).width;
-    if (bw > W - pad * 2) { size *= (W - pad * 2) / bw; ctx.font = `800 ${size}px ${FONT}`; }
+    if (bw > maxW) { size *= maxW / bw; ctx.font = `800 ${size}px ${FONT}`; }
     ctx.globalAlpha = k1; ctx.fillStyle = '#fff';
-    ctx.fillText(plan.brand, W / 2, y + (1 - k1) * 30);
+    ctx.fillText(plan.brand, cx, y + (1 - k1) * 30);
     ctx.font = `600 30px ${FONT}`;
     ctx.globalAlpha = easeOut((local - 0.2) / 0.45) * 0.92;
-    y += 16;
-    wrap(ctx, plan.tagline, Math.min(W - pad * 2, 760), 2).forEach((l) => { y += 44; ctx.fillText(l, W / 2, y); });
-
+    y += 14;
+    wrap(ctx, plan.tagline, Math.min(maxW, 760), 2).forEach((l) => { y += 44; ctx.fillText(l, cx, y); });
     const k3 = backOut((local - 0.45) / 0.45);
     if (k3 > 0) {
       ctx.font = `800 36px ${FONT}`;
-      const bwid = Math.min(W - pad * 2, ctx.measureText(sc.headline).width + 96), bh = 88;
+      const bwid = Math.min(maxW, ctx.measureText(sc.headline).width + 96), bh = 88;
       const s = k3 * (1 + 0.035 * Math.sin(local * 5));
       ctx.save();
-      ctx.translate(W / 2, y + 104); ctx.scale(s, s);
+      ctx.translate(cx, y + 100); ctx.scale(s, s);
       ctx.globalAlpha = clamp(k3);
       ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
-      ctx.fillStyle = A; rr(ctx, -bwid / 2, -bh / 2, bwid, bh, bh / 2); ctx.fill();
+      ctx.fillStyle = A; rr(-bwid / 2, -bh / 2, bwid, bh, bh / 2); ctx.fill();
       ctx.shadowColor = 'transparent';
       ctx.fillStyle = onColor(A); ctx.fillText(sc.headline, 0, 13, bwid - 40);
       ctx.restore();
     }
     ctx.globalAlpha = easeOut((local - 0.8) / 0.4) * 0.85;
-    ctx.font = `600 28px ${FONT}`; ctx.fillStyle = '#fff';
-    ctx.fillText(job.host, W / 2, y + 200);
+    ctx.font = `600 27px ${FONT}`; ctx.fillStyle = '#fff';
+    ctx.fillText(job.host, cx, y + 192);
     ctx.globalAlpha = 1;
   }
 
@@ -420,31 +654,50 @@ function makeRenderer(cv, job) {
     const gap = 6, bw = (W - pad * 2 - gap * (scenes.length - 1)) / scenes.length;
     scenes.forEach((s, i) => {
       const x = pad + i * (bw + gap);
-      ctx.fillStyle = 'rgba(255,255,255,.3)'; rr(ctx, x, 30, bw, 5, 3); ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,.3)'; rr(x, 30, bw, 5, 3); ctx.fill();
       const f = clamp((t - s.start) / s.dur);
-      if (f > 0) { ctx.fillStyle = '#fff'; rr(ctx, x, 30, bw * f, 5, 3); ctx.fill(); }
+      if (f > 0) { ctx.fillStyle = '#fff'; rr(x, 30, bw * f, 5, 3); ctx.fill(); }
     });
     if (scenes[idx].kind === 'cta') return;
     ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-    ctx.fillStyle = P; ctx.beginPath(); ctx.arc(pad + 14, 76, 14, 0, 7); ctx.fill();
-    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+    let x = pad;
+    if (logo) { logoTile(pad, 56, 44); x += 56; }
+    else { ctx.fillStyle = P; ctx.beginPath(); ctx.arc(pad + 14, 78, 14, 0, 7); ctx.fill(); ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke(); x += 40; }
     ctx.font = `600 27px ${FONT}`; ctx.fillStyle = '#fff';
     ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 8;
-    ctx.fillText(plan.brand, pad + 40, 78);
+    ctx.fillText(plan.brand, x, 80);
     ctx.shadowBlur = 0;
   }
 
-  const FADE = 0.4;
-  const draw = (t) => {
-    const idx = sceneAt(scenes, t), sc = scenes[idx], local = t - sc.start;
+  function full(sc, local) {
+    ctx.setTransform(S, 0, 0, S, 0, 0);
+    ctx.globalAlpha = 1;
     ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
-    if (idx > 0 && local < FADE) background(scenes[idx - 1], 1, 1);
-    background(sc, clamp(local / sc.dur), idx > 0 ? clamp(local / FADE) : 1);
+    background(sc, clamp(local / sc.dur));
     (sc.kind === 'cta' ? cta : scene)(sc, local);
+  }
+
+  return function draw(t) {
+    const idx = sceneAt(scenes, t), sc = scenes[idx], local = t - sc.start;
+    if (idx > 0 && local < TRANS) {
+      // transition : la scène précédente reste dessous, la nouvelle arrive par-dessus
+      const prev = scenes[idx - 1], e = easeInOut(local / TRANS), kind = sc.kind === 'cta' ? 'wipe' : TRANSITIONS[(idx - 1) % TRANSITIONS.length];
+      ctx = layer.getContext('2d'); full(sc, local);
+      ctx = main; full(prev, prev.dur);
+      ctx.fillStyle = `rgba(0,0,0,${0.45 * e})`; ctx.fillRect(0, 0, W, H);
+      ctx.save();
+      if (kind === 'fade') ctx.globalAlpha = e;
+      else if (kind === 'slideL') ctx.translate(W * (1 - e), 0);
+      else if (kind === 'slideU') ctx.translate(0, H * (1 - e));
+      else if (kind === 'zoom') { ctx.globalAlpha = clamp(e * 1.6); ctx.translate(W / 2, H / 2); ctx.scale(1.35 - 0.35 * e, 1.35 - 0.35 * e); ctx.translate(-W / 2, -H / 2); }
+      else { ctx.beginPath(); ctx.arc(W / 2, H * 0.55, e * Math.hypot(W, H) * 0.62, 0, 7); ctx.clip(); }
+      ctx.drawImage(layer, 0, 0, W, H);
+      ctx.restore();
+      if (kind === 'wipe' && e < 1) { ctx.strokeStyle = A; ctx.lineWidth = 10 * (1 - e) + 2; ctx.beginPath(); ctx.arc(W / 2, H * 0.55, e * Math.hypot(W, H) * 0.62, 0, 7); ctx.stroke(); }
+    } else { ctx = main; full(sc, local); }
     chrome(t, idx);
     return idx;
   };
-  return draw;
 }
 function sceneAt(scenes, t) {
   const i = scenes.findIndex((s) => t < s.start + s.dur);
@@ -455,31 +708,52 @@ function sceneAt(scenes, t) {
 const status = (msg, pct) => { $('#st-status').textContent = msg; if (pct != null) $('#st-bar').style.width = pct + '%'; };
 const FPS = 30;
 
+// Durées des scènes. Avec une durée imposée, le total tombe juste à l'image près :
+// on étire les scènes s'il reste du temps, sinon on accélère un peu la voix (30 % au plus).
+function timeline(scenes, target) {
+  const min = (s) => (s.kind === 'cta' ? 2.6 : 2.2);
+  let rate = 1, durs = scenes.map((s) => Math.max(s.kind === 'cta' ? 3.2 : 2.6, s.speech + 0.8));
+  let sum = durs.reduce((a, b) => a + b, 0);
+  if (target) {
+    if (sum > target) {
+      const speech = scenes.reduce((a, s) => a + s.speech, 0);
+      rate = Math.min(1.3, Math.max(1, speech / Math.max(1, target - scenes.length * 0.55)));
+      durs = scenes.map((s) => Math.max(min(s), s.speech / rate + 0.55));
+      sum = durs.reduce((a, b) => a + b, 0);
+    }
+    durs = durs.map((d) => (d * target) / sum);
+  }
+  let f = 0, acc = 0;
+  scenes.forEach((s, i) => {
+    acc += durs[i];
+    const end = Math.round(acc * FPS);
+    s.start = f / FPS; s.dur = (end - f) / FPS; f = end;
+  });
+  return { total: f / FPS, rate };
+}
+
 // Export image par image avec Mediabunny (WebCodecs) : vrai MP4, fluide même sur un téléphone lent.
-async function exportOffline(job, cv, draw, voices) {
+async function exportOffline(job, cv, draw, hasAudio) {
   const MB = job.MB;
   const format = new MB.Mp4OutputFormat({ fastStart: 'in-memory' });
   const vcodec = await MB.getFirstEncodableVideoCodec(['avc', 'vp9', 'av1'].filter((c) => format.getSupportedCodecs().includes(c)), { width: cv.width, height: cv.height });
   if (!vcodec) return null;
-  const acodec = voices.some(Boolean) || job.musicBuf ? await MB.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000 }) : null;
+  const acodec = hasAudio ? await MB.getFirstEncodableAudioCodec(['aac', 'opus'], { numberOfChannels: 2, sampleRate: 48000 }) : null;
   const output = new MB.Output({ format, target: new MB.BufferTarget() });
-  job.output = output;
-  const vsrc = new MB.CanvasSource(cv, { codec: vcodec, bitrate: 5e6, keyFrameInterval: 2 });
+  const vsrc = new MB.CanvasSource(cv, { codec: vcodec, bitrate: job.scale > 1 ? 9e6 : 5e6, keyFrameInterval: 2 });
   output.addVideoTrack(vsrc, { frameRate: FPS });
   const asrc = acodec ? new MB.AudioBufferSource({ codec: acodec, bitrate: 128e3 }) : null;
   if (asrc) output.addAudioTrack(asrc);
   await output.start();
-
   if (asrc) {
     const off = new OfflineAudioContext(2, Math.ceil(job.total * 48000), 48000);
     mixAudio(off, off.destination, job);
     await asrc.add(await off.startRendering());
   }
-
-  const frames = Math.ceil(job.total * FPS);
+  const frames = Math.round(job.total * FPS);
   for (let f = 0; f < frames; f++) {
     if (job.cancelled) { await output.cancel().catch(() => {}); return null; }
-    const t = f / FPS, sc = job.scenes[sceneAt(job.scenes, t)];
+    const t = f / FPS, i = sceneAt(job.scenes, t), sc = job.scenes[i];
     if (sc.clip) sc.frame = await clipFrame(sc.clip, t - sc.start);
     draw(t);
     await vsrc.add(t, 1 / FPS);
@@ -509,18 +783,17 @@ async function clipFrame(c, t) {
   }
   return c.cur ? c.cur.canvas : null;
 }
-
-async function openClip(MB, blob, W, H) {
+async function openClip(MB, blob, w, h) {
   try {
     const input = new MB.Input({ source: new MB.BlobSource(blob), formats: MB.ALL_FORMATS });
     const track = await input.getPrimaryVideoTrack();
     if (!track || !(await track.canDecode())) return null;
-    return { input, sink: new MB.CanvasSink(track, { width: W, height: H, fit: 'cover', poolSize: 3 }), duration: await track.computeDuration(), at: 0 };
+    return { input, sink: new MB.CanvasSink(track, { width: w, height: h, fit: 'cover', poolSize: 3 }), duration: await track.computeDuration(), at: 0 };
   } catch { return null; }
 }
 
 // Secours pour les navigateurs sans WebCodecs : enregistrement en temps réel.
-async function exportRealtime(job, cv, draw, voices) {
+async function exportRealtime(job, cv, draw) {
   if (!(window.MediaRecorder && cv.captureStream)) return null;
   const { actx, scenes } = job;
   const dest = actx.createMediaStreamDestination();
@@ -545,7 +818,7 @@ async function exportRealtime(job, cv, draw, voices) {
       if (idx !== cur) {
         const prev = scenes[cur].video, next = scenes[idx].video;
         if (next && next !== prev) { try { next.currentTime = 0; } catch {} next.play().catch(() => {}); }
-        if (prev && prev !== next) setTimeout(() => prev.pause(), 450);
+        if (prev && prev !== next) setTimeout(() => prev.pause(), 600);
         cur = idx;
       }
       status(`Enregistrement… ${Math.ceil(job.total - now)} s`, (now / job.total) * 100);
@@ -562,70 +835,80 @@ async function produce(ad) {
   stopPreview();
   const AC = window.AudioContext || window.webkitAudioContext;
   const actx = new AC(); // créé dans le geste utilisateur (iOS)
-  const job = (state.job = { cancelled: false, actx, plan, host: page.host });
+  const [W, H] = FORMATS[state.fmt], scale = +$('#res').value / 720, target = +$('#dur').value;
+  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale });
   const cv = $('#cv'), result = $('#result');
-  [cv.width, cv.height] = FORMATS[state.fmt];
-  const W = cv.width, H = cv.height;
-  cv.getContext('2d').clearRect(0, 0, W, H);
+  cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
   cv.hidden = false; result.hidden = true; result.removeAttribute('src');
   $('#st-actions').hidden = true;
   $('#studio').hidden = false;
   document.body.style.overflow = 'hidden';
 
-  const scenes = (job.scenes = [...ad.scenes.map((s) => ({ ...s })), { kind: 'cta', headline: ad.cta, voiceover: ad.ctaVoiceover }]);
-  const n = ad.scenes.length;
+  const scenes = (job.scenes = [...ad.scenes.map((s) => ({ ...s })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
+  let site = 0;
+  scenes.forEach((s) => { if (s.visual === 'site') s.variant = site++ % 3; });
+  const needClip = (s) => s.visual === 'footage' || s.visual === 'site';
+  const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
-  const tasks = n * 2 + 4;
-  const tick = (p) => p.then((v) => { status('Préparation des plans, du site et de la voix off…', (++done / tasks) * 100); return v; }, () => { done++; return null; });
-  status('Préparation des plans, du site et de la voix off…', 0);
+  const tasks = scenes.length * 2 + photoIds.length + 3;
+  const MSG = plan.type === 'ecom' ? 'Préparation des photos produit et de la voix off…' : 'Préparation des plans, du site et de la voix off…';
+  const tick = (p) => p.then((v) => { status(MSG, (++done / tasks) * 100); return v; }, () => { status(MSG, (++done / tasks) * 100); return null; });
+  status(MSG, 0);
 
   try {
     job.MB = window.VideoEncoder ? await import('/vendor/mediabunny.min.mjs').catch(() => null) : null;
     const lite = navigator.connection && (navigator.connection.saveData || /2g|3g/.test(navigator.connection.effectiveType || ''));
     const clips = pickClips(await ad.clips, H > W);
-    const needShot = scenes.some((s) => s.visual === 'site');
-    const needProduct = plan.type === 'ecom' && page.images[0];
-    const [blobs, voices, shot, product] = await Promise.all([
-      Promise.all(clips.map((c) => tick(c ? fetchBlob(media(lite ? c.lite : c.url)) : Promise.resolve(null)))),
+    const [blobs, voices, shot, logo, photos] = await Promise.all([
+      Promise.all(scenes.map((s, i) => tick(clips[i] && needClip(s) ? fetchBlob(media(lite ? clips[i].lite : clips[i].url)) : Promise.resolve(null)))),
       Promise.all(scenes.map((s) => tick(loadVoice(actx, s.voiceover, plan.language)))),
-      tick(needShot ? loadImage('/api/shot?u=' + encodeURIComponent(page.url)) : Promise.resolve(null)),
-      tick(needProduct ? loadImage(media(page.images[0])) : Promise.resolve(null)),
-      tick(Promise.all([document.fonts.load(`800 60px Poppins`), document.fonts.load(`600 30px Poppins`)])),
+      tick(site ? loadImage('/api/shot?u=' + encodeURIComponent(page.url)) : Promise.resolve(null)),
+      tick(state.logo.then((l) => l && l.img)),
+      Promise.all(photoIds.map((i) => tick(loadImage(state.photoUrls[i])))),
+      tick(Promise.all([document.fonts.load('800 60px Poppins'), document.fonts.load('600 30px Poppins')])),
     ]);
     if (job.cancelled) return;
-    job.shot = shot; job.product = product;
+    job.shot = shot; job.logo = logo;
 
-    let offline = !!job.MB;
+    // photos produit : détourage quand le fond est uni, sinon la photo est utilisée telle quelle
+    const byId = new Map();
+    photos.forEach((img, n) => { if (img) byId.set(photoIds[n], { img, cut: cutout(img) }); });
+    const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
+    scenes.forEach((s) => {
+      if (s.kind === 'cta') s.ph = best;
+      else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;
+    });
+    // gros plan : jamais sur un détourage trop petit ; sans photo, la scène retombe sur la vidéo ou le dégradé
+    scenes.forEach((s) => { if (!s.ph && (s.visual === 'product' || s.visual === 'detail')) s.visual = 'footage'; });
+
+    const offline = !!job.MB;
+    const first = blobs.findIndex(Boolean);
     if (offline) {
-      const opened = await Promise.all(blobs.map((b) => (b ? openClip(job.MB, b, W, H) : null)));
-      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[0] : opened[i]; });
+      const opened = await Promise.all(blobs.map((b) => (b ? openClip(job.MB, b, cv.width, cv.height) : null)));
+      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[first] || null : opened[i]; });
     }
-    let t = 0;
     scenes.forEach((s, i) => {
       s.voice = voices[i];
-      const read = s.voiceover ? s.voiceover.split(/\s+/).length * 0.36 : 0;
-      const speech = s.voice ? s.voice.duration : read;
-      s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, speech) : [];
-      s.dur = Math.max(s.kind === 'cta' ? 3.4 : 2.6, speech + 0.8);
-      s.start = t;
-      t += s.dur;
+      s.speech = s.voice ? s.voice.duration : s.voiceover ? s.voiceover.split(/\s+/).length * 0.36 : 0;
     });
-    job.total = t;
+    const tl = timeline(scenes, target);
+    job.total = tl.total; job.rate = tl.rate;
+    scenes.forEach((s) => { s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, s.speech / tl.rate, 0.3) : []; });
     const track = Music.byId(state.music);
-    job.musicBuf = track ? await Music.render(track, t).catch(() => null) : null;
+    job.musicBuf = track ? await Music.render(track, job.total).catch(() => null) : null;
     const draw = makeRenderer(cv, job);
+    const hasAudio = voices.some(Boolean) || !!job.musicBuf;
 
-    let blob = offline ? await exportOffline(job, cv, draw, voices) : null;
+    let blob = offline ? await exportOffline(job, cv, draw, hasAudio) : null;
     if (job.cancelled) return;
     if (!blob) {
       const vids = await Promise.all(blobs.map((b) => (b ? loadVideoEl(b) : null)));
-      scenes.forEach((s, i) => { s.frame = null; s.video = s.kind === 'cta' ? vids[0] : vids[i]; });
-      blob = await exportRealtime(job, cv, draw, voices);
+      scenes.forEach((s, i) => { s.frame = null; s.video = s.kind === 'cta' ? vids[first] || null : vids[i]; });
+      blob = await exportRealtime(job, cv, draw);
     }
     if (job.cancelled) return;
     if (!blob) return status('Ce navigateur ne permet pas de créer la vidéo. Essayez avec Chrome ou Safari à jour.', 100);
 
-    const silent = voices.every((v) => !v);
     const name = `${plan.brand}-${ad.angle}`.normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') + (blob.type.includes('mp4') ? '.mp4' : '.webm');
     job.url = URL.createObjectURL(blob);
     result.src = job.url; result.hidden = false; cv.hidden = true;
@@ -634,13 +917,17 @@ async function produce(ad) {
     $('#b-share').hidden = !navigator.canShare?.({ files: [file] });
     $('#b-share').onclick = () => navigator.share({ files: [file], title: plan.brand }).catch(() => {});
     $('#st-actions').hidden = false;
-    status(`Vidéo prête · ${Math.round(job.total)} s · ${(blob.size / 1e6).toFixed(1)} Mo` + (silent ? ' · sans voix off' : '') + (track && job.musicBuf ? ` · ♪ ${track.name}` : ''), 100);
+    const notes = [`${+job.total.toFixed(1)} s`, `${cv.width}×${cv.height}`, `${(blob.size / 1e6).toFixed(1)} Mo`];
+    if (voices.every((v) => !v)) notes.push('sans voix off');
+    if (tl.rate > 1.02) notes.push(`voix accélérée ×${tl.rate.toFixed(2)}`);
+    if (track && job.musicBuf) notes.push(`♪ ${track.name}`);
+    status('Vidéo prête · ' + notes.join(' · '), 100);
   } catch (err) {
     console.error(err);
     if (!job.cancelled) status('Le montage a échoué. Réessayez.', 100);
   } finally {
     if (actx.state !== 'closed') actx.close().catch(() => {});
-    scenes.forEach((s) => { s.clip?.iter?.return?.(); s.clip?.input.dispose(); if (s.video) { s.video.pause(); URL.revokeObjectURL(s.video.src); } });
+    scenes.forEach((s) => { s.clip?.iter?.return?.(); try { s.clip?.input.dispose(); } catch {} if (s.video) { s.video.pause(); URL.revokeObjectURL(s.video.src); } });
   }
 }
 

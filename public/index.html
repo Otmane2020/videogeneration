@@ -48,6 +48,13 @@
       <button type="button" role="radio" class="type" data-type="saas"><b>SaaS</b><span>Logiciel, appli, abonnement</span><i class="badge" hidden>Détecté</i></button>
       <button type="button" role="radio" class="type" data-type="ecom"><b>E-commerce</b><span>Boutique, produits</span><i class="badge" hidden>Détecté</i></button>
     </div>
+    <div id="uploads" hidden>
+      <h3>Photos du produit</h3>
+      <p class="hint" id="up-hint"></p>
+      <div class="photos" id="photos"></div>
+      <label class="btn ghost" for="files">Ajouter mes photos</label>
+      <input id="files" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
+    </div>
     <button class="btn" id="b-gen" type="button">Créer mes pubs</button>
     <button class="link" type="button" data-back>Changer d’URL</button>
     <p class="error" id="e-type" role="alert" hidden></p>
@@ -63,6 +70,10 @@
       <button type="button" role="radio" data-fmt="9:16" aria-checked="true">9:16 Reels</button>
       <button type="button" role="radio" data-fmt="1:1" aria-checked="false">1:1 Feed</button>
       <button type="button" role="radio" data-fmt="16:9" aria-checked="false">16:9 YouTube</button>
+    </div>
+    <div class="opts">
+      <div><label for="dur">Durée</label><select id="dur"><option value="0">Auto</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select></div>
+      <div><label for="res">Qualité</label><select id="res"><option value="720">720p</option><option value="1080">1080p</option></select></div>
     </div>
     <div class="music">
       <label for="music">Musique de fond</label>

@@ -2,10 +2,15 @@
 
 Appli mobile-first : **URL → inspection → SaaS ou E-com → pubs vidéo** avec voix off.
 
-1. **URL** – on colle l'adresse du site.
-2. **Inspection** – le serveur lit la page (titres, description, images, prix) et estime le type.
-3. **SaaS ou E-com** – l'utilisateur confirme ; l'IA (vision) regarde les visuels et écrit 3 pubs.
-4. **Pubs** – plans Pixabay, capture du vrai site dans un téléphone, voix Deepgram et sous-titres mot à mot ; export MP4 image par image dans le navigateur (9:16, 1:1, 16:9), téléchargement / partage.
+1. **URL** – on colle l'adresse du site ou de la fiche produit.
+2. **Inspection** – le serveur lit la page : titres, images, logo, fiche produit structurée (nom, prix, photos).
+3. **SaaS ou E-com** – l'utilisateur confirme ; en e-commerce il peut ajouter ses propres photos.
+4. **Pubs** – l'IA écrit 3 pubs ; export MP4 image par image dans le navigateur (9:16, 1:1, 16:9, 720p/1080p, durée auto ou imposée à l'image près).
+
+**SaaS** : plans Pixabay + le vrai site dans un téléphone animé (incliné, rotation, zoom caméra).
+**E-commerce** : la pub est montée à partir des vraies photos du produit. L'IA choisit les photos utilisables ; le fond uni est retiré (le produit n'est jamais régénéré), puis le produit est posé sur un décor de studio adapté à la catégorie, avec gros plans, atouts vérifiés et prix (uniquement s'il figure dans les données de la fiche). Pixabay n'est qu'un appoint facultatif.
+
+Dans les deux cas : vrai logo et couleurs tirées du logo, transitions variées, voix off, sous-titres mot à mot, 30 mélodies synthétisées (`public/music.js`).
 
 | Service | Rôle |
 | --- | --- |

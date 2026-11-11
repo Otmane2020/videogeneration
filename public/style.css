@@ -349,3 +349,31 @@ footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; } footer nav a { col
 .seg.intents button[aria-checked="true"] { background: var(--grad); color: #fff; }
 #s-opts #b-gen { margin-top: 26px; }
 .site img { aspect-ratio: 1; object-fit: contain; background: #fff; max-height: 46dvh; }
+
+/* ---------- mobile d'abord, deuxième passe ---------- */
+.engtabs { display: none; }
+@media (max-width: 759px) {
+  #app { padding-left: 16px; padding-right: 16px; }
+  header { margin: 0 -16px 12px; padding: 10px 16px; background: #07060fe6; backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); border-bottom: 1px solid #ffffff10; }
+  .logo { font-size: 17px; }
+  .nav .pillbtn { padding: 10px 14px; } .navbtn { min-height: 40px; }
+  .hero h1 { font-size: clamp(40px, 12.5vw, 56px); }
+  .field input, .field .btn { min-height: 56px; font-size: 17px; }
+  .hero-art { max-width: none; margin-top: 4px; }
+  .eyebrow { margin-bottom: 8px; }
+  /* moins de texte : l'essentiel d'abord */
+  .flow p { display: none; } .flow > * { flex-basis: 44%; padding: 58px 12px 14px; } .flow h3 { font-size: 15px; }
+  .engtabs { display: grid; margin: 14px 0 10px; }
+  .engines { margin-top: 0; }
+  .engines[data-show="0"] article:nth-child(2), .engines[data-show="1"] article:nth-child(1) { display: none; }
+  .engines header { margin: 0 0 6px; padding: 0; border: 0; background: none; backdrop-filter: none; -webkit-backdrop-filter: none; }
+  .engines ol li { padding: 9px 0 9px 34px; font-size: 15px; }
+  .bento p { display: none; } .bento .wide p { display: block; }
+  .bento article { display: flex; flex-direction: column; gap: 8px; min-height: 96px; }
+  .bento article .ic { margin: 0; }
+  .gallery > * { flex-basis: 66%; }
+  .posts > * { flex-basis: 80%; }
+  .price { font-size: 34px; }
+  .sticky-cta { left: 16px; right: 16px; padding: 14px; }
+  .sticky-cta[hidden] { display: none; }
+}

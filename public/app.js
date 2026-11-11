@@ -1206,8 +1206,15 @@ async function produce(actx) {
 }
 
 /* ---------- page d'accueil : offres ---------- */
-// mobile : bouton d'action collé en bas dès que le formulaire du haut n'est plus visible
-new IntersectionObserver(([e]) => { $('#sticky-cta').hidden = e.isIntersecting; }).observe($('#f-url'));
+// mobile : bouton d'action collé en bas, sauf quand un autre bouton d'action est déjà à l'écran (haut et bas de page)
+const seen = new Set();
+const io = new IntersectionObserver((es) => { es.forEach((e) => (e.isIntersecting ? seen.add(e.target) : seen.delete(e.target))); $('#sticky-cta').hidden = seen.size > 0; });
+[$('#f-url'), $('.cta-end'), $('#pricing')].forEach((el) => io.observe(el));
+// mobile : un seul moteur affiché à la fois
+$$('.engtabs button').forEach((b) => b.addEventListener('click', () => {
+  $('.engines').dataset.show = b.dataset.eng;
+  $$('.engtabs button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+}));
 $('#sticky-cta').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
 $('#cta-end').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
 if (new URLSearchParams(location.search).get('checkout') === 'success') {

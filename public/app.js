@@ -1345,11 +1345,16 @@ async function produce(actx) {
         referenceImage = refCanvas.toDataURL('image/jpeg', 0.78);
       } catch (error) { console.warn('Could not prepare Muse reference image', error); }
       try {
+        const product = page.product || {};
         const response = await api('/api/backdrop?a=muse', {
           type: 'ecom',
           format: state.fmt,
           scene: plan.backdrop,
           category: plan.category,
+          productName: product.name || page.title || plan.tagline,
+          productDescription: product.description || plan.summary || page.description,
+          variant: Object.entries(state.variant || {}).map(([key, value]) => `${key}: ${value}`).join(', '),
+          brandPalette: [plan.palette?.primary, plan.palette?.accent].filter(Boolean).join(', '),
           referenceImage,
         });
         const imageBlob = await response.blob();

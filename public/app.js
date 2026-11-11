@@ -1327,8 +1327,15 @@ async function produce(actx) {
     $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = false;
     $('#upsell').hidden = paid;
     $('#upsell-note').textContent = account.proPrice ? `Pro: ${account.proPrice}, every video without watermark.` : '';
-    // historique du compte (si connecté)
-    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}` } }).then(refreshAccount).catch(() => {});
+    // historique du compte (si connecté) — on joint une vignette 60×108 du canvas courant
+    let thumb = null;
+    try {
+      const TW = 60, TH = Math.round(TW * cv.height / cv.width);
+      const tc = Object.assign(document.createElement('canvas'), { width: TW, height: TH });
+      tc.getContext('2d').drawImage(cv, 0, 0, TW, TH);
+      thumb = tc.toDataURL('image/jpeg', 0.72);
+    } catch {}
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, thumb } }).then(refreshAccount).catch(() => {});
   } catch (err) {
     console.error(err);
     if (!job.cancelled) { status('Something went wrong while editing. Please try again.', 100); $('#b-again').hidden = false; }
@@ -1448,7 +1455,19 @@ function paintAccount() {
     list.textContent = '';
     if (!account.history.length) list.append(Object.assign(document.createElement('li'), { className: 'empty', textContent: 'Your finished videos will be listed here.' }));
     account.history.forEach((h) => {
-      const li = document.createElement('li'), left = document.createElement('div');
+      const li = document.createElement('li');
+      // Vignette vidéo (thumb stockée en DB) ou icône de remplacement
+      if (h.thumb) {
+        const img = Object.assign(document.createElement('img'), { src: h.thumb, alt: '', width: 40, height: 71, loading: 'lazy' });
+        img.style.cssText = 'border-radius:6px;object-fit:cover;flex-shrink:0;';
+        li.append(img);
+      } else {
+        const ic = document.createElement('span');
+        ic.className = 'hist-ic';
+        ic.textContent = h.kind === 'ecom' ? '🛍' : '📱';
+        li.append(ic);
+      }
+      const left = document.createElement('div');
       left.append(Object.assign(document.createElement('b'), { textContent: h.brand || h.url }));
       left.append(Object.assign(document.createElement('small'), { textContent: `${new Date(h.created_at).toLocaleDateString()} · ${h.format} · ${Math.round(h.seconds)} s · ${h.resolution}` }));
       const again = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create again' });

@@ -392,7 +392,8 @@ dialog#upgrade::backdrop { background: #000c; }
 .profile b { display: block; font-size: 15px; word-break: break-all; } .profile span:not(.avatar) { font-size: 13px; color: #c9a5ff; }
 #account h3 { margin: 18px 0 8px; }
 .history { list-style: none; padding: 0; margin: 0 0 14px; max-height: 34dvh; overflow: auto; }
-.history li { padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex; justify-content: space-between; gap: 10px; }
+.history li { padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.hist-ic { font-size: 22px; flex-shrink: 0; width: 40px; text-align: center; }
 .history small { color: var(--mute); display: block; font-size: 12px; }
 .history button { background: none; border: 0; color: #c9a5ff; font: inherit; font-size: 13px; cursor: pointer; padding: 6px 0; white-space: nowrap; }
 .history .empty { color: var(--mute); justify-content: flex-start; }

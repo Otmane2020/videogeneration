@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
         }
       }
       // profil : offre et historique des vidéos réussies
-      const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
+      const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution, thumb FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
       const q = process.env.DATABASE_URL ? await usage(req, u).catch(() => null) : null;
       return send(res, 200, { user: u && { email: u.email, plan: u.plan, credits: u.credits || 0, admin: admins().includes(u.email) }, usage: q && { used: q.used, limit: q.limit }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
     }
@@ -41,7 +41,9 @@ module.exports = async (req, res) => {
       const u = await user(req);
       if (!u) return send(res, 200, { saved: false });
       const g = body.gen || {}, t = (v, n) => String(v ?? '').slice(0, n);
-      await sql('INSERT INTO generations (user_id, brand, url, kind, intent, format, seconds, resolution) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [u.id, t(g.brand, 80), t(g.url, 400), t(g.kind, 10), t(g.intent, 20), t(g.format, 8), Math.min(120, Math.max(0, +g.seconds || 0)), t(g.resolution, 12)]);
+      // thumb : data URL d'une vignette 60×108 (ou 108×60) JPEG envoyée par le client (~3 KB max)
+      const thumb = typeof g.thumb === 'string' && g.thumb.startsWith('data:image/') ? g.thumb.slice(0, 20000) : null;
+      await sql('INSERT INTO generations (user_id, brand, url, kind, intent, format, seconds, resolution, thumb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [u.id, t(g.brand, 80), t(g.url, 400), t(g.kind, 10), t(g.intent, 20), t(g.format, 8), Math.min(120, Math.max(0, +g.seconds || 0)), t(g.resolution, 12), thumb]);
       return send(res, 200, { saved: true });
     }
     if (action === 'reset') {
@@ -66,7 +68,14 @@ module.exports = async (req, res) => {
     let u;
     if (action === 'signup') {
       // un seul compte gratuit par adresse IP (FREE_ACCOUNTS_PER_IP pour assouplir)
-      const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim().slice(0, 60);
+      // Sur Vercel la vraie IP client est dans x-vercel-ip-address (prioritaire),
+      // puis x-real-ip (nginx/proxy custom), puis le premier hop de x-forwarded-for.
+      const ip = String(
+        req.headers['x-vercel-ip-address'] ||
+        req.headers['x-real-ip'] ||
+        req.headers['x-forwarded-for'] ||
+        ''
+      ).split(',')[0].trim().slice(0, 60);
       const max = parseInt(process.env.FREE_ACCOUNTS_PER_IP || '1', 10);
       if (ip && max > 0 && !admins().includes(mail)) {
         const n = await sql("SELECT count(*)::int AS n FROM users WHERE signup_ip = $1 AND plan = 'free'", [ip]);

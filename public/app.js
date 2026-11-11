@@ -1112,7 +1112,7 @@ async function produce(actx) {
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
   result.pause();
   cv.hidden = false; result.hidden = true; result.removeAttribute('src');
-  $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = $('#b-nomark').hidden = true;
+  $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = $('#upsell').hidden = true;
 
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
@@ -1216,7 +1216,8 @@ async function produce(actx) {
     status('Your video is ready · ' + notes.join(' · '), 100);
     buildEditor(used);
     $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = false;
-    $('#b-nomark').hidden = paid;
+    $('#upsell').hidden = paid;
+    $('#upsell-note').textContent = account.proPrice ? `Pro: ${account.proPrice}, every video without watermark.` : '';
     // historique du compte (si connecté)
     api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}` } }).then(refreshAccount).catch(() => {});
   } catch (err) {
@@ -1339,7 +1340,9 @@ async function startCheckout(errEl) {
 }
 $('#up-go').addEventListener('click', () => startCheckout($('#up-err')));
 $('#ac-up').addEventListener('click', () => { $('#account').close(); openUpgrade('You are on the free Starter plan.'); });
-$('#b-nomark').addEventListener('click', () => openUpgrade('Free videos are exported in 720p with a watermark.', true));
+// à l'export : deux façons d'enlever le filigrane, à l'unité ou avec l'offre Pro
+$('#b-nomark').addEventListener('click', () => $('#up-one').click());
+$('#b-gopro').addEventListener('click', () => openUpgrade('Every video in 1080p, without watermark.', true));
 // Export à l'unité : le paiement s'ouvre dans un nouvel onglet pour ne pas perdre la vidéo en cours ;
 // dès que le paiement est confirmé, la vidéo est remontée en 1080p sans filigrane.
 $('#up-one').addEventListener('click', async () => {

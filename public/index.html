@@ -48,7 +48,7 @@
 </defs></svg>
 <main id="app">
   <header>
-    <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span>ClipMotion</a>
+    <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span><span class="wm">Clip<b>Motion</b></span></a>
     <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><button class="navbtn" id="b-account" type="button" hidden>Sign in</button><a class="pillbtn" href="#top">Try it free</a></nav>
     <ol class="steps" aria-label="Steps" hidden>
       <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Style</li><li data-s="5">Video</li>
@@ -164,7 +164,7 @@
       <a class="btn" href="#top" id="cta-end">Paste my link</a>
     </section>
     <a class="sticky-cta" href="#top" id="sticky-cta" hidden>Create my video</a>
-    <footer><span class="logo"><span class="mark"></span>ClipMotion</span><nav aria-label="Footer"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><a href="#faq">FAQ</a></nav><span>© ClipMotion · clipmotion.ai</span></footer>
+    <footer><span class="logo"><span class="mark"></span><span class="wm">Clip<b>Motion</b></span></span><nav aria-label="Footer"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><a href="#faq">FAQ</a></nav><span>© ClipMotion · clipmotion.ai</span></footer>
   </section>
 
   <section id="s-inspect" class="view" hidden>
@@ -248,8 +248,15 @@
       <a class="btn" id="b-dl" download>Download</a>
       <button class="btn ghost" id="b-share" type="button" hidden>Share</button>
     </div>
+    <div class="upsell" id="upsell" hidden>
+      <b>Make it yours: no watermark, full 1080p</b>
+      <div class="row">
+        <button class="btn" id="b-nomark" type="button">This video · $0.99</button>
+        <button class="btn ghost" id="b-gopro" type="button">Go Pro</button>
+      </div>
+      <small id="upsell-note"></small>
+    </div>
     <button class="btn ghost" id="b-edit" type="button" hidden>Edit video</button>
-    <button class="btn ghost" id="b-nomark" type="button" hidden>Remove watermark · $0.99</button>
     <button class="link" id="b-again" type="button" hidden>Try another goal or format</button>
     <button class="link" type="button" data-back>New link</button>
   </section>

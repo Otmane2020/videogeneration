@@ -183,6 +183,48 @@ async function removeBg(imageUrl) {
   throw httpError(503, 'No background removal API key configured (CLIPDROP_API_KEY or REMOVEBG_API_KEY)');
 }
 
+// ─── Meta Muse Image via OpenRouter ───────────────────────────────────────────
+// Génère un seul décor par vidéo e-commerce. Le produit fourni en référence sert à
+// accorder la palette, mais le modèle doit rendre un décor vide : le packshot exact
+// sera ensuite composé par le canvas de ClipMotion.
+async function museBackdrop({ prompt, referenceImage }) {
+  const key = process.env.OPENROUTER_API_KEY;
+  if (!key) throw httpError(503, 'OPENROUTER_API_KEY is not configured');
+
+  const body = { model: 'meta/muse-image', prompt };
+  if (referenceImage) {
+    if (typeof referenceImage !== 'string' || !/^data:image\/(?:jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/.test(referenceImage)) {
+      throw httpError(400, 'Invalid product reference image');
+    }
+    if (referenceImage.length > 3 * 1024 * 1024) throw httpError(413, 'Product reference image is too large');
+    body.input_references = [{ type: 'image_url', image_url: { url: referenceImage } }];
+  }
+
+  const response = await fetch('https://openrouter.ai/api/v1/images', {
+    method: 'POST',
+    signal: AbortSignal.timeout(110000),
+    headers: {
+      authorization: `Bearer ${key}`,
+      'content-type': 'application/json',
+      'http-referer': process.env.PUBLIC_URL || 'https://www.clipmotion.ai',
+      'x-title': 'ClipMotion',
+    },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const message = data.error?.message || data.message || `OpenRouter image API ${response.status}`;
+    console.warn('Meta Muse Image failed', response.status, String(message).slice(0, 240));
+    throw httpError(502, `Meta Muse Image: ${String(message).slice(0, 180)}`);
+  }
+  const item = data.data?.find((x) => x?.b64_json);
+  if (!item?.b64_json) throw httpError(502, 'Meta Muse Image returned no image');
+  const mediaType = /^image\/(?:png|jpeg|webp)$/.test(item.media_type || '') ? item.media_type : 'image/png';
+  const image = Buffer.from(item.b64_json, 'base64');
+  if (!image.length) throw httpError(502, 'Meta Muse Image returned an empty image');
+  return { image, mediaType, cost: Number(data.usage?.cost) || null };
+}
+
 // ─── Handler principal ────────────────────────────────────────────────────────
 module.exports = handler('POST', async (req, res) => {
   const action = new URL(req.url || '/', 'http://x').searchParams.get('a') || '';
@@ -197,7 +239,39 @@ module.exports = handler('POST', async (req, res) => {
     return send(res, 200, png, { 'content-type': 'image/png', 'cache-control': 'private, max-age=3600' });
   }
 
-  // ── Action : génération de décor ──────────────────────────────────────────
+  // ── Action : Meta Muse Image, décor e-commerce unique ───────────────────────
+  if (action === 'muse') {
+    const b = await readJson(req);
+    if (b.type !== 'ecom') throw httpError(400, 'Meta Muse backdrop is only enabled for e-commerce videos');
+    const format = ['9:16', '1:1', '16:9'].includes(b.format) ? b.format : '9:16';
+    // Le choix IA est une option Pro dans l'interface ; on applique aussi le contrôle côté serveur.
+    if (process.env.DATABASE_URL && process.env.SESSION_SECRET) {
+      const u = await user(req).catch(() => null);
+      if (!u || u.plan === 'free') throw httpError(402, 'Meta Muse AI backdrop requires Pro plan');
+    }
+    const framing = format === '9:16'
+      ? 'Tall vertical portrait framing, composed for a 9:16 mobile video; make the central product area tall and leave safe margins at the top and bottom.'
+      : format === '16:9'
+        ? 'Wide horizontal landscape framing, composed for a 16:9 video; keep the main light architecture wide and the product landing area in the lower middle.'
+        : 'Square 1:1 framing with a centered product landing area.';
+    const scene = clean(b.scene, 220);
+    const category = clean(b.category, 60);
+    const prompt = `Create a premium photorealistic advertising BACKGROUND PLATE ONLY for a high-end ${category || 'consumer product'} product commercial.
+Visual direction: deep midnight navy and indigo studio atmosphere, luminous violet and lavender light ribbons forming a large elegant arc behind the hero area, soft atmospheric purple bloom, subtle cool highlights, glossy dark reflective floor with a restrained realistic reflection, cinematic studio lighting, premium luxury electronics campaign, refined gradients, realistic material and light falloff.
+${framing}
+The lower-middle foreground must remain clean, open and empty so ClipMotion can composite the customer's original transparent product cutout there. Create depth with the environment and lighting, not with props.
+${scene ? `Additional mood direction: ${scene}.` : ''}
+The reference image, when supplied, is ONLY a guide for the product category, its palette and the campaign mood. Do not reproduce the referenced product. Do not draw any product, object, headphones, device, pedestal, furniture, person, hand, text, lettering, brand, logo, watermark, frame or mockup. No placeholder object. Output only the finished empty photographic environment.`;
+    const generated = await museBackdrop({ prompt, referenceImage: b.referenceImage || null });
+    return send(res, 200, generated.image, {
+      'content-type': generated.mediaType,
+      'cache-control': 'no-store',
+      'x-image-model': 'meta/muse-image',
+      ...(generated.cost ? { 'x-image-cost-usd': String(generated.cost) } : {}),
+    });
+  }
+
+  // ── Action : génération de décor historique ───────────────────────────────
   const b = await readJson(req);
   const decor = MOODS[b.decor] ? b.decor : 'studio';
   const ratio = RATIOS[b.format] || '9:16';

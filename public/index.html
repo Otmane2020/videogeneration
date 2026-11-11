@@ -156,6 +156,7 @@
       <h2>Your first video ad in a few minutes</h2>
       <a class="btn" href="#top" id="cta-end">Paste my link</a>
     </section>
+    <a class="sticky-cta" href="#top" id="sticky-cta" hidden>Create my video</a>
     <footer><span class="logo"><span class="mark"></span>ClipMotion</span><nav aria-label="Footer"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><a href="#faq">FAQ</a></nav><span>© ClipMotion · clipmotion.ai</span></footer>
   </section>
 
@@ -228,21 +229,23 @@
       <a class="btn" id="b-dl" download>Download</a>
       <button class="btn ghost" id="b-share" type="button" hidden>Share</button>
     </div>
-    <div id="editor" hidden>
-      <h2>Fine-tune your video</h2>
-      <p class="hint">Edit the text, swap a visual or change the music, then update.</p>
-      <div id="ed-scenes"></div>
-      <div class="music">
-        <label for="music">Music</label>
-        <div class="row">
-          <select id="music"></select>
-          <button class="btn ghost" id="b-listen" type="button">Listen</button>
-        </div>
-      </div>
-      <button class="btn" id="b-update" type="button">Update video</button>
-    </div>
+    <button class="btn ghost" id="b-edit" type="button" hidden>Edit video</button>
     <button class="link" id="b-again" type="button" hidden>Try another goal or format</button>
     <button class="link" type="button" data-back>New link</button>
+  </section>
+<section id="s-edit" class="view" hidden>
+    <button class="link back" id="b-back-video" type="button">← Back to video</button>
+    <h2>Fine-tune your video</h2>
+    <p class="hint">Edit the text, swap a visual or change the music, then update.</p>
+    <div id="ed-scenes"></div>
+    <div class="music">
+      <label for="music">Music</label>
+      <div class="row">
+        <select id="music"></select>
+        <button class="btn ghost" id="b-listen" type="button">Listen</button>
+      </div>
+    </div>
+    <div class="edbar"><button class="btn" id="b-update" type="button">Update video</button></div>
   </section>
 </main>
 

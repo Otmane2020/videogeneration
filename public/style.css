@@ -302,3 +302,40 @@ footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; } footer nav a { col
 .hero-art .demo b { white-space: nowrap; font-size: clamp(9px, 1.25vw, 13px); padding: 3px 7px; }
 .hero-art .demo figcaption { padding: 24px 6px 10px; gap: 4px; }
 @media (max-width: 759px) { .hero-art .demo b { font-size: clamp(9px, 2.6vw, 13px); } }
+
+/* ---------- page d'édition ---------- */
+.link.back { margin: 0 0 14px; padding-left: 0; text-decoration: none; }
+.edbar { position: sticky; bottom: 0; padding: 10px 0 calc(10px + env(safe-area-inset-bottom)); background: linear-gradient(#07060f00, #07060f 35%); }
+.edbar .btn { margin: 0; }
+#b-edit { margin-top: 10px; }
+
+/* ---------- landing : mobile d'abord ---------- */
+.sticky-cta { display: none; }
+@media (max-width: 759px) {
+  header { margin-bottom: 14px; }
+  .hero { gap: 22px; padding: 4px 0 8px; }
+  .hero h1 { font-size: clamp(38px, 11.5vw, 52px); }
+  .hero .lead { font-size: 16px; margin: 12px 0 18px; }
+  .trust { gap: 4px 14px; margin-top: 12px; }
+  .hero-art { max-width: 340px; gap: 8px; }
+  .block { padding: 40px 0 4px; }
+  .block > h2 { font-size: 26px; margin-bottom: 16px; }
+  /* rangées à faire défiler au doigt, au lieu de longues piles de cartes */
+  .flow, .gallery, .plans, .posts { display: flex; gap: 10px; overflow-x: auto; scroll-snap-type: x mandatory; -webkit-overflow-scrolling: touch; margin: 0 -16px; padding: 4px 16px 14px; scrollbar-width: none; }
+  .flow::-webkit-scrollbar, .gallery::-webkit-scrollbar, .plans::-webkit-scrollbar, .posts::-webkit-scrollbar { display: none; }
+  .flow > *, .gallery > *, .plans > *, .posts > * { flex: 0 0 78%; scroll-snap-align: center; }
+  .flow > * { flex-basis: 62%; padding: 62px 14px 16px; }
+  .flow li:not(:last-child)::after { left: auto; right: -11px; bottom: auto; top: 32px; width: 10px; height: 2px; }
+  .gallery > * { flex-basis: 58%; }
+  .plans > * { flex-basis: 84%; }
+  .bento { grid-template-columns: 1fr 1fr; gap: 8px; }
+  .bento article { padding: 14px; }
+  .bento .wide { grid-column: span 2; }
+  .bento h3 { font-size: 15px; } .bento p { font-size: 13.5px; }
+  .engines article { padding: 16px; }
+  summary { padding: 16px; min-height: 52px; align-items: center; }
+  .cta-end { margin: 40px 0 20px; padding: 30px 18px; }
+  footer { padding-bottom: 84px; }
+  .sticky-cta { display: block; position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 6; padding: 15px; border-radius: 16px; background: var(--grad); color: #fff; font-weight: 700; font-size: 16px; text-align: center; text-decoration: none; box-shadow: 0 12px 40px #000c; }
+  .nav { gap: 8px; } .navbtn { padding: 8px 12px; }
+}

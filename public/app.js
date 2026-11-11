@@ -208,7 +208,7 @@ $('#b-gen').addEventListener('click', async () => {
   const cv = $('#cv'), [W, H] = FORMATS[state.fmt];
   cv.width = W; cv.height = H; cv.getContext('2d').clearRect(0, 0, W, H);
   cv.hidden = false; $('#result').hidden = true;
-  $('#st-actions').hidden = $('#editor').hidden = $('#b-again').hidden = true;
+  $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = true;
   show('s-video', 4);
   status(ecom ? 'Reviewing your product photos and writing the script…' : 'Studying your brand and writing the script…', 4);
   try {
@@ -235,7 +235,10 @@ $('#b-gen').addEventListener('click', async () => {
     actx.close().catch(() => {});
   }
 });
-$('#b-update').addEventListener('click', () => { const actx = newAudio(); cancelJob(); scrollTo({ top: 0, behavior: 'smooth' }); produce(actx); });
+// l'édition se fait sur sa propre page ; « Update » revient à la vidéo et la remonte
+$('#b-edit').addEventListener('click', () => { $('#result').pause(); show('s-edit', 4); });
+$('#b-back-video').addEventListener('click', () => { stopPreview(); show('s-video', 4); });
+$('#b-update').addEventListener('click', () => { const actx = newAudio(); cancelJob(); show('s-video', 4); produce(actx); });
 $('#b-again').addEventListener('click', () => { cancelJob(); show('s-type', 3); });
 
 // Retouches : texte de chaque scène, visuel, musique.
@@ -252,7 +255,7 @@ function buildEditor(used) {
     parent.append(el);
   };
   ad.scenes.forEach((s, i) => {
-    if (i >= used.length) return;
+    if (i >= used.length - 1) return; // `used` compte aussi l'écran final ; les scènes retirées d'un format court ne sont pas proposées
     const card = Object.assign(document.createElement('div'), { className: 'edscene' });
     const swap = s.visual === 'footage' || s.visual === 'site';
     const t = Object.assign(document.createElement('button'), { type: 'button', className: 'thumb', disabled: !swap });
@@ -1063,7 +1066,7 @@ async function produce(actx) {
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
   result.pause();
   cv.hidden = false; result.hidden = true; result.removeAttribute('src');
-  $('#st-actions').hidden = $('#editor').hidden = $('#b-again').hidden = true;
+  $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = true;
 
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
@@ -1166,7 +1169,7 @@ async function produce(actx) {
     if (voices.every((v) => !v)) notes.push('no voice-over');
     status('Your video is ready · ' + notes.join(' · '), 100);
     buildEditor(used);
-    $('#st-actions').hidden = $('#editor').hidden = $('#b-again').hidden = false;
+    $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = false;
   } catch (err) {
     console.error(err);
     if (!job.cancelled) { status('Something went wrong while editing. Please try again.', 100); $('#b-again').hidden = false; }
@@ -1177,6 +1180,9 @@ async function produce(actx) {
 }
 
 /* ---------- page d'accueil : offres ---------- */
+// mobile : bouton d'action collé en bas dès que le formulaire du haut n'est plus visible
+new IntersectionObserver(([e]) => { $('#sticky-cta').hidden = e.isIntersecting; }).observe($('#f-url'));
+$('#sticky-cta').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
 $('#cta-end').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
 if (new URLSearchParams(location.search).get('checkout') === 'success') {
   const n = Object.assign(document.createElement('p'), { className: 'notice', textContent: 'Thank you! Your payment went through. Your plan will be activated shortly.' });

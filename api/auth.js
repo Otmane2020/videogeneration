@@ -19,7 +19,7 @@ module.exports = async (req, res) => {
     if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
     const body = await readJson(req);
     const { action, email, password, token } = body;
-    if (action === 'logout') return send(res, 200, { user: null }, { 'set-cookie': clear });
+    if (action === 'logout') return send(res, 200, { user: null }, { 'set-cookie': clear(req.headers.host) });
     if (action === 'spend') {
       // utilise un export à l'unité acheté : la vidéo en cours sort sans filigrane
       const u = await user(req);
@@ -40,7 +40,7 @@ module.exports = async (req, res) => {
       const rows = /^[0-9a-f-]{36}$/.test(id) ? await sql('SELECT id, email, plan, pass FROM users WHERE id = $1', [id]) : [];
       if (!rows[0] || !resetCheck(token, rows[0].pass)) throw httpError(400, 'This reset link is no longer valid. Ask for a new one.');
       await sql('UPDATE users SET pass = $1 WHERE id = $2', [hash(pw2), id]);
-      return send(res, 200, { user: { email: rows[0].email, plan: rows[0].plan } }, { 'set-cookie': cookieFor(id) });
+      return send(res, 200, { user: { email: rows[0].email, plan: rows[0].plan } }, { 'set-cookie': cookieFor(id, req.headers.host) });
     }
     const mail = String(email || '').trim().toLowerCase(), pw = String(password || '');
     if (action === 'forgot') {
@@ -72,7 +72,7 @@ module.exports = async (req, res) => {
       if (!rows[0] || !check(pw, rows[0].pass)) throw httpError(401, 'Wrong email or password');
       u = rows[0];
     } else throw httpError(400, 'Unknown action');
-    send(res, 200, { user: { email: u.email, plan: u.plan } }, { 'set-cookie': cookieFor(u.id) });
+    send(res, 200, { user: { email: u.email, plan: u.plan } }, { 'set-cookie': cookieFor(u.id, req.headers.host) });
   } catch (e) {
     if (!e.status || e.status >= 500) console.error('auth', e.message);
     send(res, e.status || 500, { error: e.status && e.status < 500 ? e.message : e.status === 503 ? e.message : 'Server error' });

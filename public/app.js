@@ -1471,7 +1471,7 @@ async function produce(actx) {
       tc.getContext('2d').drawImage(cv, 0, 0, TW, TH);
       thumb = tc.toDataURL('image/jpeg', 0.72);
     } catch {}
-    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, captionStyle: job.captionStyle, templateStyle: job.templateStyle, backdropModel: job.backdropModel, thumb } })
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, captionStyle: job.captionStyle, templateStyle: job.templateStyle, videoTemplate: job.videoTemplate, backdropModel: job.backdropModel, thumb } })
       .then((r) => r.json()).then(async (j) => { if (j.id && blob) { try { await vidIdb.set(j.id, blob); await vidIdb.prune(15); } catch {} } refreshAccount(); }).catch(() => {});
   } catch (err) {
     console.error(err);
@@ -1624,8 +1624,10 @@ function paintAccount() {
       });
       const captionNames = { karaoke:'Karaoke', 'bold-pop':'Bold Pop', typewriter:'Typewriter', neon:'Neon', minimal:'Minimal', highlight:'Highlight', editorial:'Editorial', boxed:'Boxed', word:'Word by Word', clean:'Clean' };
       const templateNames = { cinematic:'Cinematic', bold:'Bold', editorial:'Editorial', minimal:'Minimal', neon:'Neon', split:'Split', social:'Social', product:'Product' };
+      const creativeNames = { 'product-demo':'Product demo', 'problem-solution':'Problem / solution', 'feature-showcase':'Feature showcase', 'startup-launch':'Startup launch', 'customer-story':'Customer story', corporate:'Corporate', 'editorial-product':'Editorial product', 'product-spotlight':'Product spotlight', 'lifestyle-product':'Lifestyle product' };
       if (h.caption_style) meta.append(Object.assign(document.createElement('span'), { textContent: captionNames[h.caption_style] || h.caption_style }));
       if (h.template_style) meta.append(Object.assign(document.createElement('span'), { textContent: templateNames[h.template_style] || h.template_style }));
+      if (h.creative_template) meta.append(Object.assign(document.createElement('span'), { textContent: creativeNames[h.creative_template] || h.creative_template }));
 
       const actions = document.createElement('div');
       actions.className = 'history-actions';

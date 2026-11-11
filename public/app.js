@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: 'karaoke', templateStyle: 'cinematic', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -70,6 +70,9 @@ $('#f-url').addEventListener('submit', async (e) => {
 $$('[data-back]').forEach((b) => b.addEventListener('click', () => { cancelJob(); show('s-url', 1); }));
 
 /* ---------- 3. réglages ---------- */
+$('#caption-style')?.addEventListener('change', (e) => { state.captionStyle = e.target.value; });
+$('#template-style')?.addEventListener('change', (e) => { state.templateStyle = e.target.value; });
+
 function renderSetup() {
   const p = state.page;
   $('#site-host').textContent = $('#brand-host').textContent = p.host;
@@ -148,7 +151,7 @@ function initVariant() {
 }
 // toutes les photos disponibles : importées à la main d'abord, puis celles de la page
 function allPhotos() {
-  return [...state.uploads.map((u) => ({ show: u.url, send: u.data })), ...state.page.images.map((u) => ({ show: media(u), send: u }))];
+  return [...state.uploads.map((u) => ({ show: u.url, send: u.data, source: u.url })), ...state.page.images.map((u) => ({ show: media(u), send: u, source: u }))];
 }
 // sélection par défaut : la photo de la variante choisie en tête, sans les photos des autres variantes
 function autoPick() {
@@ -251,6 +254,7 @@ $('#b-gen').addEventListener('click', async () => {
   try {
     const list = ecom ? photoList() : [];
     state.photoUrls = list.map((p) => p.show);
+    state.photoSources = list.map((p) => p.source);
     // la variante choisie fixe le prix affiché et le texte de la pub
     const v = ecom ? variantOf() : null;
     const page = v?.price ? { ...state.page, product: { ...state.page.product, price: v.price } } : state.page;
@@ -648,6 +652,8 @@ function makeRenderer(cv, job) {
   const tmp = document.createElement('canvas'), refl = document.createElement('canvas');
   let ctx = main;
   const { scenes, plan, shot, logo } = job;
+  const captionStyle = job.captionStyle || 'karaoke';
+  const templateStyle = job.templateStyle || 'cinematic';
   const P = plan.palette.primary, A = plan.palette.accent;
   const wide = W > H, square = W === H;
   const pad = wide ? 64 : 44;
@@ -886,43 +892,60 @@ function makeRenderer(cv, job) {
 
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
     const tx = wide ? pad + textW / 2 : W / 2;
-    // sous-titres : petit groupe de mots centré, le mot prononcé grossit et prend la couleur d'accent
+    // Sous-titres stylables : le rendu reste incrusté dans le MP4 exporté.
     const chunk = sc.words.find((c) => local < c[c.length - 1].t1 + 0.2) || null;
-    if (chunk && local >= chunk[0].t0 - 0.1) {
-      const size = wide ? 38 : 44;
-      ctx.font = `800 ${size}px ${FONT}`;
-      const texts = chunk.map((wd) => wd.w.toUpperCase()), widths = texts.map((t) => ctx.measureText(t).width + size * 0.42);
-      const total = widths.reduce((a, b2) => a + b2, 0), fit = Math.min(1, (textW + 20) / total);
-      const inK = backOut((local - chunk[0].t0 + 0.1) / 0.18);
-      let x = tx - (total * fit) / 2;
-      ctx.lineJoin = 'round';
-      chunk.forEach((wd, n) => {
-        const on = local >= wd.t0 && local < wd.t1, pop = on ? 1 + 0.14 * (1 - easeOut((local - wd.t0) / 0.16)) + 0.06 : 1;
-        const cxw = x + (widths[n] * fit) / 2;
-        ctx.save();
-        ctx.translate(cxw, bottom); ctx.scale(fit * pop * (0.7 + 0.3 * inK), fit * pop * (0.7 + 0.3 * inK));
-        ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.strokeText(texts[n], 0, 0);
-        ctx.fillStyle = on ? A : local >= wd.t1 ? '#fff' : 'rgba(255,255,255,.7)';
-        ctx.fillText(texts[n], 0, 0);
-        ctx.restore();
-        x += widths[n] * fit;
-      });
+    if (chunk && local >= chunk[0].t0 - 0.1 && window.ClipMotionCaptions) {
+      window.ClipMotionCaptions.draw(ctx, chunk, local, { x: tx, y: bottom, width: textW, wide, accent: A, font: FONT, style: captionStyle, backOut, easeOut });
     }
-    // titre en bandeaux de couleur : chaque ligne arrive en rebond, légèrement penchée, puis se redresse
+    // Template de composition : chaque variante change réellement le traitement du titre dans la vidéo.
     ctx.font = `800 ${headSize}px ${FONT}`;
     lines.forEach((l, i) => {
       const e = backOut((local - 0.1 - i * 0.12) / 0.38);
       if (e <= 0) return;
-      const last = i === lines.length - 1, w = ctx.measureText(l).width + 36;
+      const last = i === lines.length - 1, w = Math.min(textW - 12, ctx.measureText(l).width + 42);
+      const y = top + i * lh + (lh - 8) / 2;
       ctx.save();
       ctx.globalAlpha = clamp(e * 1.4);
-      ctx.translate(tx, top + i * lh + (lh - 8) / 2);
-      ctx.rotate((1 - Math.min(1, e)) * (i % 2 ? 0.07 : -0.07) + (i % 2 ? 0.012 : -0.012));
-      ctx.scale(0.55 + 0.45 * e, 0.55 + 0.45 * e);
-      ctx.fillStyle = last ? A : P;
-      rr(-w / 2, -(lh - 8) / 2, w, lh - 8, 14); ctx.fill();
-      ctx.fillStyle = onColor(last ? A : P);
-      ctx.fillText(l, 0, headSize * 0.36);
+      ctx.translate(tx, y);
+      if (templateStyle === 'editorial') {
+        ctx.font = `700 ${Math.round(headSize * 0.96)}px Georgia, serif`;
+        ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 18;
+        ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+      } else if (templateStyle === 'minimal') {
+        ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 16;
+        ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+      } else if (templateStyle === 'neon') {
+        ctx.textAlign = 'center'; ctx.shadowColor = A; ctx.shadowBlur = 24;
+        ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.strokeText(l, 0, headSize * 0.34, textW - 20);
+        ctx.fillStyle = A; ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+      } else if (templateStyle === 'split') {
+        ctx.textAlign = 'center'; ctx.fillStyle = last ? A : '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 14;
+        ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+        ctx.fillStyle = last ? '#fff' : A;
+        ctx.fillRect(-w / 2, headSize * 0.48, w, Math.max(4, headSize * 0.055));
+      } else if (templateStyle === 'social') {
+        ctx.textAlign = 'center'; ctx.fillStyle = '#101018';
+        rr(-w / 2, -(lh - 4) / 2, w, lh - 4, 12); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else if (templateStyle === 'product') {
+        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(8,7,18,.78)';
+        rr(-w / 2 - 12, -(lh - 4) / 2, w + 24, lh - 4, 18); ctx.fill();
+        ctx.fillStyle = last ? A : '#fff'; ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else if (templateStyle === 'bold') {
+        ctx.textAlign = 'center'; ctx.fillStyle = last ? A : P;
+        rr(-w / 2, -(lh - 4) / 2, w, lh - 4, 7); ctx.fill();
+        ctx.fillStyle = onColor(last ? A : P); ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else {
+        ctx.rotate((1 - Math.min(1, e)) * (i % 2 ? 0.07 : -0.07) + (i % 2 ? 0.012 : -0.012));
+        ctx.scale(0.55 + 0.45 * e, 0.55 + 0.45 * e);
+        ctx.fillStyle = last ? A : P;
+        rr(-w / 2, -(lh - 8) / 2, w, lh - 8, 14); ctx.fill();
+        ctx.fillStyle = onColor(last ? A : P);
+        ctx.textAlign = 'center'; ctx.fillText(l, 0, headSize * 0.36, textW - 24);
+      }
       ctx.restore();
     });
   }
@@ -1206,7 +1229,7 @@ async function produce(actx) {
   const paid = unlocked();
   if (state.unlockedAd === state.ad && state.ad) $('#res').value = '1080';
   if (!paid && $('#res').value !== '720') { $('#res').value = '720'; $$('[data-for=res] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '720'))); }
-  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid });
+  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid, captionStyle: state.captionStyle, templateStyle: state.templateStyle });
   const cv = $('#cv'), result = $('#result');
   const scale = job.scale;
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
@@ -1264,7 +1287,7 @@ async function produce(actx) {
       if (!cache[key]) {
         status('Cutting out your product…');
         // 1. Essai côté serveur via remove.bg (meilleure qualité sur les objets complexes)
-        const srcUrl = state.photoUrls?.[id];
+        const srcUrl = state.photoSources?.[id];
         let cut = srcUrl
           ? await api('/api/backdrop?a=removebg', { url: srcUrl })
               .then(async (r) => {
@@ -1289,10 +1312,15 @@ async function produce(actx) {
               })
               .catch(() => null) // 503 (pas de clé) ou erreur → on passe au ONNX local
           : null;
-        // 2. Modèle ONNX local (ormbg) si remove.bg n'est pas disponible ou a échoué
+        // 2. Modèle ONNX local (ormbg) : on le force pour chaque photo réellement utilisée comme produit vedette.
+        // Le classement « packshot » de l'analyse ne doit pas empêcher le détourage d'une photo produit classique.
         if (!cut) {
-          cut = await Cutout.run(img, { force: kinds.get(id) === 'packshot', onProgress: (f) => status(`Loading the cut-out tool… ${Math.round(f * 100)}%`) })
-            .catch((e) => { console.warn('cutout', e); return cutout(img); });
+          const localCut = window.Cutout?.run
+            ? await window.Cutout.run(img, { force: true, onProgress: (f) => status(`Removing background… ${Math.round(f * 100)}%`) })
+                .catch((e) => { console.warn('ONNX background removal failed', e); return null; })
+            : null;
+          cut = localCut || cutout(img);
+          if (!cut) status('Background could not be removed from this photo; using the original image.');
         }
         if (job.cancelled) return;
         cache[key] = { img, cut };
@@ -1302,12 +1330,44 @@ async function produce(actx) {
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
     // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
     if (best?.cut && $('#bgai').value === '1') {
-      status('Creating the custom backdrop…');
-      plan.backdrops ||= {};
-      plan.backdrops[state.fmt] ||= api('/api/backdrop', { decor: plan.decor, scene: plan.backdrop, category: plan.category, accent: plan.palette.accent, format: state.fmt })
-        .then((r) => r.blob()).then((b) => loadImage(URL.createObjectURL(b))).catch(() => null);
-      job.backdrop = await plan.backdrops[state.fmt];
-      if (!job.backdrop) delete plan.backdrops[state.fmt];
+      status('Creating your one-off product backdrop with Meta Muse Image…');
+      // Une référence JPEG légère suffit pour communiquer la catégorie et les couleurs du produit.
+      // L'image produit ne sera jamais remplacée : seul le fond est généré.
+      let referenceImage = null;
+      try {
+        const maxSide = 768, scale = Math.min(1, maxSide / Math.max(best.img.naturalWidth, best.img.naturalHeight));
+        const rw = Math.max(1, Math.round(best.img.naturalWidth * scale));
+        const rh = Math.max(1, Math.round(best.img.naturalHeight * scale));
+        const refCanvas = Object.assign(document.createElement('canvas'), { width: rw, height: rh });
+        const refCtx = refCanvas.getContext('2d');
+        refCtx.fillStyle = '#11121e'; refCtx.fillRect(0, 0, rw, rh);
+        refCtx.drawImage(best.img, 0, 0, rw, rh);
+        referenceImage = refCanvas.toDataURL('image/jpeg', 0.78);
+      } catch (error) { console.warn('Could not prepare Muse reference image', error); }
+      try {
+        const product = page.product || {};
+        const response = await api('/api/backdrop?a=muse', {
+          type: 'ecom',
+          format: state.fmt,
+          scene: plan.backdrop,
+          category: plan.category,
+          productName: product.name || page.title || plan.tagline,
+          productDescription: product.description || plan.summary || page.description,
+          variant: Object.entries(state.variant || {}).map(([key, value]) => `${key}: ${value}`).join(', '),
+          brandPalette: [plan.palette?.primary, plan.palette?.accent].filter(Boolean).join(', '),
+          referenceImage,
+        });
+        const imageBlob = await response.blob();
+        const objectUrl = URL.createObjectURL(imageBlob);
+        job.backdrop = await loadImage(objectUrl);
+        URL.revokeObjectURL(objectUrl);
+        job.backdropModel = job.backdrop ? (response.headers.get('x-image-model') || 'meta/muse-image') : null;
+      } catch (error) {
+        job.backdrop = null;
+        job.backdropModel = null;
+        console.warn('Meta Muse backdrop unavailable; using the built-in studio background', error);
+        status('Meta Muse is unavailable right now. Using the built-in studio background.');
+      }
     }
     scenes.forEach((s, i) => {
       if (s.kind === 'cta') s.ph = best;
@@ -1374,7 +1434,7 @@ async function produce(actx) {
       tc.getContext('2d').drawImage(cv, 0, 0, TW, TH);
       thumb = tc.toDataURL('image/jpeg', 0.72);
     } catch {}
-    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, thumb } })
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, captionStyle: job.captionStyle, templateStyle: job.templateStyle, backdropModel: job.backdropModel, thumb } })
       .then((r) => r.json()).then(async (j) => { if (j.id && blob) { try { await vidIdb.set(j.id, blob); await vidIdb.prune(15); } catch {} } refreshAccount(); }).catch(() => {});
   } catch (err) {
     console.error(err);
@@ -1458,12 +1518,14 @@ $('#topbar-go').addEventListener('click', () => openUpgrade($('#topbar-text').te
 $('#topbar-x').addEventListener('click', () => { $('#topbar').hidden = true; });
 
 /* ---------- compte, profil, offre ---------- */
-const account = { user: null, history: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
+const account = { user: null, history: [], objectUrls: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
 const isPaid = () => !!account.user && account.user.plan !== 'free';
 // vidéo débloquée à l'unité : valable pour cette pub, retouches comprises
 const unlocked = () => isPaid() || (!!state.ad && state.unlockedAd === state.ad);
 const PLAN_NAME = { free: 'Starter (free)', pro: 'Pro', business: 'Business' };
 function paintAccount() {
+  account.objectUrls.forEach((url) => URL.revokeObjectURL(url));
+  account.objectUrls = [];
   const u = account.user;
   // Nav : connecté → avatar circulaire avec initiale + masquer "Try it free"
   //       déconnecté → bouton "Sign in" + afficher "Try it free"
@@ -1496,39 +1558,84 @@ function paintAccount() {
     if (!account.history.length) list.append(Object.assign(document.createElement('li'), { className: 'empty', textContent: 'Your finished videos will be listed here.' }));
     account.history.forEach((h) => {
       const li = document.createElement('li');
-      // Vignette vidéo (thumb stockée en DB) ou icône de remplacement
+      li.className = 'history-card';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'history-thumb';
       if (h.thumb) {
-        const img = Object.assign(document.createElement('img'), { src: h.thumb, alt: '', width: 40, height: 71, loading: 'lazy' });
-        img.style.cssText = 'border-radius:6px;object-fit:cover;flex-shrink:0;';
-        li.append(img);
+        const img = Object.assign(document.createElement('img'), { src: h.thumb, alt: '', width: 72, height: 128, loading: 'lazy' });
+        thumb.append(img);
       } else {
         const ic = document.createElement('span');
         ic.className = 'hist-ic';
         ic.textContent = h.kind === 'ecom' ? '🛍' : '📱';
-        li.append(ic);
+        thumb.append(ic);
       }
-      const left = document.createElement('div');
-      left.append(Object.assign(document.createElement('b'), { textContent: h.brand || h.url }));
-      left.append(Object.assign(document.createElement('small'), { textContent: `${new Date(h.created_at).toLocaleDateString()} · ${h.format} · ${Math.round(h.seconds)} s · ${h.resolution}` }));
-      const again = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create again' });
-      again.addEventListener('click', () => { $('#account').close(); show('s-url', 1); $('#url').value = h.url; $('#f-url').requestSubmit(); });
-      const acts = document.createElement('div');
-      acts.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px';
-      acts.append(again);
-      // boutons download + preview chargés depuis IndexedDB
+
+      const main = document.createElement('div');
+      main.className = 'history-main';
+      const top = document.createElement('div');
+      top.className = 'history-top';
+      const title = Object.assign(document.createElement('b'), { className: 'history-title', textContent: h.brand || (() => { try { return new URL(h.url).hostname; } catch { return 'Untitled video'; } })() });
+      const date = Object.assign(document.createElement('small'), { className: 'history-date', textContent: new Date(h.created_at).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) });
+      top.append(title, date);
+
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      [h.format, `${Math.round(h.seconds || 0)} sec`, h.resolution].filter(Boolean).forEach((value) => {
+        meta.append(Object.assign(document.createElement('span'), { textContent: value }));
+      });
+      const captionNames = { karaoke:'Karaoke', 'bold-pop':'Bold Pop', typewriter:'Typewriter', neon:'Neon', minimal:'Minimal', highlight:'Highlight', editorial:'Editorial', boxed:'Boxed', word:'Word by Word', clean:'Clean' };
+      const templateNames = { cinematic:'Cinematic', bold:'Bold', editorial:'Editorial', minimal:'Minimal', neon:'Neon', split:'Split', social:'Social', product:'Product' };
+      if (h.caption_style) meta.append(Object.assign(document.createElement('span'), { textContent: captionNames[h.caption_style] || h.caption_style }));
+      if (h.template_style) meta.append(Object.assign(document.createElement('span'), { textContent: templateNames[h.template_style] || h.template_style }));
+
+      const actions = document.createElement('div');
+      actions.className = 'history-actions';
+      const again = Object.assign(document.createElement('button'), { type: 'button', className: 'history-action', textContent: 'Create again' });
+      again.addEventListener('click', () => { $('#account').close(); show('s-url', 1); $('#url').value = h.url || ''; $('#f-url').requestSubmit(); });
+      actions.append(again);
+
       if (h.id) {
         vidIdb.get(h.id).then((blob) => {
-          if (!blob) return;
+          if (!blob || !li.isConnected) return;
           const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
-          const fname = (h.brand || 'video').normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext;
-          const url = URL.createObjectURL(blob);
-          const dl = Object.assign(document.createElement('a'), { href: url, download: fname, className: 'btn ghost', textContent: '↓ Download', style: 'font-size:12px;padding:4px 10px' });
-          const prev = Object.assign(document.createElement('button'), { type: 'button', className: 'btn ghost', textContent: '▶ Preview', style: 'font-size:12px;padding:4px 10px' });
-          prev.addEventListener('click', () => { const v = Object.assign(document.createElement('video'), { src: url, controls: true, autoplay: true, style: 'max-width:min(90vw,360px);max-height:70vh;border-radius:12px;background:#000' }); const overlay = Object.assign(document.createElement('div'), { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center' }); overlay.addEventListener('click', (e) => { if (e.target === overlay) { v.pause(); overlay.remove(); } }); overlay.append(v); document.body.append(overlay); });
-          acts.append(dl, prev);
-        }).catch(() => {});
+          const fname = (h.brand || 'clipmotion-video').normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext;
+          const downloadUrl = URL.createObjectURL(blob);
+          account.objectUrls.push(downloadUrl);
+          const dl = Object.assign(document.createElement('a'), { href: downloadUrl, download: fname, className: 'history-action', textContent: '↓ Download' });
+          const prev = Object.assign(document.createElement('button'), { type: 'button', className: 'history-action primary', textContent: '▶ Preview' });
+          prev.addEventListener('click', () => {
+            $('#account').close();
+            const previewUrl = URL.createObjectURL(blob);
+            const dialog = document.createElement('dialog');
+            dialog.className = 'history-preview';
+            const head = document.createElement('div');
+            head.className = 'history-preview-head';
+            head.append(Object.assign(document.createElement('b'), { textContent: h.brand || 'Video preview' }));
+            const close = Object.assign(document.createElement('button'), { type: 'button', className: 'history-preview-close', textContent: 'Close' });
+            const video = Object.assign(document.createElement('video'), { src: previewUrl, controls: true, autoplay: true, playsInline: true });
+            video.setAttribute('aria-label', `Preview of ${h.brand || 'your video'}`);
+            close.addEventListener('click', () => dialog.close());
+            dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+            dialog.addEventListener('close', () => {
+              video.pause();
+              URL.revokeObjectURL(previewUrl);
+              dialog.remove();
+            }, { once: true });
+            head.append(close);
+            dialog.append(head, video);
+            document.body.append(dialog);
+            dialog.showModal();
+            video.play().catch(() => {});
+          });
+          actions.append(dl, prev);
+        }).catch((err) => console.warn('Could not load video from local history', err));
       }
-      li.append(left, acts); list.append(li);
+
+      main.append(top, meta, actions);
+      li.append(thumb, main);
+      list.append(li);
     });
   }
   $('#ac-go').textContent = account.reset ? 'Save password' : account.signup ? 'Create account' : 'Sign in';

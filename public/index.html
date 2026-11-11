@@ -80,7 +80,6 @@
         <figure class="demo d1"><img src="/demo/watch.jpg" alt="" width="576" height="1008"><figcaption><b>Built to last</b><b class="alt">a lifetime</b></figcaption></figure>
         <figure class="demo d2"><img src="/demo/sneakers.jpg" alt="" width="576" height="1008"><figcaption><b>New drop</b><b class="alt">out now</b></figcaption></figure>
         <figure class="demo d3"><img src="/demo/saas.jpg" alt="" width="576" height="1008"><figcaption><b>Your growth,</b><b class="alt">in one view</b></figcaption></figure>
-        <figure class="demo d4"><img src="/demo/timberland.svg" alt="" width="576" height="1008"><figcaption><b>Step into</b><b class="alt">the wild.</b></figcaption></figure>
       </div>
     </div>
 
@@ -117,9 +116,7 @@
         <figure class="demo"><img src="/demo/watch.jpg" alt="Example video ad frame for a wristwatch on a cinematic backdrop" loading="lazy" width="576" height="1008"><figcaption><b>Built to last</b><b class="alt">a lifetime</b><small>Watches &amp; jewellery</small></figcaption></figure>
         <figure class="demo"><img src="/demo/sneakers.jpg" alt="Example video ad frame for sneakers under neon light" loading="lazy" width="576" height="1008"><figcaption><b>New drop</b><b class="alt">out now</b><small>Fashion &amp; sneakers</small></figcaption></figure>
         <figure class="demo"><img src="/demo/saas.jpg" alt="Example video ad frame for a SaaS analytics app shown on a phone" loading="lazy" width="576" height="1008"><figcaption><b>Your growth,</b><b class="alt">in one view</b><small>SaaS &amp; apps</small></figcaption></figure>
-        <figure class="demo"><img src="/demo/timberland.svg" alt="Example video ad frame for Timberland boots on a dark cinematic backdrop" loading="lazy" width="576" height="1008"><figcaption><b>Step into</b><b class="alt">the wild.</b><small>Footwear &amp; outdoor</small></figcaption></figure>
       </div>
-      <p class="hint center">Illustrative frames. Your video uses your own product photos, site and brand.</p>
     </section>
 
     <section class="block" id="features">
@@ -232,6 +229,34 @@
     </div>
     <h3>Length</h3>
     <div class="seg five" role="radiogroup" aria-label="Length" data-for="dur"><button type="button" role="radio" data-v="0">Auto</button><button type="button" role="radio" data-v="10">10 s</button><button type="button" role="radio" data-v="15">15 s</button><button type="button" role="radio" data-v="20">20 s</button><button type="button" role="radio" data-v="30">30 s</button></div>
+    <h3>Subtitle style</h3>
+    <label class="studio-select" for="caption-style"><span>Choose how your captions look</span>
+      <select id="caption-style">
+        <option value="karaoke">01 · Karaoke Highlight</option>
+        <option value="bold-pop">02 · Bold Pop</option>
+        <option value="typewriter">03 · Typewriter</option>
+        <option value="neon">04 · Neon Glow</option>
+        <option value="minimal">05 · Minimal</option>
+        <option value="highlight">06 · Word Highlight</option>
+        <option value="editorial">07 · Editorial</option>
+        <option value="boxed">08 · Caption Box</option>
+        <option value="word">09 · Word by Word</option>
+        <option value="clean">10 · Clean Lower Third</option>
+      </select>
+    </label>
+    <h3>Video template</h3>
+    <label class="studio-select" for="template-style"><span>Composition and title treatment</span>
+      <select id="template-style">
+        <option value="cinematic">Cinematic Motion</option>
+        <option value="bold">Bold Campaign</option>
+        <option value="editorial">Editorial Luxury</option>
+        <option value="minimal">Minimal Studio</option>
+        <option value="neon">Neon Social</option>
+        <option value="split">Split Typography</option>
+        <option value="social">Social Punch</option>
+        <option value="product">Product Spotlight</option>
+      </select>
+    </label>
     <h3>Quality</h3>
     <div class="seg two" role="radiogroup" aria-label="Quality" data-for="res"><button type="button" role="radio" data-v="720">720p</button><button type="button" role="radio" data-v="1080">1080p</button></div>
     <div id="opt-bg"><h3>Backdrop</h3>
@@ -332,6 +357,7 @@
 
 <script src="/music.js" defer></script>
 <script src="/cutout.js" defer></script>
+<script src="/captions.js" defer></script>
 <script src="/app.js" defer></script>
 <script src="/t.js" defer></script>
 </body>

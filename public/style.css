@@ -437,3 +437,8 @@ dialog#dlgate { width: min(440px, 94vw); border: 1px solid #a57bff; border-radiu
 .choice.plain { background: none; } .choice.plain b { font-size: 14px; font-weight: 600; }
 
 .seg button small{display:block;font-size:11px;font-weight:500;opacity:.65;margin-top:1px}
+
+/* ---------- Studio controls: subtitle and composition presets ---------- */
+.studio-select { display:grid; gap:8px; margin:0 0 18px; color:var(--mute); font-size:13px; }
+.studio-select select { width:100%; min-height:48px; padding:12px 14px; border:1px solid var(--line); border-radius:13px; color:var(--text); background:#141124; font:inherit; font-size:14px; }
+.studio-select select:focus { outline:2px solid #a57bff; outline-offset:2px; }

@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: 'karaoke', templateStyle: 'cinematic', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: 'karaoke', templateStyle: 'cinematic', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -151,7 +151,7 @@ function initVariant() {
 }
 // toutes les photos disponibles : importées à la main d'abord, puis celles de la page
 function allPhotos() {
-  return [...state.uploads.map((u) => ({ show: u.url, send: u.data })), ...state.page.images.map((u) => ({ show: media(u), send: u }))];
+  return [...state.uploads.map((u) => ({ show: u.url, send: u.data, source: u.url })), ...state.page.images.map((u) => ({ show: media(u), send: u, source: u }))];
 }
 // sélection par défaut : la photo de la variante choisie en tête, sans les photos des autres variantes
 function autoPick() {
@@ -254,6 +254,7 @@ $('#b-gen').addEventListener('click', async () => {
   try {
     const list = ecom ? photoList() : [];
     state.photoUrls = list.map((p) => p.show);
+    state.photoSources = list.map((p) => p.source);
     // la variante choisie fixe le prix affiché et le texte de la pub
     const v = ecom ? variantOf() : null;
     const page = v?.price ? { ...state.page, product: { ...state.page.product, price: v.price } } : state.page;
@@ -1286,7 +1287,7 @@ async function produce(actx) {
       if (!cache[key]) {
         status('Cutting out your product…');
         // 1. Essai côté serveur via remove.bg (meilleure qualité sur les objets complexes)
-        const srcUrl = state.photoUrls?.[id];
+        const srcUrl = state.photoSources?.[id];
         let cut = srcUrl
           ? await api('/api/backdrop?a=removebg', { url: srcUrl })
               .then(async (r) => {
@@ -1311,10 +1312,15 @@ async function produce(actx) {
               })
               .catch(() => null) // 503 (pas de clé) ou erreur → on passe au ONNX local
           : null;
-        // 2. Modèle ONNX local (ormbg) si remove.bg n'est pas disponible ou a échoué
+        // 2. Modèle ONNX local (ormbg) : on le force pour chaque photo réellement utilisée comme produit vedette.
+        // Le classement « packshot » de l'analyse ne doit pas empêcher le détourage d'une photo produit classique.
         if (!cut) {
-          cut = await Cutout.run(img, { force: kinds.get(id) === 'packshot', onProgress: (f) => status(`Loading the cut-out tool… ${Math.round(f * 100)}%`) })
-            .catch((e) => { console.warn('cutout', e); return cutout(img); });
+          const localCut = window.Cutout?.run
+            ? await window.Cutout.run(img, { force: true, onProgress: (f) => status(`Removing background… ${Math.round(f * 100)}%`) })
+                .catch((e) => { console.warn('ONNX background removal failed', e); return null; })
+            : null;
+          cut = localCut || cutout(img);
+          if (!cut) status('Background could not be removed from this photo; using the original image.');
         }
         if (job.cancelled) return;
         cache[key] = { img, cut };
@@ -1480,12 +1486,14 @@ $('#topbar-go').addEventListener('click', () => openUpgrade($('#topbar-text').te
 $('#topbar-x').addEventListener('click', () => { $('#topbar').hidden = true; });
 
 /* ---------- compte, profil, offre ---------- */
-const account = { user: null, history: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
+const account = { user: null, history: [], objectUrls: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
 const isPaid = () => !!account.user && account.user.plan !== 'free';
 // vidéo débloquée à l'unité : valable pour cette pub, retouches comprises
 const unlocked = () => isPaid() || (!!state.ad && state.unlockedAd === state.ad);
 const PLAN_NAME = { free: 'Starter (free)', pro: 'Pro', business: 'Business' };
 function paintAccount() {
+  account.objectUrls.forEach((url) => URL.revokeObjectURL(url));
+  account.objectUrls = [];
   const u = account.user;
   // Nav : connecté → avatar circulaire avec initiale + masquer "Try it free"
   //       déconnecté → bouton "Sign in" + afficher "Try it free"
@@ -1518,39 +1526,84 @@ function paintAccount() {
     if (!account.history.length) list.append(Object.assign(document.createElement('li'), { className: 'empty', textContent: 'Your finished videos will be listed here.' }));
     account.history.forEach((h) => {
       const li = document.createElement('li');
-      // Vignette vidéo (thumb stockée en DB) ou icône de remplacement
+      li.className = 'history-card';
+
+      const thumb = document.createElement('div');
+      thumb.className = 'history-thumb';
       if (h.thumb) {
-        const img = Object.assign(document.createElement('img'), { src: h.thumb, alt: '', width: 40, height: 71, loading: 'lazy' });
-        img.style.cssText = 'border-radius:6px;object-fit:cover;flex-shrink:0;';
-        li.append(img);
+        const img = Object.assign(document.createElement('img'), { src: h.thumb, alt: '', width: 72, height: 128, loading: 'lazy' });
+        thumb.append(img);
       } else {
         const ic = document.createElement('span');
         ic.className = 'hist-ic';
         ic.textContent = h.kind === 'ecom' ? '🛍' : '📱';
-        li.append(ic);
+        thumb.append(ic);
       }
-      const left = document.createElement('div');
-      left.append(Object.assign(document.createElement('b'), { textContent: h.brand || h.url }));
-      left.append(Object.assign(document.createElement('small'), { textContent: `${new Date(h.created_at).toLocaleDateString()} · ${h.format} · ${Math.round(h.seconds)} s · ${h.resolution}` }));
-      const again = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create again' });
-      again.addEventListener('click', () => { $('#account').close(); show('s-url', 1); $('#url').value = h.url; $('#f-url').requestSubmit(); });
-      const acts = document.createElement('div');
-      acts.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px';
-      acts.append(again);
-      // boutons download + preview chargés depuis IndexedDB
+
+      const main = document.createElement('div');
+      main.className = 'history-main';
+      const top = document.createElement('div');
+      top.className = 'history-top';
+      const title = Object.assign(document.createElement('b'), { className: 'history-title', textContent: h.brand || (() => { try { return new URL(h.url).hostname; } catch { return 'Untitled video'; } })() });
+      const date = Object.assign(document.createElement('small'), { className: 'history-date', textContent: new Date(h.created_at).toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) });
+      top.append(title, date);
+
+      const meta = document.createElement('div');
+      meta.className = 'history-meta';
+      [h.format, `${Math.round(h.seconds || 0)} sec`, h.resolution].filter(Boolean).forEach((value) => {
+        meta.append(Object.assign(document.createElement('span'), { textContent: value }));
+      });
+      const captionNames = { karaoke:'Karaoke', 'bold-pop':'Bold Pop', typewriter:'Typewriter', neon:'Neon', minimal:'Minimal', highlight:'Highlight', editorial:'Editorial', boxed:'Boxed', word:'Word by Word', clean:'Clean' };
+      const templateNames = { cinematic:'Cinematic', bold:'Bold', editorial:'Editorial', minimal:'Minimal', neon:'Neon', split:'Split', social:'Social', product:'Product' };
+      if (h.caption_style) meta.append(Object.assign(document.createElement('span'), { textContent: captionNames[h.caption_style] || h.caption_style }));
+      if (h.template_style) meta.append(Object.assign(document.createElement('span'), { textContent: templateNames[h.template_style] || h.template_style }));
+
+      const actions = document.createElement('div');
+      actions.className = 'history-actions';
+      const again = Object.assign(document.createElement('button'), { type: 'button', className: 'history-action', textContent: 'Create again' });
+      again.addEventListener('click', () => { $('#account').close(); show('s-url', 1); $('#url').value = h.url || ''; $('#f-url').requestSubmit(); });
+      actions.append(again);
+
       if (h.id) {
         vidIdb.get(h.id).then((blob) => {
-          if (!blob) return;
+          if (!blob || !li.isConnected) return;
           const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
-          const fname = (h.brand || 'video').normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext;
-          const url = URL.createObjectURL(blob);
-          const dl = Object.assign(document.createElement('a'), { href: url, download: fname, className: 'btn ghost', textContent: '↓ Download', style: 'font-size:12px;padding:4px 10px' });
-          const prev = Object.assign(document.createElement('button'), { type: 'button', className: 'btn ghost', textContent: '▶ Preview', style: 'font-size:12px;padding:4px 10px' });
-          prev.addEventListener('click', () => { const v = Object.assign(document.createElement('video'), { src: url, controls: true, autoplay: true, style: 'max-width:min(90vw,360px);max-height:70vh;border-radius:12px;background:#000' }); const overlay = Object.assign(document.createElement('div'), { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center' }); overlay.addEventListener('click', (e) => { if (e.target === overlay) { v.pause(); overlay.remove(); } }); overlay.append(v); document.body.append(overlay); });
-          acts.append(dl, prev);
-        }).catch(() => {});
+          const fname = (h.brand || 'clipmotion-video').normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext;
+          const downloadUrl = URL.createObjectURL(blob);
+          account.objectUrls.push(downloadUrl);
+          const dl = Object.assign(document.createElement('a'), { href: downloadUrl, download: fname, className: 'history-action', textContent: '↓ Download' });
+          const prev = Object.assign(document.createElement('button'), { type: 'button', className: 'history-action primary', textContent: '▶ Preview' });
+          prev.addEventListener('click', () => {
+            $('#account').close();
+            const previewUrl = URL.createObjectURL(blob);
+            const dialog = document.createElement('dialog');
+            dialog.className = 'history-preview';
+            const head = document.createElement('div');
+            head.className = 'history-preview-head';
+            head.append(Object.assign(document.createElement('b'), { textContent: h.brand || 'Video preview' }));
+            const close = Object.assign(document.createElement('button'), { type: 'button', className: 'history-preview-close', textContent: 'Close' });
+            const video = Object.assign(document.createElement('video'), { src: previewUrl, controls: true, autoplay: true, playsInline: true });
+            video.setAttribute('aria-label', `Preview of ${h.brand || 'your video'}`);
+            close.addEventListener('click', () => dialog.close());
+            dialog.addEventListener('click', (event) => { if (event.target === dialog) dialog.close(); });
+            dialog.addEventListener('close', () => {
+              video.pause();
+              URL.revokeObjectURL(previewUrl);
+              dialog.remove();
+            }, { once: true });
+            head.append(close);
+            dialog.append(head, video);
+            document.body.append(dialog);
+            dialog.showModal();
+            video.play().catch(() => {});
+          });
+          actions.append(dl, prev);
+        }).catch((err) => console.warn('Could not load video from local history', err));
       }
-      li.append(left, acts); list.append(li);
+
+      main.append(top, meta, actions);
+      li.append(thumb, main);
+      list.append(li);
     });
   }
   $('#ac-go').textContent = account.reset ? 'Save password' : account.signup ? 'Create account' : 'Sign in';

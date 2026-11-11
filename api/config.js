@@ -18,5 +18,7 @@ module.exports = handler('GET', async (req, res) => {
   try { const custom = JSON.parse(process.env.PLANS_JSON || 'null'); if (Array.isArray(custom) && custom.length) plans = custom.slice(0, 4); } catch { /* PLANS_JSON invalide : offres par défaut */ }
   const checkout = { pro: link(process.env.CHECKOUT_PRO), business: link(process.env.CHECKOUT_BUSINESS) };
   // « api » : paiement par Stripe Checkout ; sinon un lien de paiement direct ; sinon rien (bouton « Coming soon »)
-  send(res, 200, { plans: plans.map((p) => ({ ...p, checkout: ready(p.id) ? 'api' : checkout[p.id] || link(p.checkout) })) }, { 'cache-control': 'public, max-age=300' });
+  let reviews = [];
+  try { const r = JSON.parse(process.env.TESTIMONIALS_JSON || '[]'); if (Array.isArray(r)) reviews = r.slice(0, 9).map((x) => ({ name: String(x.name || '').slice(0, 60), role: String(x.role || '').slice(0, 80), quote: String(x.quote || '').slice(0, 400), photo: link(x.photo), stars: Math.min(5, Math.max(1, +x.stars || 5)) })).filter((x) => x.name && x.quote); } catch { /* JSON invalide */ }
+  send(res, 200, { reviews, plans: plans.map((p) => ({ ...p, checkout: ready(p.id) ? 'api' : checkout[p.id] || link(p.checkout) })) }, { 'cache-control': 'public, max-age=300' });
 });

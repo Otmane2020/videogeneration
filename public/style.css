@@ -393,3 +393,14 @@ dialog#upgrade::backdrop { background: #000c; }
 .history small { color: var(--mute); display: block; font-size: 12px; }
 .history button { background: none; border: 0; color: #c9a5ff; font: inherit; font-size: 13px; cursor: pointer; padding: 6px 0; white-space: nowrap; }
 .history .empty { color: var(--mute); justify-content: flex-start; }
+
+/* ---------- avis clients ---------- */
+.reviews { display: grid; gap: 12px; }
+.review { margin: 0; border: 1px solid var(--line); border-radius: 20px; padding: 20px; background: linear-gradient(180deg, #15122a, var(--card)); }
+.stars { color: #ffc93c; font-size: 20px; letter-spacing: 2px; margin-bottom: 10px; }
+.review blockquote { margin: 0 0 14px; font-size: 15.5px; line-height: 1.55; color: #e4e0f7; }
+.review figcaption { display: flex; align-items: center; gap: 10px; }
+.review img, .review .avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; font-size: 16px; }
+.review b { display: block; font-size: 14px; } .review small { color: var(--mute); font-size: 12.5px; }
+@media (min-width: 760px) { .reviews { grid-template-columns: repeat(3, 1fr); } }
+@media (max-width: 759px) { .reviews { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; margin: 0 -16px; padding: 4px 16px 14px; scrollbar-width: none; } .reviews > * { flex: 0 0 82%; scroll-snap-align: center; } }

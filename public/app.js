@@ -1245,7 +1245,20 @@ if (new URLSearchParams(location.search).get('checkout') === 'success') {
   $('.hero-copy').prepend(n);
   history.replaceState(null, '', location.pathname);
 }
-fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
+fetch('/api/config').then((r) => r.json()).then(({ plans, reviews = [] }) => {
+  // avis clients : affichés seulement s'il y en a de vrais
+  $('#reviews').hidden = !reviews.length;
+  reviews.forEach((r) => {
+    const el = Object.assign(document.createElement('figure'), { className: 'review' });
+    el.append(Object.assign(document.createElement('div'), { className: 'stars', textContent: '★'.repeat(r.stars) + '☆'.repeat(5 - r.stars), ariaLabel: `${r.stars} out of 5` }));
+    el.append(Object.assign(document.createElement('blockquote'), { textContent: r.quote }));
+    const who = document.createElement('figcaption');
+    who.append(r.photo ? Object.assign(new Image(), { src: r.photo, alt: '', loading: 'lazy' }) : Object.assign(document.createElement('span'), { className: 'avatar', textContent: r.name[0].toUpperCase() }));
+    const t = document.createElement('div');
+    t.append(Object.assign(document.createElement('b'), { textContent: r.name }), Object.assign(document.createElement('small'), { textContent: r.role }));
+    who.append(t); el.append(who);
+    $('#reviews-list').append(el);
+  });
   const box = $('#plans');
   account.proPrice = (plans.find((x) => x.id === 'pro') || {}).price ? `${plans.find((x) => x.id === 'pro').price}${plans.find((x) => x.id === 'pro').period || ''}` : '';
   plans.forEach((p) => {

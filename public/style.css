@@ -438,11 +438,6 @@ dialog#dlgate { width: min(440px, 94vw); border: 1px solid #a57bff; border-radiu
 
 .seg button small{display:block;font-size:11px;font-weight:500;opacity:.65;margin-top:1px}
 
-/* ---------- Studio controls: subtitle and composition presets ---------- */
-.studio-select { display:grid; gap:8px; margin:0 0 18px; color:var(--mute); font-size:13px; }
-.studio-select select { width:100%; min-height:48px; padding:12px 14px; border:1px solid var(--line); border-radius:13px; color:var(--text); background:#141124; font:inherit; font-size:14px; }
-.studio-select select:focus { outline:2px solid #a57bff; outline-offset:2px; }
-
 /* ---------- Responsive landing and account history polish ---------- */
 @media (max-width: 759px) {
   .hero-art {
@@ -564,3 +559,6 @@ dialog#account {
   .history-actions { gap:5px; }
   .history-action { min-height:36px; padding:6px 8px; font-size:11px; }
 }
+
+/* Automatic creative direction: no manual template or quality controls */
+.auto-style-note { margin: 2px 0 18px; padding: 11px 13px; border: 1px solid var(--line); border-radius: 12px; background: #ffffff06; color: var(--mute); font-size: 12.5px; line-height: 1.45; }

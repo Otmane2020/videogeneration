@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: 'karaoke', templateStyle: 'cinematic', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: '', templateStyle: '', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -69,9 +69,7 @@ $('#f-url').addEventListener('submit', async (e) => {
 });
 $$('[data-back]').forEach((b) => b.addEventListener('click', () => { cancelJob(); show('s-url', 1); }));
 
-/* ---------- 3. réglages ---------- */
-$('#caption-style')?.addEventListener('change', (e) => { state.captionStyle = e.target.value; });
-$('#template-style')?.addEventListener('change', (e) => { state.templateStyle = e.target.value; });
+/* ---------- 3. réglages automatiques ---------- */
 
 function renderSetup() {
   const p = state.page;
@@ -128,12 +126,14 @@ $$('[data-fmt]').forEach((b) => b.addEventListener('click', () => {
   state.fmt = b.dataset.fmt;
   $$('[data-fmt]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
 }));
-// options en boutons : chaque groupe pilote une valeur (durée, qualité, décor, nombre de clips)
-$$('.seg[data-for]').forEach((g) => {
-  const sel = $('#' + g.dataset.for), paint = () => $$('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
-  $$('button', g).forEach((b) => b.addEventListener('click', () => {
-    const pro = (g.dataset.for === 'res' && b.dataset.v === '1080') || (g.dataset.for === 'bgai' && b.dataset.v === '1');
-    if (pro && !isPaid()) return openUpgrade(g.dataset.for === 'res' ? '1080p export is part of the Pro plan.' : 'Custom AI scenes are part of the Pro plan.');
+// Seuls les réglages créatifs demandés à l'utilisateur restent visibles.
+// Template, style des sous-titres et qualité d'export sont choisis automatiquement.
+$('.seg[data-for]').forEach((g) => {
+  const sel = $('#' + g.dataset.for);
+  if (!sel) return;
+  const paint = () => $('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
+  $('button', g).forEach((b) => b.addEventListener('click', () => {
+    if (g.dataset.for === 'bgai' && b.dataset.v === '1' && !isPaid()) return openUpgrade('Custom AI scenes are part of the Pro plan.');
     sel.value = b.dataset.v; paint();
   }));
   paint();
@@ -269,9 +269,9 @@ $('#b-gen').addEventListener('click', async () => {
     // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
     // besoin que pour ses scènes vidéo. Derrière le téléphone : un fond sobre, pas une scène qui distrait.
     // SaaS : au moins 5 plans (une par scène + l'écran final), choisis automatiquement
-    const closing = ['team celebrating office', 'business team handshake', 'office'];
+    const closing = ['team collaborating office', 'small business owner working', 'professional team celebrating'];
     const wanted = state.ad.scenes.map((s) => (ecom && s.visual !== 'footage' ? null : s.queries || []));
-    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : closing], fallback: ecom ? 'lifestyle' : 'technology', hd: $('#res').value === '1080' })
+    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : closing], fallback: ecom ? 'lifestyle' : 'saas', hd: $('#res').value === '1080' })
       .then((r) => r.json()).then(({ results }) => results).catch(() => []);
     state.clipLists = wanted.map((_, i) => lists[i] || []);
     state.ctaList = lists[wanted.length] || [];
@@ -440,9 +440,17 @@ function greenScreen(clip) {
 }
 // Un plan par scène : le plus pertinent (`rel`), vertical de préférence pour un format vertical, jamais deux fois le même.
 // Deux plans d'un même auteur se ressemblent souvent : on en change quand cela ne coûte rien en pertinence.
-async function pickClips(lists, portrait) {
+async function pickClips(lists, targetAspect) {
   const used = new Set(), authors = new Set(), picks = [];
-  const sorted = lists.map((list) => [...list].sort((a, b) => (b.rel || 0) - (a.rel || 0) || (portrait ? (b.h > b.w) - (a.h > a.w) : 0)));
+  const aspectError = (clip) => {
+    const ratio = clip.w > 0 && clip.h > 0 ? clip.w / clip.h : targetAspect;
+    return Math.abs(Math.log(ratio / targetAspect));
+  };
+  const sorted = lists.map((list) => [...list].sort((a, b) =>
+    ((b.rel || 0) - (a.rel || 0)) * 100
+    + (aspectError(a) - aspectError(b)) * 9
+    + (Number(!!b.hd) - Number(!!a.hd)) * 1.5
+  ));
   sorted.forEach((list) => list.slice(0, 3).forEach(greenScreen)); // les vignettes des favoris se chargent ensemble
   for (const list of sorted) {
     const free = list.filter((x) => !used.has(x.id)), floor = Math.min(free[0]?.rel || 0, 2);
@@ -739,6 +747,9 @@ function makeRenderer(cv, job) {
   }
   function background(sc, k) {
     const ph = sc.ph;
+    // Pour une scène de démonstration SaaS, le vrai screenshot du site doit rester lisible.
+    // On utilise un décor de marque derrière le téléphone, pas un second footage concurrent.
+    if (plan.type === 'saas' && sc.visual === 'site' && shot) return studio(k, k * sc.dur);
     if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.75 + 0.3 * k, lerp(0.3, 0.7, easeInOut(k)), lerp(0.38, 0.62, easeInOut(k)));
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
@@ -1225,11 +1236,19 @@ async function produce(actx) {
   const plan = state.plan, page = state.page, ad = state.ad, cache = state.cache;
   stopPreview();
   const [W, H] = FORMATS[state.fmt], target = +$('#dur').value;
-  // offre gratuite : 720p au plus et filigrane
-  const paid = unlocked();
-  if (state.unlockedAd === state.ad && state.ad) $('#res').value = '1080';
-  if (!paid && $('#res').value !== '720') { $('#res').value = '720'; $$('[data-for=res] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '720'))); }
-  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid, captionStyle: state.captionStyle, templateStyle: state.templateStyle });
+  // Qualité automatique selon l'offre et les capacités réelles de l'appareil.
+  const paid = unlocked(), connection = navigator.connection || {};
+  const constrained = !!connection.saveData || /^(slow-2g|2g|3g)$/.test(connection.effectiveType || '')
+    || (Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) < 4)
+    || (Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) < 4);
+  const resolution = paid && !constrained ? 1080 : 720;
+  $('#res').value = String(resolution);
+  // Le brief IA choisit le template narratif, les sous-titres et leur traitement selon le contenu.
+  const templateStyle = plan.templateStyle || 'cinematic';
+  const captionStyle = plan.captionStyle || (plan.type === 'saas' ? 'karaoke' : 'boxed');
+  state.templateStyle = templateStyle;
+  state.captionStyle = captionStyle;
+  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: resolution / 720, watermark: !paid, captionStyle, templateStyle, videoTemplate: plan.videoTemplate || 'corporate', quality: resolution });
   const cv = $('#cv'), result = $('#result');
   const scale = job.scale;
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
@@ -1257,7 +1276,7 @@ async function produce(actx) {
     const lite = navigator.connection && (navigator.connection.saveData || /2g|3g/.test(navigator.connection.effectiveType || ''));
     // visuel de chaque scène : celui choisi à la main, sinon le meilleur résultat de la recherche
     state.visuals = scenes.map((s) => s.visual);
-    const auto = await pickClips(scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? state.ctaList : []) : state.clipLists[i]) || []), H > W);
+    const auto = await pickClips(scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? state.ctaList : []) : state.clipLists[i]) || []), W / H);
     if (job.cancelled) return;
     const used = (state.used = scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? auto[i] || null : null) : s.pick || auto[i] || null)));
     const voice = (text) => (text ? cached(cache.voice, plan.language + '|' + text, () => loadVoice(text, plan.language)) : Promise.resolve(null));

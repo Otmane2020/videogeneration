@@ -127,14 +127,14 @@ function autoCaption(type, template, source) {
 }
 function saasFallbackQueries(source, index) {
   const s = String(source || '').toLowerCase();
-  let shots = ['startup team office', 'business owner laptop', 'colleagues planning office', 'professional team meeting'];
-  if (/analytics|data|report|kpi|metric|forecast|dashboard|finance/.test(s)) shots = ['business analyst charts', 'team reviewing reports', 'financial analyst computer', 'office data presentation'];
-  else if (/crm|sales|customer support|helpdesk|service/.test(s)) shots = ['sales team meeting', 'customer service headset', 'business phone call', 'salesperson laptop office'];
-  else if (/project|task|workflow|productivity|automation|management/.test(s)) shots = ['team planning meeting', 'project manager laptop', 'colleagues sticky notes', 'team collaborating office'];
-  else if (/design|creative|marketing|content|social media/.test(s)) shots = ['designer computer screen', 'creative team brainstorming', 'marketing team meeting', 'photographer laptop'];
-  else if (/hr|recruit|hiring|talent/.test(s)) shots = ['job interview office', 'recruiter laptop', 'human resources meeting', 'candidate interview'];
-  else if (/booking|appointment|clinic|health|doctor/.test(s)) shots = ['receptionist computer', 'doctor appointment office', 'clinic reception office', 'customer service phone'];
-  else if (/ai|developer|software|code|tech|api/.test(s)) shots = ['developer coding laptop', 'engineer dual monitor', 'programmer working office', 'software developer typing'];
+  let shots = ['startup team office', 'business owner laptop', 'colleagues planning office', 'professional team meeting', 'small business owner working', 'team presentation office', 'manager reviewing documents', 'colleagues collaborating office'];
+  if (/analytics|data|report|kpi|metric|forecast|dashboard|finance/.test(s)) shots = ['business analyst charts', 'team reviewing reports', 'financial analyst computer', 'office data presentation', 'manager reviewing reports', 'analyst spreadsheet office', 'team presenting charts', 'executive reviewing figures'];
+  else if (/crm|sales|customer support|helpdesk|service/.test(s)) shots = ['sales team meeting', 'customer service headset', 'business phone call', 'salesperson laptop office', 'account manager client meeting', 'support agent computer', 'sales representative presentation', 'customer success team office'];
+  else if (/project|task|workflow|productivity|automation|management/.test(s)) shots = ['team planning meeting', 'project manager laptop', 'colleagues sticky notes', 'team collaborating office', 'manager organizing tasks', 'coworkers planning whiteboard', 'team reviewing schedule', 'colleagues working together'];
+  else if (/design|creative|marketing|content|social media/.test(s)) shots = ['designer computer screen', 'creative team brainstorming', 'marketing team meeting', 'photographer laptop', 'content creator editing video', 'designer sketching ideas', 'marketing manager presentation', 'creative colleagues workspace'];
+  else if (/hr|recruit|hiring|talent/.test(s)) shots = ['job interview office', 'recruiter laptop', 'human resources meeting', 'candidate interview', 'recruiter reviewing resume', 'manager interviewing candidate', 'colleagues onboarding new hire', 'human resources office team'];
+  else if (/booking|appointment|clinic|health|doctor/.test(s)) shots = ['receptionist computer', 'doctor appointment office', 'clinic reception office', 'customer service phone', 'medical receptionist greeting patient', 'professional booking appointment', 'clinic staff planning', 'patient consultation office'];
+  else if (/ai|developer|software|code|tech|api/.test(s)) shots = ['developer coding laptop', 'engineer dual monitor', 'programmer working office', 'software developer typing', 'developer reviewing code', 'engineer team discussion', 'programmer computer closeup', 'software team planning sprint'];
   return [shots[(index * 2) % shots.length], shots[(index * 2 + 1) % shots.length]];
 }
 const GOALS = {

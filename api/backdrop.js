@@ -202,7 +202,7 @@ async function museBackdrop({ prompt, referenceImage }) {
 
   const response = await fetch('https://openrouter.ai/api/v1/images', {
     method: 'POST',
-    signal: AbortSignal.timeout(110000),
+    signal: AbortSignal.timeout(50000),
     headers: {
       authorization: `Bearer ${key}`,
       'content-type': 'application/json',
@@ -250,10 +250,10 @@ module.exports = handler('POST', async (req, res) => {
       if (!u || u.plan === 'free') throw httpError(402, 'Meta Muse AI backdrop requires Pro plan');
     }
     const framing = format === '9:16'
-      ? 'Tall vertical portrait framing, composed for a 9:16 mobile video; make the central product area tall and leave safe margins at the top and bottom.'
+      ? 'Render as a tall 2:3 portrait composition intended to be center-cropped into a 9:16 mobile video. Keep the glowing arc, light source and empty product landing area inside the central safe crop; avoid important details near the left and right edges.'
       : format === '16:9'
-        ? 'Wide horizontal landscape framing, composed for a 16:9 video; keep the main light architecture wide and the product landing area in the lower middle.'
-        : 'Square 1:1 framing with a centered product landing area.';
+        ? 'Render as a wide 3:2 landscape composition intended to be center-cropped into a 16:9 video. Keep the glowing arc, light source and empty product landing area inside the central safe crop; avoid important details near the top and bottom edges.'
+        : 'Render as a balanced square 1:1 composition with the luminous arc and empty product landing area centered.';
     const scene = clean(b.scene, 220);
     const category = clean(b.category, 60);
     const prompt = `Create a premium photorealistic advertising BACKGROUND PLATE ONLY for a high-end ${category || 'consumer product'} product commercial.

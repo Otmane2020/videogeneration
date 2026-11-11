@@ -339,3 +339,13 @@ footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; } footer nav a { col
   .sticky-cta { display: block; position: fixed; left: 12px; right: 12px; bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 6; padding: 15px; border-radius: 16px; background: var(--grad); color: #fff; font-weight: 700; font-size: 16px; text-align: center; text-decoration: none; box-shadow: 0 12px 40px #000c; }
   .nav { gap: 8px; } .navbtn { padding: 8px 12px; }
 }
+
+/* ---------- étape « Style » : tout en boutons de sélection ---------- */
+#s-opts h3 { margin: 20px 0 8px; }
+#s-opts .seg { margin-bottom: 0; }
+.seg.two { grid-template-columns: 1fr 1fr; } .seg.four { grid-template-columns: repeat(4, 1fr); } .seg.five { grid-template-columns: repeat(5, 1fr); }
+.seg.intents { gap: 4px; }
+.seg.intents button { text-align: center; min-height: 48px; padding: 10px 4px; border: 0; border-radius: 10px; background: none; font-size: 14px; font-weight: 600; color: var(--mute); }
+.seg.intents button[aria-checked="true"] { background: var(--grad); color: #fff; }
+#s-opts #b-gen { margin-top: 26px; }
+.site img { aspect-ratio: 1; object-fit: contain; background: #fff; max-height: 46dvh; }

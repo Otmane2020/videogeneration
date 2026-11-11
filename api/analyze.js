@@ -28,6 +28,7 @@ ${SHAPE_HEAD}
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook
      {"headline": string,             // on-screen text, max 6 words, punchy
       "voiceover": string,
+      "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "queries": [string, string, string],
       "visual": "footage"|"site"}     // stock footage, or a phone showing the real website
    ],
@@ -52,6 +53,7 @@ ${SHAPE_HEAD}
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook that already shows the product
      {"headline": string,             // on-screen text, max 6 words
       "voiceover": string,
+      "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "visual": "product"|"detail"|"footage",  // product = the product presented on the backdrop; detail = slow close-up travelling over a photo; footage = stock video
       "photo": number,                // index of the usable photo to show (ignored for footage)
       "badge": string,                // optional: one verified fact from the page, max 4 words (material, size, warranty...), else ""
@@ -128,7 +130,7 @@ function normalize(d, page, type, seen) {
       if (type === 'saas') visual = s.visual === 'site' ? 'site' : 'footage';
       else if (['product', 'detail'].includes(s.visual) && (photo = mapPhoto(s.photo)) >= 0) visual = s.visual;
       return {
-        headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), visual, photo,
+        headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries: [...(Array.isArray(s.queries) ? s.queries : []), s.query].map(cleanQ).filter(Boolean).slice(0, 3),
       };

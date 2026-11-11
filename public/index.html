@@ -51,7 +51,7 @@
     <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span>ClipMotion</a>
     <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><button class="navbtn" id="b-account" type="button" hidden>Sign in</button><a class="pillbtn" href="#top">Try it free</a></nav>
     <ol class="steps" aria-label="Steps" hidden>
-      <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Video</li>
+      <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Style</li><li data-s="5">Video</li>
     </ol>
   </header>
 
@@ -191,34 +191,46 @@
     </div>
     <div id="uploads" hidden>
       <div id="variants"></div>
-      <h3>Product photos</h3>
       <p class="hint" id="up-hint"></p>
-      <div class="photos" id="photos"></div>
-      <label class="btn ghost" for="files">Add my photos</label>
+      <div class="photos" id="photos" hidden></div>
+      <label class="btn ghost" for="files" id="up-btn">Add my photos</label>
       <input id="files" type="file" accept="image/jpeg,image/png,image/webp" multiple hidden>
     </div>
-    <h3>What is this video for?</h3>
-    <div class="intents" role="radiogroup" aria-label="Goal">
-      <button type="button" role="radio" data-intent="launch"><b>Product launch</b><span>Present it and its key benefits</span></button>
-      <button type="button" role="radio" data-intent="problem"><b>Problem → solution</b><span>Start from the customer’s pain</span></button>
-      <button type="button" role="radio" data-intent="awareness"><b>Brand awareness</b><span>Make the brand memorable</span></button>
-      <button type="button" role="radio" data-intent="offer"><b>Drive sales</b><span>Push viewers to act now</span></button>
+    <button class="btn" id="b-next" type="button">Continue</button>
+    <button class="link" type="button" data-back>Change link</button>
+    <p class="error" id="e-type" role="alert" hidden></p>
+  </section>
+
+  <section id="s-opts" class="view" hidden>
+    <h2>Style your video</h2>
+    <h3>Goal</h3>
+    <div class="seg two intents" role="radiogroup" aria-label="Goal">
+      <button type="button" role="radio" data-intent="launch">Launch</button>
+      <button type="button" role="radio" data-intent="problem">Problem → fix</button>
+      <button type="button" role="radio" data-intent="awareness">Awareness</button>
+      <button type="button" role="radio" data-intent="offer">Sales</button>
     </div>
     <h3>Format</h3>
     <div class="seg" role="radiogroup" aria-label="Format">
-      <button type="button" role="radio" data-fmt="9:16" aria-checked="true">9:16 Reels</button>
-      <button type="button" role="radio" data-fmt="1:1" aria-checked="false">1:1 Feed</button>
-      <button type="button" role="radio" data-fmt="16:9" aria-checked="false">16:9 YouTube</button>
+      <button type="button" role="radio" data-fmt="9:16" aria-checked="true">9:16</button>
+      <button type="button" role="radio" data-fmt="1:1" aria-checked="false">1:1</button>
+      <button type="button" role="radio" data-fmt="16:9" aria-checked="false">16:9</button>
     </div>
-    <div class="opts">
-      <div><label for="dur">Length</label><select id="dur"><option value="0">Auto</option><option value="10">10 s</option><option value="15">15 s</option><option value="20">20 s</option><option value="30">30 s</option></select></div>
-      <div><label for="res">Quality</label><select id="res"><option value="720">720p</option><option value="1080">1080p</option></select></div>
-      <div id="opt-bg"><label for="bgai">Backdrop</label><select id="bgai"><option value="0">Studio</option><option value="1">Custom AI scene</option></select></div>
-      <div id="opt-stock"><label for="stock">Stock clips</label><select id="stock"><option value="-1">Auto</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></div>
-    </div>
+    <h3>Length</h3>
+    <div class="seg five" role="radiogroup" aria-label="Length" data-for="dur"><button type="button" role="radio" data-v="0">Auto</button><button type="button" role="radio" data-v="10">10 s</button><button type="button" role="radio" data-v="15">15 s</button><button type="button" role="radio" data-v="20">20 s</button><button type="button" role="radio" data-v="30">30 s</button></div>
+    <h3>Quality</h3>
+    <div class="seg two" role="radiogroup" aria-label="Quality" data-for="res"><button type="button" role="radio" data-v="720">720p</button><button type="button" role="radio" data-v="1080">1080p</button></div>
+    <div id="opt-bg"><h3>Backdrop</h3>
+    <div class="seg two" role="radiogroup" aria-label="Backdrop" data-for="bgai"><button type="button" role="radio" data-v="0">Studio</button><button type="button" role="radio" data-v="1">AI scene</button></div></div>
+    <div id="opt-stock"><h3>Stock clips</h3>
+    <div class="seg four" role="radiogroup" aria-label="Stock clips" data-for="stock"><button type="button" role="radio" data-v="-1">Auto</button><button type="button" role="radio" data-v="2">2</button><button type="button" role="radio" data-v="3">3</button><button type="button" role="radio" data-v="4">4</button></div></div>
+    <select id="dur" hidden><option value="0">Auto</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="30">30</option></select>
+    <select id="res" hidden><option value="720">720p</option><option value="1080">1080p</option></select>
+    <select id="bgai" hidden><option value="0">Studio</option><option value="1">AI</option></select>
+    <select id="stock" hidden><option value="-1">Auto</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select>
     <button class="btn" id="b-gen" type="button">Generate my video</button>
-    <button class="link" type="button" data-back>Change link</button>
-    <p class="error" id="e-type" role="alert" hidden></p>
+    <button class="link" type="button" id="b-prev">Back</button>
+    <p class="error" id="e-opts" role="alert" hidden></p>
   </section>
 
   <section id="s-video" class="view" hidden>

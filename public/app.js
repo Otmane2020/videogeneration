@@ -102,10 +102,18 @@ function setIntent(i) {
 }
 $$('.type').forEach((b) => b.addEventListener('click', () => setType(b.dataset.type)));
 $$('.intents button').forEach((b) => b.addEventListener('click', () => setIntent(b.dataset.intent)));
-$$('#s-type .seg button').forEach((b) => b.addEventListener('click', () => {
+$$('[data-fmt]').forEach((b) => b.addEventListener('click', () => {
   state.fmt = b.dataset.fmt;
-  $$('#s-type .seg button').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+  $$('[data-fmt]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
 }));
+// options en boutons : chaque groupe pilote une valeur (durée, qualité, décor, nombre de clips)
+$$('.seg[data-for]').forEach((g) => {
+  const sel = $('#' + g.dataset.for), paint = () => $$('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
+  $$('button', g).forEach((b) => b.addEventListener('click', () => { sel.value = b.dataset.v; paint(); }));
+  paint();
+});
+$('#b-next').addEventListener('click', () => { fail($('#e-opts'), ''); show('s-opts', 4); });
+$('#b-prev').addEventListener('click', () => show('s-type', 3));
 
 /* ----- variantes (couleur, taille…) et choix des photos ----- */
 const MAX_PHOTOS = 5;
@@ -157,7 +165,7 @@ function renderPhotos() {
   const v = variantOf(), price = v?.price || pr?.price;
   if (price) vbox.append(Object.assign(document.createElement('p'), { className: 'vprice', textContent: `${price} ${pr.currency || ''}`.trim() + (v && !v.available ? ' · out of stock' : '') }));
 
-  const all = allPhotos(), box = $('#photos');
+  const all = [], box = $('#photos');
   box.textContent = '';
   all.slice(0, 16).forEach((p) => {
     const n = state.picked.indexOf(p.send);
@@ -174,9 +182,14 @@ function renderPhotos() {
     });
     box.append(b);
   });
-  $('#up-hint').textContent = all.length
-    ? `${all.length} photo${all.length > 1 ? 's' : ''} found. Tap to choose the ones for the ad (${state.picked.length}/${MAX_PHOTOS}); no. 1 is the main photo.`
-    : 'No photo found on the page: add your product photos.';
+  // les photos sont choisies automatiquement ; l'ajout manuel n'est proposé que si la page n'en a donné aucune
+  const found = state.page.images.length > 0;
+  $('#up-hint').textContent = found ? '' : state.uploads.length ? `${state.uploads.length} photo${state.uploads.length > 1 ? 's' : ''} added.` : 'No product photo found: add yours.';
+  $('#up-hint').hidden = found; $('#up-btn').hidden = found;
+  // l'image principale suit la variante choisie
+  const main = photoList()[0];
+  const hero = $('#site-img');
+  if (main) { hero.hidden = false; hero.src = main.show; }
 }
 $('#files').addEventListener('change', async (e) => {
   const files = [...e.target.files].slice(0, 5);
@@ -209,7 +222,7 @@ $('#b-gen').addEventListener('click', async () => {
   cv.width = W; cv.height = H; cv.getContext('2d').clearRect(0, 0, W, H);
   cv.hidden = false; $('#result').hidden = true;
   $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = true;
-  show('s-video', 4);
+  show('s-video', 5);
   status(ecom ? 'Reviewing your product photos and writing the script…' : 'Studying your brand and writing the script…', 4);
   try {
     const list = ecom ? photoList() : [];
@@ -220,6 +233,7 @@ $('#b-gen').addEventListener('click', async () => {
     const plan = (state.plan = await (await api('/api/analyze', { page, type: state.type, intent: state.intent, photos: ecom ? list.map((p) => p.send) : undefined, variant: ecom && Object.keys(state.variant).length ? state.variant : undefined })).json());
     const brand = await state.logo;
     if (brand?.colors) Object.assign(plan.palette, brand.colors);
+    plan.palette = safePalette(plan.palette);
     state.ad = plan.ads[0];
     setMusic(ecom ? 'm6' : 'm1');
     status('Finding the right visuals…', 10);
@@ -230,16 +244,16 @@ $('#b-gen').addEventListener('click', async () => {
       .then((r) => r.json()).then(({ results }) => results).catch(() => state.ad.scenes.map(() => []));
     await produce(actx);
   } catch (err) {
-    show('s-type', 3);
-    fail($('#e-type'), err.message);
+    show('s-opts', 4);
+    fail($('#e-opts'), err.message);
     actx.close().catch(() => {});
   }
 });
 // l'édition se fait sur sa propre page ; « Update » revient à la vidéo et la remonte
-$('#b-edit').addEventListener('click', () => { $('#result').pause(); show('s-edit', 4); });
-$('#b-back-video').addEventListener('click', () => { stopPreview(); show('s-video', 4); });
-$('#b-update').addEventListener('click', () => { const actx = newAudio(); cancelJob(); show('s-video', 4); produce(actx); });
-$('#b-again').addEventListener('click', () => { cancelJob(); show('s-type', 3); });
+$('#b-edit').addEventListener('click', () => { $('#result').pause(); show('s-edit', 5); });
+$('#b-back-video').addEventListener('click', () => { stopPreview(); show('s-video', 5); });
+$('#b-update').addEventListener('click', () => { const actx = newAudio(); cancelJob(); show('s-video', 5); produce(actx); });
+$('#b-again').addEventListener('click', () => { cancelJob(); show('s-opts', 4); });
 
 // Retouches : texte de chaque scène, visuel, musique.
 const VISUAL = { site: 'Site demo', product: 'Product', detail: 'Close-up', footage: 'Clip' };
@@ -265,7 +279,7 @@ function buildEditor(used) {
     if (swap) { t.setAttribute('aria-label', `Scene ${i + 1}: change visual`); t.addEventListener('click', () => openPicker(i)); }
     const col = document.createElement('div');
     field(col, `Scene ${i + 1} · on-screen text`, s.headline, false, (v) => { s.headline = v || s.headline; });
-    field(col, 'Voice-over and captions', s.voiceover, true, (v) => { s.voiceover = v; });
+    field(col, 'Voice-over and captions', s.voiceover, true, (v) => { s.voiceover = v; s.spoken = ''; });
     card.append(t, col);
     box.append(card);
   });
@@ -525,6 +539,18 @@ const backOut = (x) => { x = clamp(x); return 1 + 2.7 * Math.pow(x - 1, 3) + 1.7
 const FONT = 'Poppins, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
 const mix = (hex, to, k) => { const a = rgb(hex), b = rgb(to); return `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], k))).join(',')})`; };
+// Couleurs de la vidéo : l'accent sert à surligner des mots sur fond sombre, il doit rester clair et vif.
+function safePalette(p) {
+  const lum = (h) => { const [r, g, b] = rgb(h); return 0.299 * r + 0.587 * g + 0.114 * b; };
+  const sat = (h) => { const [r, g, b] = rgb(h); return Math.max(r, g, b) - Math.min(r, g, b); };
+  let primary = /^#[0-9a-f]{6}$/i.test(p.primary || '') ? p.primary : '#7c5cff', accent = /^#[0-9a-f]{6}$/i.test(p.accent || '') ? p.accent : '#ffd166';
+  if (lum(primary) < 40 && sat(accent) > 60 && lum(accent) > 70) [primary, accent] = [accent, '#ffd166']; // marque noire : la couleur vive devient principale
+  else if (lum(primary) < 40) primary = '#7c5cff';
+  if (lum(accent) < 110 || sat(accent) < 30 && lum(accent) < 200) accent = '#ffd166';
+  const d = rgb(primary).reduce((a, v, i) => a + Math.abs(v - rgb(accent)[i]), 0);
+  if (d < 90) accent = lum(primary) > 150 ? '#ffffff' : '#ffd166';
+  return { primary, accent };
+}
 function onColor(hex) {
   const [r, g, b] = rgb(hex);
   return 0.299 * r + 0.587 * g + 0.114 * b > 160 ? '#101010' : '#ffffff';
@@ -1098,7 +1124,7 @@ async function produce(actx) {
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([
       Promise.all(scenes.map((s, i) => tick(used[i]?.kind === 'video' && needClip(s) ? cached(cache.blob, used[i].url, () => fetchBlob(media(lite ? used[i].lite : used[i].url))) : Promise.resolve(null)))),
       Promise.all(scenes.map((s, i) => (used[i]?.kind === 'photo' && needClip(s) ? loadImage(media(used[i].url)) : null))),
-      Promise.all(scenes.map((s) => tick(voice(s.voiceover)))),
+      Promise.all(scenes.map((s) => tick(voice(s.spoken || s.voiceover)))),
       tick(site ? (cache.shot ||= loadImage('/api/shot?u=' + encodeURIComponent(page.url))) : Promise.resolve(null)),
       tick(state.logo),
       Promise.all(photoIds.map((i) => tick(loadImage(state.photoUrls[i])))),

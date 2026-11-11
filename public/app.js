@@ -1201,6 +1201,7 @@ fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
       const b = Object.assign(document.createElement('button'), { className: 'btn', type: 'button', textContent: `Choose ${p.name}` });
       b.addEventListener('click', async () => {
         b.disabled = true;
+        if (!account.user) { b.disabled = false; return openAccount(true); }
         try { location.href = (await (await api('/api/checkout', { plan: p.id })).json()).url; }
         catch (err) { b.disabled = false; b.textContent = err.message; }
       });
@@ -1210,3 +1211,42 @@ fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
     box.append(el);
   });
 }).catch(() => { $('#pricing').hidden = true; });
+
+/* ---------- compte ---------- */
+const account = { user: null, signup: false, reset: new URLSearchParams(location.search).get('reset') };
+function paintAccount() {
+  const u = account.user;
+  $('#b-account').textContent = u ? (u.plan === 'free' ? 'Account' : `Account · ${u.plan[0].toUpperCase() + u.plan.slice(1)}`) : 'Sign in';
+  $('#ac-in').hidden = !u; $('#ac-form').hidden = !!u;
+  $('#ac-title').textContent = u ? 'Your account' : account.reset ? 'Choose a new password' : account.signup ? 'Create your account' : 'Sign in';
+  $('#ac-email').hidden = $('label[for="ac-email"]').hidden = $('#ac-switch').hidden = $('#ac-forgot').hidden = !!account.reset;
+  $('#ac-forgot').hidden ||= account.signup;
+  if (u) $('#ac-who').textContent = `${u.email} · ${u.plan === 'free' ? 'Starter plan' : u.plan + ' plan'}`;
+  $('#ac-go').textContent = account.reset ? 'Save password' : account.signup ? 'Create account' : 'Sign in';
+  $('#ac-switch').textContent = account.signup ? 'Already have an account? Sign in' : 'New here? Create an account';
+  $('#ac-pass').autocomplete = account.signup ? 'new-password' : 'current-password';
+}
+function openAccount(signup) { account.signup = !!signup; fail($('#ac-err'), ''); paintAccount(); $('#account').showModal(); }
+$('#b-account').addEventListener('click', () => openAccount(false));
+$('#ac-switch').addEventListener('click', () => { account.signup = !account.signup; fail($('#ac-err'), ''); paintAccount(); });
+$('#ac-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  fail($('#ac-err'), '');
+  try {
+    const body = account.reset ? { action: 'reset', token: account.reset, password: $('#ac-pass').value } : { action: account.signup ? 'signup' : 'login', email: $('#ac-email').value, password: $('#ac-pass').value };
+    account.user = (await (await api('/api/auth', body)).json()).user;
+    if (account.reset) { account.reset = null; history.replaceState(null, '', location.pathname); }
+    $('#ac-pass').value = '';
+    paintAccount(); $('#account').close();
+  } catch (err) { fail($('#ac-err'), err.message); }
+});
+$('#ac-out').addEventListener('click', async () => { await api('/api/auth', { action: 'logout' }).catch(() => {}); account.user = null; paintAccount(); $('#account').close(); });
+fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
+$('#ac-forgot').addEventListener('click', async () => {
+  fail($('#ac-err'), '');
+  const email = $('#ac-email').value.trim();
+  if (!email) return fail($('#ac-err'), 'Enter your email first');
+  await api('/api/auth', { action: 'forgot', email }).catch(() => {});
+  $('#ac-msg').textContent = 'If an account exists for this address, a reset link is on its way.';
+});
+if (account.reset) openAccount(false);

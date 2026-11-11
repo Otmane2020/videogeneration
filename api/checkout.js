@@ -1,6 +1,7 @@
 // Paiement : ouvre une session Stripe Checkout pour l'offre choisie.
 // À configurer : STRIPE_SECRET_KEY, STRIPE_PRICE_PRO, STRIPE_PRICE_BUSINESS (identifiants de prix Stripe, « price_... »).
 const { send, readJson, httpError, handler } = require('../lib/util');
+const { user } = require('../lib/auth');
 
 const PRICES = () => ({ pro: process.env.STRIPE_PRICE_PRO, business: process.env.STRIPE_PRICE_BUSINESS });
 
@@ -8,6 +9,9 @@ module.exports = handler('POST', async (req, res) => {
   const { plan } = await readJson(req);
   const key = process.env.STRIPE_SECRET_KEY, price = PRICES()[plan];
   if (!key || !/^price_\w+$/.test(price || '')) throw httpError(503, 'Payments are not available yet');
+  // le paiement est rattaché à un compte : c'est lui que le webhook passera en offre payante
+  const u = await user(req);
+  if (!u) throw httpError(401, 'Sign in to choose a plan');
   const host = String(req.headers.host || '');
   if (!/^[\w.-]+(:\d+)?$/.test(host)) throw httpError(400, 'Invalid host');
   const origin = (/^(localhost|127\.)/.test(host) ? 'http://' : 'https://') + host;
@@ -15,7 +19,7 @@ module.exports = handler('POST', async (req, res) => {
     mode: process.env.STRIPE_MODE === 'payment' ? 'payment' : 'subscription',
     'line_items[0][price]': price, 'line_items[0][quantity]': '1',
     success_url: `${origin}/?checkout=success`, cancel_url: `${origin}/#pricing`,
-    allow_promotion_codes: 'true', 'metadata[plan]': plan,
+    allow_promotion_codes: 'true', 'metadata[plan]': plan, client_reference_id: u.id, customer_email: u.email,
   });
   const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {
     method: 'POST', signal: AbortSignal.timeout(15000),

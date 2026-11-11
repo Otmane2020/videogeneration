@@ -1,6 +1,7 @@
 // Décor publicitaire sur mesure, généré par IA (modèle image via OpenRouter).
 // On ne génère QUE le décor, vide : le vrai produit détouré est posé dessus ensuite, donc jamais déformé.
 const { send, readJson, httpError, handler } = require('../lib/util');
+const { user } = require('../lib/auth');
 
 const MOODS = {
   warm: 'warm golden-hour light, amber rim light, cosy upscale interior',
@@ -15,6 +16,11 @@ const clean = (v, max) => String(v || '').replace(/[^\p{L}\p{N}\s,.'-]/gu, ' ').
 
 module.exports = handler('POST', async (req, res) => {
   if (!process.env.OPENROUTER_API_KEY) throw httpError(503, 'AI backdrop is not configured');
+  // les décors IA ont un coût : réservés aux offres payantes dès que les comptes sont actifs
+  if (process.env.DATABASE_URL && process.env.SESSION_SECRET) {
+    const u = await user(req).catch(() => null);
+    if (!u || u.plan === 'free') throw httpError(402, 'Custom AI scenes are part of the Pro plan');
+  }
   const b = await readJson(req);
   const decor = MOODS[b.decor] ? b.decor : 'studio';
   const ratio = RATIOS[b.format] || '9:16';

@@ -49,7 +49,7 @@
 <main id="app">
   <header>
     <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span>ClipMotion</a>
-    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><a class="pillbtn" href="#top">Try it free</a></nav>
+    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><button class="navbtn" id="b-account" type="button" hidden>Sign in</button><a class="pillbtn" href="#top">Try it free</a></nav>
     <ol class="steps" aria-label="Steps" hidden>
       <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Video</li>
     </ol>
@@ -245,6 +245,20 @@
     <button class="link" type="button" data-back>New link</button>
   </section>
 </main>
+
+<dialog id="account" aria-labelledby="ac-title">
+  <form method="dialog" class="pk-head"><h3 id="ac-title">Sign in</h3><button class="link" value="close" aria-label="Close">Close</button></form>
+  <div id="ac-in" hidden><p class="hint" id="ac-who"></p><button class="btn ghost" id="ac-out" type="button">Sign out</button></div>
+  <form id="ac-form" novalidate>
+    <label for="ac-email">Email</label><input id="ac-email" type="email" autocomplete="email" required>
+    <label for="ac-pass">Password</label><input id="ac-pass" type="password" autocomplete="current-password" minlength="8" required>
+    <p class="error" id="ac-err" role="alert" hidden></p>
+    <button class="btn" type="submit" id="ac-go">Sign in</button>
+    <button class="link" type="button" id="ac-switch">New here? Create an account</button>
+    <button class="link" type="button" id="ac-forgot">Forgot your password?</button>
+    <p class="hint" id="ac-msg" role="status"></p>
+  </form>
+</dialog>
 
 <dialog id="picker" aria-labelledby="pk-title">
   <form method="dialog" class="pk-head"><h3 id="pk-title">Choose a visual</h3><button class="link" value="close" aria-label="Close">Close</button></form>

@@ -109,7 +109,11 @@ $$('[data-fmt]').forEach((b) => b.addEventListener('click', () => {
 // options en boutons : chaque groupe pilote une valeur (durée, qualité, décor, nombre de clips)
 $$('.seg[data-for]').forEach((g) => {
   const sel = $('#' + g.dataset.for), paint = () => $$('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
-  $$('button', g).forEach((b) => b.addEventListener('click', () => { sel.value = b.dataset.v; paint(); }));
+  $$('button', g).forEach((b) => b.addEventListener('click', () => {
+    const pro = (g.dataset.for === 'res' && b.dataset.v === '1080') || (g.dataset.for === 'bgai' && b.dataset.v === '1');
+    if (pro && !isPaid()) return openUpgrade(g.dataset.for === 'res' ? '1080p export is part of the Pro plan.' : 'Custom AI scenes are part of the Pro plan.');
+    sel.value = b.dataset.v; paint();
+  }));
   paint();
 });
 $('#b-next').addEventListener('click', () => { fail($('#e-opts'), ''); show('s-opts', 4); });
@@ -947,6 +951,16 @@ function makeRenderer(cv, job) {
       if (kind === 'wipe' && e < 1) { ctx.strokeStyle = A; ctx.lineWidth = 10 * (1 - e) + 2; ctx.beginPath(); ctx.arc(W / 2, H * 0.55, e * Math.hypot(W, H) * 0.62, 0, 7); ctx.stroke(); }
     } else { ctx = main; full(sc, local); }
     chrome(t, idx);
+    if (job.watermark) {
+      // offre gratuite : filigrane en oblique, répété sur toute l'image
+      ctx.save();
+      ctx.translate(W / 2, H / 2); ctx.rotate(-0.5);
+      ctx.font = `800 34px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillStyle = 'rgba(255,255,255,.2)'; ctx.strokeStyle = 'rgba(0,0,0,.16)'; ctx.lineWidth = 2;
+      const R = Math.hypot(W, H) / 2;
+      for (let y = -R; y <= R; y += 210) for (let x = -R - (Math.round(y / 210) % 2 ? 190 : 0); x <= R; x += 380) { ctx.strokeText('clipmotion.ai', x, y); ctx.fillText('clipmotion.ai', x, y); }
+      ctx.restore();
+    }
     return idx;
   };
 }
@@ -1086,13 +1100,17 @@ const cached = (map, key, make) => { if (!map.has(key)) map.set(key, make().catc
 async function produce(actx) {
   const plan = state.plan, page = state.page, ad = state.ad, cache = state.cache;
   stopPreview();
-  const [W, H] = FORMATS[state.fmt], scale = +$('#res').value / 720, target = +$('#dur').value;
-  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale });
+  const [W, H] = FORMATS[state.fmt], target = +$('#dur').value;
+  // offre gratuite : 720p au plus et filigrane
+  const paid = isPaid();
+  if (!paid && $('#res').value !== '720') { $('#res').value = '720'; $$('[data-for=res] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '720'))); }
+  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid });
   const cv = $('#cv'), result = $('#result');
+  const scale = job.scale;
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
   result.pause();
   cv.hidden = false; result.hidden = true; result.removeAttribute('src');
-  $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = true;
+  $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = $('#b-nomark').hidden = true;
 
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
@@ -1196,6 +1214,9 @@ async function produce(actx) {
     status('Your video is ready · ' + notes.join(' · '), 100);
     buildEditor(used);
     $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = false;
+    $('#b-nomark').hidden = paid;
+    // historique du compte (si connecté)
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}` } }).then(refreshAccount).catch(() => {});
   } catch (err) {
     console.error(err);
     if (!job.cancelled) { status('Something went wrong while editing. Please try again.', 100); $('#b-again').hidden = false; }
@@ -1224,6 +1245,7 @@ if (new URLSearchParams(location.search).get('checkout') === 'success') {
 }
 fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
   const box = $('#plans');
+  account.proPrice = (plans.find((x) => x.id === 'pro') || {}).price ? `${plans.find((x) => x.id === 'pro').price}${plans.find((x) => x.id === 'pro').period || ''}` : '';
   plans.forEach((p) => {
     const el = Object.assign(document.createElement('article'), { className: 'plan' + (p.featured ? ' featured' : '') });
     const add = (tag, cls, text) => { const n = Object.assign(document.createElement(tag), { className: cls, textContent: text }); el.append(n); return n; };
@@ -1251,20 +1273,54 @@ fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
   });
 }).catch(() => { $('#pricing').hidden = true; });
 
-/* ---------- compte ---------- */
-const account = { user: null, signup: false, reset: new URLSearchParams(location.search).get('reset') };
+/* ---------- compte, profil, offre ---------- */
+const account = { user: null, history: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
+const isPaid = () => !!account.user && account.user.plan !== 'free';
+const PLAN_NAME = { free: 'Starter (free)', pro: 'Pro', business: 'Business' };
 function paintAccount() {
   const u = account.user;
-  $('#b-account').textContent = u ? (u.plan === 'free' ? 'Account' : `Account · ${u.plan[0].toUpperCase() + u.plan.slice(1)}`) : 'Sign in';
+  $('#b-account').textContent = u ? (u.plan === 'free' ? 'Account' : `Account · ${PLAN_NAME[u.plan] || u.plan}`) : 'Sign in';
   $('#ac-in').hidden = !u; $('#ac-form').hidden = !!u;
   $('#ac-title').textContent = u ? 'Your account' : account.reset ? 'Choose a new password' : account.signup ? 'Create your account' : 'Sign in';
   $('#ac-email').hidden = $('label[for="ac-email"]').hidden = $('#ac-switch').hidden = $('#ac-forgot').hidden = !!account.reset;
   $('#ac-forgot').hidden ||= account.signup;
-  if (u) $('#ac-who').textContent = `${u.email} · ${u.plan === 'free' ? 'Starter plan' : u.plan + ' plan'}`;
+  if (u) {
+    $('#ac-avatar').textContent = u.email[0].toUpperCase();
+    $('#ac-mail').textContent = u.email;
+    $('#ac-plan').textContent = `${PLAN_NAME[u.plan] || u.plan} plan` + (u.plan === 'free' ? ' · 720p with watermark' : ' · 1080p, no watermark');
+    $('#ac-up').hidden = u.plan !== 'free';
+    const list = $('#ac-history');
+    list.textContent = '';
+    if (!account.history.length) list.append(Object.assign(document.createElement('li'), { className: 'empty', textContent: 'Your finished videos will be listed here.' }));
+    account.history.forEach((h) => {
+      const li = document.createElement('li'), left = document.createElement('div');
+      left.append(Object.assign(document.createElement('b'), { textContent: h.brand || h.url }));
+      left.append(Object.assign(document.createElement('small'), { textContent: `${new Date(h.created_at).toLocaleDateString()} · ${h.format} · ${Math.round(h.seconds)} s · ${h.resolution}` }));
+      const again = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create again' });
+      again.addEventListener('click', () => { $('#account').close(); show('s-url', 1); $('#url').value = h.url; $('#f-url').requestSubmit(); });
+      li.append(left, again); list.append(li);
+    });
+  }
   $('#ac-go').textContent = account.reset ? 'Save password' : account.signup ? 'Create account' : 'Sign in';
   $('#ac-switch').textContent = account.signup ? 'Already have an account? Sign in' : 'New here? Create an account';
   $('#ac-pass').autocomplete = account.signup ? 'new-password' : 'current-password';
 }
+const refreshAccount = () => fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; account.history = j.history || []; $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
+// fenêtre d'offre : s'ouvre quand une option payante est demandée
+function openUpgrade(why) {
+  $('#up-why').textContent = why || 'Get the most out of every video.';
+  $('#up-price').textContent = account.proPrice;
+  fail($('#up-err'), '');
+  $('#upgrade').showModal();
+}
+async function startCheckout(errEl) {
+  if (!account.user) { $('#upgrade').close(); return openAccount(true); }
+  try { location.href = (await (await api('/api/checkout', { plan: 'pro' })).json()).url; }
+  catch (err) { fail(errEl, err.message); }
+}
+$('#up-go').addEventListener('click', () => startCheckout($('#up-err')));
+$('#ac-up').addEventListener('click', () => { $('#account').close(); openUpgrade('You are on the free Starter plan.'); });
+$('#b-nomark').addEventListener('click', () => openUpgrade('Free videos are exported in 720p with a watermark.'));
 function openAccount(signup) { account.signup = !!signup; fail($('#ac-err'), ''); paintAccount(); $('#account').showModal(); }
 $('#b-account').addEventListener('click', () => openAccount(false));
 $('#ac-switch').addEventListener('click', () => { account.signup = !account.signup; fail($('#ac-err'), ''); paintAccount(); });
@@ -1274,13 +1330,14 @@ $('#ac-form').addEventListener('submit', async (e) => {
   try {
     const body = account.reset ? { action: 'reset', token: account.reset, password: $('#ac-pass').value } : { action: account.signup ? 'signup' : 'login', email: $('#ac-email').value, password: $('#ac-pass').value };
     account.user = (await (await api('/api/auth', body)).json()).user;
+    refreshAccount();
     if (account.reset) { account.reset = null; history.replaceState(null, '', location.pathname); }
     $('#ac-pass').value = '';
     paintAccount(); $('#account').close();
   } catch (err) { fail($('#ac-err'), err.message); }
 });
 $('#ac-out').addEventListener('click', async () => { await api('/api/auth', { action: 'logout' }).catch(() => {}); account.user = null; paintAccount(); $('#account').close(); });
-fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
+refreshAccount();
 $('#ac-forgot').addEventListener('click', async () => {
   fail($('#ac-err'), '');
   const email = $('#ac-email').value.trim();

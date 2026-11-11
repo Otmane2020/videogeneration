@@ -10,11 +10,22 @@ module.exports = async (req, res) => {
   try {
     if (req.method === 'GET') {
       const u = await user(req).catch(() => null);
-      return send(res, 200, { user: u && { email: u.email, plan: u.plan }, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
+      // profil : offre et historique des vidéos réussies
+      const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
+      return send(res, 200, { user: u && { email: u.email, plan: u.plan }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
     }
     if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
-    const { action, email, password, token } = await readJson(req);
+    const body = await readJson(req);
+    const { action, email, password, token } = body;
     if (action === 'logout') return send(res, 200, { user: null }, { 'set-cookie': clear });
+    if (action === 'log') {
+      // une vidéo vient d'être montée : on l'ajoute à l'historique du compte
+      const u = await user(req);
+      if (!u) return send(res, 200, { saved: false });
+      const g = body.gen || {}, t = (v, n) => String(v ?? '').slice(0, n);
+      await sql('INSERT INTO generations (user_id, brand, url, kind, intent, format, seconds, resolution) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [u.id, t(g.brand, 80), t(g.url, 400), t(g.kind, 10), t(g.intent, 20), t(g.format, 8), Math.min(120, Math.max(0, +g.seconds || 0)), t(g.resolution, 12)]);
+      return send(res, 200, { saved: true });
+    }
     if (action === 'reset') {
       const pw2 = String(password || ''), id = String(token || '').split('.')[0];
       if (pw2.length < 8 || pw2.length > 200) throw httpError(400, 'Your password needs at least 8 characters');
@@ -36,7 +47,14 @@ module.exports = async (req, res) => {
     if (pw.length < 8 || pw.length > 200) throw httpError(400, 'Your password needs at least 8 characters');
     let u;
     if (action === 'signup') {
-      const rows = await sql('INSERT INTO users (email, pass) VALUES ($1, $2) ON CONFLICT (email) DO NOTHING RETURNING id, email, plan', [mail, hash(pw)]);
+      // un seul compte gratuit par adresse IP (FREE_ACCOUNTS_PER_IP pour assouplir)
+      const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim().slice(0, 60);
+      const max = parseInt(process.env.FREE_ACCOUNTS_PER_IP || '1', 10);
+      if (ip && max > 0) {
+        const n = await sql("SELECT count(*)::int AS n FROM users WHERE signup_ip = $1 AND plan = 'free'", [ip]);
+        if (n[0].n >= max) throw httpError(403, 'A free account already exists on this network. Sign in to it, or upgrade it to Pro.');
+      }
+      const rows = await sql('INSERT INTO users (email, pass, signup_ip) VALUES ($1, $2, $3) ON CONFLICT (email) DO NOTHING RETURNING id, email, plan', [mail, hash(pw), ip || null]);
       if (!rows[0]) throw httpError(409, 'An account already exists for this email. Sign in instead.');
       u = rows[0];
       await sendMail(mail, 'welcome', { origin: originOf(req) });

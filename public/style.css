@@ -377,3 +377,19 @@ footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; } footer nav a { col
   .sticky-cta { left: 16px; right: 16px; padding: 14px; }
   .sticky-cta[hidden] { display: none; }
 }
+
+/* ---------- profil, historique, passage à l'offre payante ---------- */
+dialog#upgrade { width: min(420px, 94vw); border: 1px solid #a57bff; border-radius: 22px; background: #0d0b1a; color: var(--text); padding: 18px; box-shadow: 0 20px 80px #7c5cff55; }
+dialog#upgrade::backdrop { background: #000c; }
+.perks { list-style: none; padding: 0; margin: 12px 0; }
+.perks li { padding: 7px 0 7px 26px; position: relative; font-size: 15.5px; }
+.perks li::before { content: "✓"; position: absolute; left: 0; color: #c9a5ff; font-weight: 700; }
+.profile { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--grad); display: grid; place-items: center; font-weight: 800; font-size: 18px; flex: none; }
+.profile b { display: block; font-size: 15px; word-break: break-all; } .profile span:not(.avatar) { font-size: 13px; color: #c9a5ff; }
+#account h3 { margin: 18px 0 8px; }
+.history { list-style: none; padding: 0; margin: 0 0 14px; max-height: 34dvh; overflow: auto; }
+.history li { padding: 10px 0; border-top: 1px solid var(--line); font-size: 14px; display: flex; justify-content: space-between; gap: 10px; }
+.history small { color: var(--mute); display: block; font-size: 12px; }
+.history button { background: none; border: 0; color: #c9a5ff; font: inherit; font-size: 13px; cursor: pointer; padding: 6px 0; white-space: nowrap; }
+.history .empty { color: var(--mute); justify-content: flex-start; }

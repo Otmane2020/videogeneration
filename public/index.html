@@ -69,7 +69,7 @@
           </div>
         </form>
         <p class="error" id="e-url" role="alert" hidden></p>
-        <ul class="trust"><li>No sign-up</li><li>Free to try</li><li>MP4 up to 1080p</li></ul>
+        <ul class="trust"><li>No sign-up</li><li>Free to try</li><li>MP4 export</li></ul>
       </div>
       <div class="hero-art" aria-hidden="true">
         <figure class="demo d1"><img src="/demo/watch.jpg" alt="" width="576" height="1008"><figcaption><b>Built to last</b><b class="alt">a lifetime</b></figcaption></figure>
@@ -243,6 +243,7 @@
       <button class="btn ghost" id="b-share" type="button" hidden>Share</button>
     </div>
     <button class="btn ghost" id="b-edit" type="button" hidden>Edit video</button>
+    <button class="link" id="b-nomark" type="button" hidden>Remove the watermark and export in 1080p</button>
     <button class="link" id="b-again" type="button" hidden>Try another goal or format</button>
     <button class="link" type="button" data-back>New link</button>
   </section>
@@ -264,7 +265,13 @@
 
 <dialog id="account" aria-labelledby="ac-title">
   <form method="dialog" class="pk-head"><h3 id="ac-title">Sign in</h3><button class="link" value="close" aria-label="Close">Close</button></form>
-  <div id="ac-in" hidden><p class="hint" id="ac-who"></p><button class="btn ghost" id="ac-out" type="button">Sign out</button></div>
+  <div id="ac-in" hidden>
+    <div class="profile"><span class="avatar" id="ac-avatar"></span><div><b id="ac-mail"></b><span id="ac-plan"></span></div></div>
+    <button class="btn" id="ac-up" type="button">Upgrade to Pro</button>
+    <h3>Your videos</h3>
+    <ul class="history" id="ac-history"></ul>
+    <button class="btn ghost" id="ac-out" type="button">Sign out</button>
+  </div>
   <form id="ac-form" novalidate>
     <label for="ac-email">Email</label><input id="ac-email" type="email" autocomplete="email" required>
     <label for="ac-pass">Password</label><input id="ac-pass" type="password" autocomplete="current-password" minlength="8" required>
@@ -274,6 +281,15 @@
     <button class="link" type="button" id="ac-forgot">Forgot your password?</button>
     <p class="hint" id="ac-msg" role="status"></p>
   </form>
+</dialog>
+
+<dialog id="upgrade" aria-labelledby="up-title">
+  <form method="dialog" class="pk-head"><h3 id="up-title">Upgrade to Pro</h3><button class="link" value="close" aria-label="Close">Close</button></form>
+  <p class="hint" id="up-why"></p>
+  <ul class="perks"><li>1080p export</li><li>No watermark</li><li>Custom AI scenes behind your product</li><li>History of your videos</li></ul>
+  <p class="price" id="up-price"></p>
+  <button class="btn" id="up-go" type="button">Upgrade now</button>
+  <p class="error" id="up-err" role="alert" hidden></p>
 </dialog>
 
 <dialog id="picker" aria-labelledby="pk-title">

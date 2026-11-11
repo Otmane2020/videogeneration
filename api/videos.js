@@ -1,20 +1,63 @@
 // Recherche de plans d'illustration (vidéos ou photos) pour chaque scène.
+// Fournisseurs : Pixabay (primaire, 100/min gratuit) + Pexels (secours, 200/h gratuit)
 const { send, readJson, httpError, handler } = require('../lib/util');
 
 const cache = new Map(); // la banque demande de mettre les réponses en cache 24 h
 
-async function call(path, params) {
-  const key = path + JSON.stringify(params);
+function cached(key, fn) {
   const hit = cache.get(key);
-  if (hit && Date.now() - hit.t < 864e5) return hit.v;
+  if (hit && Date.now() - hit.t < 864e5) return Promise.resolve(hit.v);
+  return fn().then((v) => {
+    if (cache.size > 600) cache.clear();
+    cache.set(key, { t: Date.now(), v });
+    return v;
+  });
+}
+
+// --- Pixabay ---
+async function pixabayCall(path, params) {
   const u = new URL('https://pixabay.com/api/' + path);
   u.search = new URLSearchParams({ key: process.env.PIXABAY_API_KEY, safesearch: 'true', per_page: '24', ...params });
   const r = await fetch(u, { signal: AbortSignal.timeout(12000) });
-  if (!r.ok) throw new Error(`stock ${r.status}`);
-  const v = (await r.json()).hits || [];
-  if (cache.size > 600) cache.clear();
-  cache.set(key, { t: Date.now(), v });
-  return v;
+  if (!r.ok) throw new Error(`pixabay ${r.status}`);
+  return (await r.json()).hits || [];
+}
+async function pixabayVideos(q, hd) {
+  const hits = await pixabayCall('videos/', { q, video_type: 'film' });
+  return hits.filter((h) => h.duration >= 5 && h.duration <= 90).map((h) => {
+    const f = h.videos || {};
+    const full = f.medium?.url && f.medium.height >= 1080 ? f.medium : null;
+    const std = [f.small, f.medium, f.tiny].find((x) => x?.url) || {};
+    const pick = hd && full ? full : std;
+    return { id: h.id, kind: 'video', url: pick.url, lite: f.tiny?.url || std.url, w: pick.width, h: pick.height, hd: !!full, thumb: std.thumbnail || f.tiny?.thumbnail || '', duration: h.duration };
+  }).filter((x) => x.url);
+}
+async function pixabayPhotos(q) {
+  const hits = await pixabayCall('', { q, image_type: 'photo', min_width: '1600' });
+  return hits.map((h) => ({ id: h.id, kind: 'photo', url: h.largeImageURL, lite: h.webformatURL, w: h.imageWidth, h: h.imageHeight, hd: h.imageWidth >= 1920, thumb: h.webformatURL })).filter((x) => x.url);
+}
+
+// --- Pexels ---
+async function pexelsCall(path, params) {
+  const u = new URL('https://api.pexels.com/' + path);
+  u.search = new URLSearchParams({ per_page: '20', ...params });
+  const r = await fetch(u, { signal: AbortSignal.timeout(12000), headers: { Authorization: process.env.PEXELS_API_KEY } });
+  if (!r.ok) throw new Error(`pexels ${r.status}`);
+  return await r.json();
+}
+async function pexelsVideos(q) {
+  const data = await pexelsCall('videos/search', { query: q, orientation: 'landscape', min_duration: 5, max_duration: 90 });
+  return (data.videos || []).map((h) => {
+    const files = (h.video_files || []).sort((a, b) => (b.width || 0) - (a.width || 0));
+    const hd = files.find((f) => f.width >= 1920) || null;
+    const std = files.find((f) => f.link) || {};
+    const pick = hd || std;
+    return { id: h.id, kind: 'video', url: pick.link, lite: std.link, w: pick.width || 1280, h: pick.height || 720, hd: !!hd, thumb: h.image || '', duration: h.duration };
+  }).filter((x) => x.url);
+}
+async function pexelsPhotos(q) {
+  const data = await pexelsCall('v1/search', { query: q, orientation: 'landscape' });
+  return (data.photos || []).map((h) => ({ id: h.id, kind: 'photo', url: h.src.original, lite: h.src.large, w: h.width, h: h.height, hd: h.width >= 1920, thumb: h.src.medium })).filter((x) => x.url);
 }
 
 // Classement : pertinence d'abord (ordre de la banque), bonus pour la HD et pour les contenus récents.
@@ -25,23 +68,32 @@ function rank(items) {
 }
 
 async function videos(q, hd) {
-  // « film » : vraies prises de vue uniquement, pas d'animations
-  const hits = await call('videos/', { q, video_type: 'film' });
-  return rank(hits.filter((h) => h.duration >= 5 && h.duration <= 90).map((h) => {
-    const f = h.videos || {};
-    const full = f.medium?.url && f.medium.height >= 1080 ? f.medium : null;
-    const std = [f.small, f.medium, f.tiny].find((x) => x?.url) || {};
-    const pick = hd && full ? full : std;
-    return { id: h.id, kind: 'video', url: pick.url, lite: f.tiny?.url || std.url, w: pick.width, h: pick.height, hd: !!full, thumb: std.thumbnail || f.tiny?.thumbnail || '', duration: h.duration };
-  }).filter((x) => x.url));
+  const key = 'v:' + q + hd;
+  return cached(key, async () => {
+    if (process.env.PIXABAY_API_KEY) {
+      try { const r = await pixabayVideos(q, hd); if (r.length) return rank(r); } catch (e) { console.error('pixabay:', e.message); }
+    }
+    if (process.env.PEXELS_API_KEY) {
+      try { return rank(await pexelsVideos(q)); } catch (e) { console.error('pexels:', e.message); }
+    }
+    return [];
+  });
 }
 async function photos(q) {
-  const hits = await call('', { q, image_type: 'photo', min_width: '1600' });
-  return rank(hits.map((h) => ({ id: h.id, kind: 'photo', url: h.largeImageURL, lite: h.webformatURL, w: h.imageWidth, h: h.imageHeight, hd: h.imageWidth >= 1920, thumb: h.webformatURL })).filter((x) => x.url));
+  const key = 'p:' + q;
+  return cached(key, async () => {
+    if (process.env.PIXABAY_API_KEY) {
+      try { const r = await pixabayPhotos(q); if (r.length) return rank(r); } catch (e) { console.error('pixabay:', e.message); }
+    }
+    if (process.env.PEXELS_API_KEY) {
+      try { return rank(await pexelsPhotos(q)); } catch (e) { console.error('pexels:', e.message); }
+    }
+    return [];
+  });
 }
 
 module.exports = handler('POST', async (req, res) => {
-  if (!process.env.PIXABAY_API_KEY) throw httpError(500, 'Stock library is not configured');
+  if (!process.env.PIXABAY_API_KEY && !process.env.PEXELS_API_KEY) throw httpError(500, 'Stock library is not configured');
   const { scenes, fallback, hd, kind } = await readJson(req);
   if (!Array.isArray(scenes) || !scenes.length || scenes.length > 8) throw httpError(400, 'Invalid queries');
   const find = kind === 'photo' ? photos : (q) => videos(q, !!hd);

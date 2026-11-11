@@ -1224,8 +1224,37 @@ async function produce(actx) {
       if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null }); continue; }
       if (!cache[key]) {
         status('Cutting out your product…');
-        const cut = await Cutout.run(img, { force: kinds.get(id) === 'packshot', onProgress: (f) => status(`Loading the cut-out tool… ${Math.round(f * 100)}%`) })
-          .catch((e) => { console.warn('cutout', e); return cutout(img); });
+        // 1. Essai côté serveur via remove.bg (meilleure qualité sur les objets complexes)
+        const srcUrl = state.photoUrls?.[id];
+        let cut = srcUrl
+          ? await api('/api/backdrop?a=removebg', { url: srcUrl })
+              .then(async (r) => {
+                if (!r.ok) throw new Error(r.status);
+                const blob = await r.blob();
+                // Convertit le PNG transparent en canvas rogné (même format que Cutout.run)
+                const bUrl = URL.createObjectURL(blob);
+                const bImg = await loadImage(bUrl).finally(() => URL.revokeObjectURL(bUrl));
+                const cv2 = Object.assign(document.createElement('canvas'), { width: bImg.naturalWidth, height: bImg.naturalHeight });
+                cv2.getContext('2d').drawImage(bImg, 0, 0);
+                const px2 = cv2.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cv2.width, cv2.height);
+                // Rogner aux contours opaques (même logique que Cutout.trim)
+                const d2 = px2.data, w2 = cv2.width, h2 = cv2.height;
+                let x0 = w2, y0 = h2, x1 = 0, y1 = 0;
+                for (let y = 0; y < h2; y += 2) for (let x = 0; x < w2; x += 2) {
+                  if (d2[(y * w2 + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+                }
+                if (x1 - x0 < 20 || y1 - y0 < 20) return null;
+                const out2 = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 1, height: y1 - y0 + 1 });
+                out2.getContext('2d').drawImage(cv2, x0, y0, out2.width, out2.height, 0, 0, out2.width, out2.height);
+                return out2;
+              })
+              .catch(() => null) // 503 (pas de clé) ou erreur → on passe au ONNX local
+          : null;
+        // 2. Modèle ONNX local (ormbg) si remove.bg n'est pas disponible ou a échoué
+        if (!cut) {
+          cut = await Cutout.run(img, { force: kinds.get(id) === 'packshot', onProgress: (f) => status(`Loading the cut-out tool… ${Math.round(f * 100)}%`) })
+            .catch((e) => { console.warn('cutout', e); return cutout(img); });
+        }
         if (job.cancelled) return;
         cache[key] = { img, cut };
       }

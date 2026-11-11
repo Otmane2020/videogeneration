@@ -1330,12 +1330,39 @@ async function produce(actx) {
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
     // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
     if (best?.cut && $('#bgai').value === '1') {
-      status('Creating the custom backdrop…');
-      plan.backdrops ||= {};
-      plan.backdrops[state.fmt] ||= api('/api/backdrop', { decor: plan.decor, scene: plan.backdrop, category: plan.category, accent: plan.palette.accent, format: state.fmt })
-        .then((r) => r.blob()).then((b) => loadImage(URL.createObjectURL(b))).catch(() => null);
-      job.backdrop = await plan.backdrops[state.fmt];
-      if (!job.backdrop) delete plan.backdrops[state.fmt];
+      status('Creating your one-off product backdrop with Meta Muse Image…');
+      // Une référence JPEG légère suffit pour communiquer la catégorie et les couleurs du produit.
+      // L'image produit ne sera jamais remplacée : seul le fond est généré.
+      let referenceImage = null;
+      try {
+        const maxSide = 768, scale = Math.min(1, maxSide / Math.max(best.img.naturalWidth, best.img.naturalHeight));
+        const rw = Math.max(1, Math.round(best.img.naturalWidth * scale));
+        const rh = Math.max(1, Math.round(best.img.naturalHeight * scale));
+        const refCanvas = Object.assign(document.createElement('canvas'), { width: rw, height: rh });
+        const refCtx = refCanvas.getContext('2d');
+        refCtx.fillStyle = '#11121e'; refCtx.fillRect(0, 0, rw, rh);
+        refCtx.drawImage(best.img, 0, 0, rw, rh);
+        referenceImage = refCanvas.toDataURL('image/jpeg', 0.78);
+      } catch (error) { console.warn('Could not prepare Muse reference image', error); }
+      try {
+        const response = await api('/api/backdrop?a=muse', {
+          type: 'ecom',
+          format: state.fmt,
+          scene: plan.backdrop,
+          category: plan.category,
+          referenceImage,
+        });
+        const imageBlob = await response.blob();
+        const objectUrl = URL.createObjectURL(imageBlob);
+        job.backdrop = await loadImage(objectUrl);
+        URL.revokeObjectURL(objectUrl);
+        job.backdropModel = job.backdrop ? (response.headers.get('x-image-model') || 'meta/muse-image') : null;
+      } catch (error) {
+        job.backdrop = null;
+        job.backdropModel = null;
+        console.warn('Meta Muse backdrop unavailable; using the built-in studio background', error);
+        status('Meta Muse is unavailable right now. Using the built-in studio background.');
+      }
     }
     scenes.forEach((s, i) => {
       if (s.kind === 'cta') s.ph = best;
@@ -1402,7 +1429,7 @@ async function produce(actx) {
       tc.getContext('2d').drawImage(cv, 0, 0, TW, TH);
       thumb = tc.toDataURL('image/jpeg', 0.72);
     } catch {}
-    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, captionStyle: job.captionStyle, templateStyle: job.templateStyle, thumb } })
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, captionStyle: job.captionStyle, templateStyle: job.templateStyle, backdropModel: job.backdropModel, thumb } })
       .then((r) => r.json()).then(async (j) => { if (j.id && blob) { try { await vidIdb.set(j.id, blob); await vidIdb.prune(15); } catch {} } refreshAccount(); }).catch(() => {});
   } catch (err) {
     console.error(err);

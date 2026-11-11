@@ -6,7 +6,7 @@ const { ready } = require('./checkout');
 
 const DEFAULT = [
   { id: 'free', name: 'Starter', price: '$0', period: '', tag: 'Available', features: ['Video ads from any link', '9:16, 1:1 and 16:9 formats', 'Voice-over, captions and 30 music tracks', 'MP4 export up to 1080p'] },
-  { id: 'pro', name: 'Pro', price: '$19', period: '/month', tag: 'Soon', featured: true, features: ['Everything in Starter', 'Custom AI-generated scenes behind your product', 'Priority rendering options as they ship'] },
+  { id: 'pro', name: 'Pro', price: '$19', period: '/month', tag: 'Soon', featured: true, features: ['Everything in Starter', 'Custom AI-generated scenes behind your product'] },
   { id: 'business', name: 'Business', price: '$49', period: '/month', tag: 'Soon', features: ['Everything in Pro', 'Multiple brands', 'Bulk generation from a catalogue', 'Priority support'] },
 ];
 const link = (v) => (/^https:\/\/[^\s"'<>]+$/.test(v || '') ? v : '');

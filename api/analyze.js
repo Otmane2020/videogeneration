@@ -184,7 +184,13 @@ function fallback(page, type, nPhotos) {
     brand: page.siteName, tagline: short(page.title || page.siteName), summary: str(page.description || page.title, 200),
     ads: angles.map((angle, a) => ({
       angle,
-      scenes: [0, 1, 2, 3].map((i) => ({ headline: short(pick(a + i)), voiceover: pick(a + i), queries: [q[(a + i) % 4]], visual: visual(i), photo: nPhotos ? i % nPhotos : 0, badge: '' })),
+      scenes: [0, 1, 2, 3].map((i) => ({
+        role: ['hook', 'context', 'demo', 'outcome'][i],
+        headline: short(pick(a + i)),
+        voiceover: pick(a + i),
+        queries: type === 'saas' ? saasFallbackQueries(lines.join(' '), i) : [q[(a + i) % 4]],
+        visual: visual(i), photo: nPhotos ? i % nPhotos : 0, badge: ''
+      })),
       cta: type === 'ecom' ? (fr ? 'Acheter maintenant' : 'Shop now') : (fr ? 'Essayer gratuitement' : 'Try it free'),
       ctaVoiceover: fr ? `Découvrez ${page.siteName} dès aujourd’hui.` : `Discover ${page.siteName} today.`,
     })),

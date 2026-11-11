@@ -1,5 +1,10 @@
 {
   "cleanUrls": true,
   "functions": { "api/*.js": { "maxDuration": 60 } },
-  "crons": [{ "path": "/api/report", "schedule": "0 7 * * *" }]
+  "rewrites": [
+    { "source": "/api/track", "destination": "/api/ops?a=track" },
+    { "source": "/api/admin", "destination": "/api/ops?a=admin" },
+    { "source": "/api/inbound", "destination": "/api/ops?a=inbound" }
+  ],
+  "crons": [{ "path": "/api/ops?a=report", "schedule": "0 7 * * *" }]
 }

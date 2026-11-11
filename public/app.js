@@ -263,6 +263,8 @@ $('#b-gen').addEventListener('click', async () => {
     if (brand?.colors) Object.assign(plan.palette, brand.colors);
     plan.palette = safePalette(plan.palette);
     state.ad = plan.ads[0];
+    // Déterminer la qualité avant la recherche de footage afin de demander des sources HD pour les exports Pro.
+    $('#res').value = String(autoResolution());
     setMusic(ecom ? 'm6' : 'm1');
     status('Finding the right visuals…', 10);
     // Plans d'illustration : sans eux, la pub se monte quand même. Chaque scène SaaS reçoit les siens, quel que soit
@@ -1244,16 +1246,20 @@ function waiting(cv, job) {
 
 const cached = (map, key, make) => { if (!map.has(key)) map.set(key, make().catch((e) => { map.delete(key); throw e; })); return map.get(key); };
 
+function autoResolution() {
+  const paid = unlocked(), connection = navigator.connection || {};
+  const constrained = !!connection.saveData || /^(slow-2g|2g|3g)$/.test(connection.effectiveType || '')
+    || (Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) < 4)
+    || (Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) < 4);
+  return paid && !constrained ? 1080 : 720;
+}
+
 async function produce(actx) {
   const plan = state.plan, page = state.page, ad = state.ad, cache = state.cache;
   stopPreview();
   const [W, H] = FORMATS[state.fmt], target = +$('#dur').value;
   // Qualité automatique selon l'offre et les capacités réelles de l'appareil.
-  const paid = unlocked(), connection = navigator.connection || {};
-  const constrained = !!connection.saveData || /^(slow-2g|2g|3g)$/.test(connection.effectiveType || '')
-    || (Number(navigator.deviceMemory) > 0 && Number(navigator.deviceMemory) < 4)
-    || (Number(navigator.hardwareConcurrency) > 0 && Number(navigator.hardwareConcurrency) < 4);
-  const resolution = paid && !constrained ? 1080 : 720;
+  const paid = unlocked(), resolution = autoResolution();
   $('#res').value = String(resolution);
   // Le brief IA choisit le template narratif, les sous-titres et leur traitement selon le contenu.
   const templateStyle = plan.templateStyle || 'cinematic';

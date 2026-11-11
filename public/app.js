@@ -828,11 +828,21 @@ function makeRenderer(cv, job) {
     if (h < 150) return;
     const p = clamp(local / dur), enter = easeOut((local - 0.05) / 0.6);
     let rot = 0, shx = 0, shy = 0, sc = 1, dy = 0;
-    if (variant === 0) {
-      // démo : téléphone bien droit, la page défile, léger zoom caméra
+    if (job.videoTemplate === 'corporate') {
+      // Démo sobre : écran stable et lisible, sans effet 3D excessif.
+      sc = variant === 0 ? 0.94 + 0.035 * easeInOut(p) : 0.9 + 0.04 * easeInOut(p);
+    } else if (job.videoTemplate === 'customer-story') {
+      // Angle éditorial plus humain, léger mouvement latéral.
+      const a = easeInOut(p);
+      shx = variant === 0 ? lerp(0.18, 0.24, a) : lerp(-0.24, -0.16, a);
+      shy = variant === 0 ? lerp(-0.08, -0.12, a) : lerp(0.1, 0.06, a);
+      rot = variant === 0 ? lerp(-0.025, 0.02, a) : lerp(0.035, -0.015, a);
+      sc = variant === 0 ? lerp(0.9, 0.96, a) : lerp(0.84, 0.9, a);
+    } else if (variant === 0) {
+      // Première démo : téléphone droit, la page défile.
       sc = 1 + 0.07 * easeInOut(p);
     } else {
-      // vue inclinée avec relief, qui pivote doucement
+      // Deuxième démo : angle et relief, avec un travelling différent.
       const a = easeInOut(p);
       shx = lerp(0.46, 0.3, a); shy = lerp(-0.27, -0.17, a); rot = lerp(-0.1, -0.04, a);
       sc = lerp(0.8, 0.9, a);
@@ -1044,7 +1054,9 @@ function makeRenderer(cv, job) {
     const idx = sceneAt(scenes, t), sc = scenes[idx], local = t - sc.start;
     if (idx > 0 && local < TRANS) {
       // transition : la scène précédente reste dessous, la nouvelle arrive par-dessus
-      const prev = scenes[idx - 1], e = easeInOut(local / TRANS), kind = sc.kind === 'cta' ? 'wipe' : TRANSITIONS[(idx - 1) % TRANSITIONS.length];
+      const prev = scenes[idx - 1], e = easeInOut(local / TRANS);
+      const roleTransition = { hook: 'flash', context: 'slideU', demo: 'zoom', outcome: 'whip' };
+      const kind = sc.kind === 'cta' ? 'wipe' : roleTransition[sc.role] || TRANSITIONS[(idx - 1) % TRANSITIONS.length];
       ctx = layer.getContext('2d'); full(sc, local);
       ctx = main; full(prev, prev.dur);
       ctx.fillStyle = `rgba(0,0,0,${0.45 * e})`; ctx.fillRect(0, 0, W, H);

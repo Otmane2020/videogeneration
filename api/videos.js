@@ -47,14 +47,21 @@ module.exports = handler('POST', async (req, res) => {
   const find = kind === 'photo' ? photos : (q) => videos(q, !!hd);
   const fb = String(fallback || 'technology').slice(0, 40);
   const results = await Promise.all(scenes.map(async (list) => {
-    // de la requête la plus précise à la plus générale ; on s'arrête dès qu'il y a assez de choix
-    const tries = [...[].concat(list || []).map((q) => String(q || '').slice(0, 60).trim()).filter(Boolean).slice(0, 3), fb];
-    for (const q of tries) {
+    // De la requête la plus précise à la plus générale. Une requête sans résultat est raccourcie mot par mot
+    // (« google search laptop » -> « google search » -> « google ») avant de passer à la suivante.
+    const given = [].concat(list || []).map((q) => String(q || '').slice(0, 60).trim()).filter(Boolean).slice(0, 3);
+    const tries = [];
+    for (const q of given) { const w = q.split(/\s+/); for (let n = w.length; n >= 1; n--) tries.push(w.slice(0, n).join(' ')); }
+    tries.push(fb);
+    let best = [];
+    for (const q of [...new Set(tries)]) {
       try {
         const v = await find(q);
-        if (v.length >= 3 || (v.length && q === fb)) return v;
+        if (v.length > best.length) best = v;
+        if (v.length >= 3) return v;
       } catch (e) { console.error(e.message); }
     }
+    if (best.length) return best;
     return [];
   }));
   send(res, 200, { results });

@@ -8,7 +8,7 @@ const COMMON = `You are a senior performance-marketing creative director who wri
 Return ONLY a JSON object. Write headline, voiceover, tagline, cta, badge in the requested language; "query" is always English.
 Never invent prices, discounts, figures, materials, features or testimonials that are not in the page content. No hashtags, no emoji.
 The whole ad lasts about 20 seconds: each voiceover is ONE short spoken sentence of 5 to 9 words.
-For "queries" you act as a professional stock-footage researcher. Give 3 ENGLISH search queries per scene, from most specific to most generic, 1 to 3 words each.
+For "queries" you act as a professional stock-footage researcher. Give 3 search queries per scene, from most specific to most generic, 1 to 3 words each. Queries are ALWAYS IN ENGLISH, whatever the language of the ad (never French, Spanish or German words); the last query is a single very common English word (for example "office", "city", "woman", "laptop").
 Think about what a camera can really film that evokes THIS business and THIS sentence: people, places, screens, gestures, objects of the trade.
 Example for an SEO software: ["google search laptop", "website analytics screen", "marketing team office"]. Example for a running shoe: ["runner tying shoes", "jogging city morning", "running track"].
 Never use abstract words (success, growth, innovation, solution), brand names, or words that only describe graphics (icon, animation, logo, infographic).`;
@@ -64,7 +64,7 @@ ${SHAPE_HEAD}
    "ctaVoiceover": string}
  ]
 }
-Visual rules: use "product" and "detail" for at least 3 scenes; "footage" for at most 1 scene and never for scene 1. Vary the photos when several are usable. If no photo is usable, use "footage" everywhere.`;
+Visual rules: every scene is "product" or "detail": the ad is made only from the product photos. Vary the photos when several are usable, and never show the same photo with the same visual twice in a row. Use "footage" only if no photo at all is usable.`;
 
 const LANGS = { fr: 'French', en: 'English', es: 'Spanish', de: 'German', it: 'Italian', nl: 'Dutch', pt: 'Portuguese', ar: 'Arabic', ja: 'Japanese' };
 const str = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -76,7 +76,8 @@ const GOALS = {
   problem: 'Problem → solution: open on the customer\'s pain, then show how the product solves it.',
   offer: 'Conversion: push the viewer to act now. Mention a price or an offer ONLY if it appears in the page content.',
 };
-const cleanQ = (v) => str(v, 50).replace(/[^\w\s-]/g, '').trim();
+// requêtes de banque d'images : lettres simples uniquement (les accents sont repliés, pas supprimés)
+const cleanQ = (v) => str(v, 50).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim();
 
 // Charge les visuels pour la vision ; garde l'indice d'origine de chacun.
 async function loadImages(sources) {

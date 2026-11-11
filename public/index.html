@@ -27,6 +27,11 @@
 {"@type":"Question","name":"What if my site blocks automated reading?","acceptedAnswer":{"@type":"Answer","text":"Add your photos by hand in the next step and the ad is built from them."}},
 {"@type":"Question","name":"Where do the footage and music come from?","acceptedAnswer":{"@type":"Answer","text":"Stock clips come from a licensed royalty-free library, and the music is composed by ClipMotion, so there are no rights to clear."}}]}]}</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236a5cff'/><stop offset='.55' stop-color='%23c44dff'/><stop offset='1' stop-color='%23ff6b8b'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M12 9l12 7-12 7z' fill='white'/></svg>">
+<link rel="manifest" href="/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
@@ -46,10 +51,11 @@
 <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
 <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M4 12h3M11 12h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/><circle cx="9" cy="12" r="2"/></symbol>
 </defs></svg>
+<div class="topbar" id="topbar" hidden><span id="topbar-text"></span><button type="button" id="topbar-go">Upgrade</button><button type="button" id="topbar-x" aria-label="Dismiss">×</button></div>
 <main id="app">
   <header>
     <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span><span class="wm">Clip<b>Motion</b></span></a>
-    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><button class="navbtn" id="b-account" type="button" hidden>Sign in</button><a class="pillbtn" href="#top">Try it free</a></nav>
+    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><button class="navbtn" id="b-install" type="button" hidden>Install app</button><button class="navbtn" id="b-account" type="button" hidden>Sign in</button><a class="pillbtn" href="#top">Try it free</a></nav>
     <ol class="steps" aria-label="Steps" hidden>
       <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Style</li><li data-s="5">Video</li>
     </ol>
@@ -281,6 +287,7 @@
   <div id="ac-in" hidden>
     <div class="profile"><span class="avatar" id="ac-avatar"></span><div><b id="ac-mail"></b><span id="ac-plan"></span><span id="ac-usage"></span></div></div>
     <a class="btn ghost" id="ac-admin" href="/admin" hidden>Admin dashboard</a>
+    <button class="btn ghost" id="ac-notify" type="button" hidden>Turn on notifications</button>
     <button class="btn" id="ac-up" type="button">Upgrade to Pro</button>
     <h3>Your videos</h3>
     <ul class="history" id="ac-history"></ul>
@@ -307,6 +314,14 @@
   <button class="btn" id="up-go" type="button">Upgrade now</button>
   <button class="btn ghost" id="up-one" type="button" hidden>Just this video, no watermark · $0.99</button>
   <p class="error" id="up-err" role="alert" hidden></p>
+</dialog>
+
+<dialog id="dlgate" aria-labelledby="dl-title">
+  <form method="dialog" class="pk-head"><h3 id="dl-title">Download your video</h3><button class="link" value="close" aria-label="Close">Close</button></form>
+  <p class="hint">Choose how you want it.</p>
+  <button class="choice best" id="dl-one" type="button"><b>This video, no watermark</b><span>Full 1080p, yours to post</span><i>$0.99</i></button>
+  <button class="choice" id="dl-pro" type="button"><b>Go Pro</b><span>30 videos a month, 1080p, no watermark, AI scenes</span><i id="dl-pro-price"></i></button>
+  <a class="choice plain" id="dl-free" download><b>Free version</b><span>720p with the clipmotion.ai watermark</span><i>Free</i></a>
 </dialog>
 
 <dialog id="picker" aria-labelledby="pk-title">

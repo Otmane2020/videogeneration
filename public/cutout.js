@@ -49,6 +49,21 @@
       const i = stack.pop(), x = i % w;
       for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) if (j >= 0 && j < w * h && !seen[j] && dist(j) < tol) { seen[j] = 1; stack.push(j); }
     }
+    // Le fond visible « à travers » le produit n'est pas relié aux bords : on retire aussi les grandes
+    // zones intérieures parfaitement de la couleur du fond (tolérance très serrée, pour ne pas trouer un produit clair).
+    const min = Math.max(400, w * h * 0.004), mark = new Int32Array(w * h);
+    let label = 0;
+    for (let start = 0; start < w * h; start++) {
+      if (seen[start] || mark[start] || dist(start) >= 7) continue;
+      label++;
+      const region = [start];
+      mark[start] = label;
+      for (let k = 0; k < region.length; k++) {
+        const i = region[k], x = i % w;
+        for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) if (j >= 0 && j < w * h && !seen[j] && !mark[j] && dist(j) < 7) { mark[j] = label; region.push(j); }
+      }
+      if (region.length >= min) for (const i of region) seen[i] = 1;
+    }
     return { seen, light: (bg[0] + bg[1] + bg[2]) / 3 > 128 };
   }
 

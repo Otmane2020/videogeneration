@@ -15,7 +15,8 @@ function show(id, step) {
   $$('.view').forEach((v) => (v.hidden = v.id !== id));
   // accueil : navigation du site ; assistant : étapes
   $('.nav').hidden = step !== 1;
-  $('.steps').hidden = step === 1;
+  $('.steps').hidden = step === 1 || step === 5;
+  document.body.classList.toggle('in-video', step === 5);
   $$('.steps li').forEach((li) => {
     li.classList.toggle('on', +li.dataset.s === step);
     li.classList.toggle('done', +li.dataset.s < step);
@@ -227,6 +228,7 @@ $('#b-gen').addEventListener('click', async () => {
   cv.hidden = false; $('#result').hidden = true;
   $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = true;
   show('s-video', 5);
+  waiting(cv, (state.job = { cancelled: false })); // écran d'attente dès le premier instant
   status(ecom ? 'Reviewing your product photos and writing the script…' : 'Studying your brand and writing the script…', 4);
   try {
     const list = ecom ? photoList() : [];
@@ -250,7 +252,7 @@ $('#b-gen').addEventListener('click', async () => {
   } catch (err) {
     show('s-opts', 4);
     fail($('#e-opts'), err.message);
-    if (/videos? (this month|of your plan)/.test(err.message)) openUpgrade(err.message);
+    if (/videos? (this month|of your plan)/.test(err.message)) { announce(err.message); openUpgrade(err.message); }
     actx.close().catch(() => {});
   }
 });
@@ -551,7 +553,7 @@ function safePalette(p) {
   let primary = /^#[0-9a-f]{6}$/i.test(p.primary || '') ? p.primary : '#7c5cff', accent = /^#[0-9a-f]{6}$/i.test(p.accent || '') ? p.accent : '#ffd166';
   if (lum(primary) < 40 && sat(accent) > 60 && lum(accent) > 70) [primary, accent] = [accent, '#ffd166']; // marque noire : la couleur vive devient principale
   else if (lum(primary) < 40) primary = '#7c5cff';
-  if (lum(accent) < 110 || sat(accent) < 30 && lum(accent) < 200) accent = '#ffd166';
+  if (lum(accent) < 110 || sat(accent) < 45) accent = '#ffd166'; // ni sombre ni gris : les mots surlignés doivent ressortir
   const d = rgb(primary).reduce((a, v, i) => a + Math.abs(v - rgb(accent)[i]), 0);
   if (d < 90) accent = lum(primary) > 150 ? '#ffffff' : '#ffd166';
   return { primary, accent };
@@ -631,25 +633,58 @@ function makeRenderer(cv, job) {
     g.addColorStop(0, P); g.addColorStop(1, '#0b0920');
     ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
   }
-  // décor de studio : mur, sol, halo de lumière. Léger travelling avant pendant la scène.
-  function studio(k) {
-    const hz = H * (wide ? 0.66 : 0.6), z = 1 + 0.05 * k;
+  // Décor dessiné par le code, aux couleurs de la marque : dégradés, halos, anneaux lumineux,
+  // faisceaux, particules et podium. Tout est animé, rien ne vient d'une banque d'images.
+  const darkSet = plan.decor === 'dark' || plan.decor === 'studio';
+  const dots = Array.from({ length: 26 }, (_, i) => ({ x: (i * 0.618) % 1, y: (i * 0.371) % 1, r: 3 + (i % 5) * 2.2, s: 0.4 + (i % 7) * 0.12 }));
+  function studio(k, t = 0) {
+    const hz = H * (wide ? 0.68 : 0.63), cx = W / 2, z = 1 + 0.05 * k;
     ctx.save();
-    ctx.translate(W / 2, hz); ctx.scale(z, z); ctx.translate(-W / 2, -hz);
-    let g = ctx.createLinearGradient(0, 0, 0, hz);
-    g.addColorStop(0, decor.wall[0]); g.addColorStop(1, decor.wall[1]);
-    ctx.fillStyle = g; ctx.fillRect(-40, -40, W + 80, hz + 40);
+    ctx.translate(cx, hz); ctx.scale(z, z); ctx.translate(-cx, -hz);
+    // fond : dégradé profond ou clair selon l'ambiance
+    let g = ctx.createLinearGradient(0, 0, W, H);
+    if (darkSet) { g.addColorStop(0, '#0d0b1c'); g.addColorStop(0.55, mix(P, '#07060f', 0.78)); g.addColorStop(1, '#050409'); }
+    else { g.addColorStop(0, decor.wall[0]); g.addColorStop(0.6, decor.wall[1]); g.addColorStop(1, decor.floor[1]); }
+    ctx.fillStyle = g; ctx.fillRect(-60, -60, W + 120, H + 120);
+    // deux halos de couleur qui dérivent lentement
+    const blob = (bx, by, r, col, a) => { const q = ctx.createRadialGradient(bx, by, 0, bx, by, r); q.addColorStop(0, col + a); q.addColorStop(1, col + '00'); ctx.fillStyle = q; ctx.fillRect(-60, -60, W + 120, H + 120); };
+    blob(W * (0.22 + 0.05 * Math.sin(t * 0.5)), H * 0.2, Math.max(W, H) * 0.55, P, darkSet ? '66' : '3d');
+    blob(W * (0.82 + 0.04 * Math.cos(t * 0.4)), H * 0.42, Math.max(W, H) * 0.5, A, darkSet ? '4d' : '33');
+    // faisceaux de lumière en biais
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < 3; i++) {
+      const bx = W * (0.1 + i * 0.36) + Math.sin(t * 0.3 + i) * 30;
+      const q = ctx.createLinearGradient(bx, 0, bx + W * 0.3, hz);
+      q.addColorStop(0, `rgba(255,255,255,${darkSet ? 0.1 : 0.22})`); q.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = q; ctx.beginPath(); ctx.moveTo(bx - 20, -40); ctx.lineTo(bx + 90, -40); ctx.lineTo(bx + W * 0.42, hz); ctx.lineTo(bx + W * 0.16, hz); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    // anneaux lumineux derrière le produit
+    const ry = hz - Math.min(W, H) * 0.42;
+    for (let i = 0; i < 3; i++) {
+      const r = Math.min(W, H) * (0.3 + i * 0.1) + Math.sin(t * 0.9 + i * 1.7) * 6;
+      ctx.strokeStyle = (i === 1 ? A : P) + (darkSet ? ['aa', '66', '33'][i] : ['77', '44', '22'][i]); ctx.lineWidth = 3 - i * 0.7;
+      ctx.beginPath(); ctx.arc(cx, ry, r, Math.PI * (0.92 + 0.1 * i) + t * 0.12 * (i % 2 ? -1 : 1), Math.PI * (2.08 - 0.1 * i) + t * 0.12 * (i % 2 ? -1 : 1)); ctx.stroke();
+    }
+    // sol : reflet et lignes de fuite
     g = ctx.createLinearGradient(0, hz, 0, H);
-    g.addColorStop(0, decor.floor[0]); g.addColorStop(1, decor.floor[1]);
-    ctx.fillStyle = g; ctx.fillRect(-40, hz, W + 80, H - hz + 40);
-    const lx = W * (0.5 + 0.06 * (k - 0.5));
-    g = ctx.createRadialGradient(lx, hz * 0.62, 10, lx, hz * 0.62, Math.max(W, H) * 0.62);
-    g.addColorStop(0, decor.light); g.addColorStop(1, 'rgba(255,255,255,0)');
-    ctx.fillStyle = g; ctx.fillRect(-40, -40, W + 80, H + 80);
-    if (plan.decor === 'dark') {
-      g = ctx.createRadialGradient(W * 0.5, hz, 0, W * 0.5, hz, W * 0.7);
-      g.addColorStop(0, A + '55'); g.addColorStop(1, A + '00');
-      ctx.fillStyle = g; ctx.fillRect(0, hz - H * 0.3, W, H * 0.6);
+    if (darkSet) { g.addColorStop(0, mix(P, '#0a0914', 0.7)); g.addColorStop(1, '#040308'); } else { g.addColorStop(0, decor.floor[0]); g.addColorStop(1, decor.floor[1]); }
+    ctx.fillStyle = g; ctx.fillRect(-60, hz, W + 120, H - hz + 60);
+    ctx.strokeStyle = darkSet ? 'rgba(255,255,255,.07)' : 'rgba(0,0,0,.06)'; ctx.lineWidth = 1.5;
+    for (let i = -6; i <= 6; i++) { ctx.beginPath(); ctx.moveTo(cx + i * W * 0.05, hz); ctx.lineTo(cx + i * W * 0.34, H + 40); ctx.stroke(); }
+    for (let i = 1; i <= 4; i++) { const yy = hz + (H - hz) * Math.pow(i / 4.4, 1.7); ctx.beginPath(); ctx.moveTo(-60, yy); ctx.lineTo(W + 60, yy); ctx.stroke(); }
+    // podium
+    const pw = Math.min(W * 0.74, 560), py = hz + (wide ? 18 : 34);
+    g = ctx.createRadialGradient(cx, py, 0, cx, py, pw / 2);
+    g.addColorStop(0, darkSet ? 'rgba(255,255,255,.2)' : 'rgba(255,255,255,.85)'); g.addColorStop(0.7, darkSet ? P + '33' : 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.save(); ctx.translate(cx, py); ctx.scale(1, 0.2); ctx.fillStyle = g; ctx.beginPath(); ctx.arc(0, 0, pw / 2, 0, 7); ctx.fill();
+    ctx.strokeStyle = A + 'aa'; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(0, 0, pw * 0.43, 0, 7); ctx.stroke(); ctx.restore();
+    // particules qui montent
+    for (const d of dots) {
+      const yy = ((d.y - t * 0.035 * d.s) % 1 + 1) % 1 * hz, xx = d.x * W + Math.sin(t * d.s + d.x * 9) * 14;
+      ctx.fillStyle = (d.r > 8 ? A : '#ffffff') + (darkSet ? '55' : '77');
+      ctx.beginPath(); ctx.arc(xx, yy, d.r * (darkSet ? 0.7 : 0.6), 0, 7); ctx.fill();
     }
     ctx.restore();
   }
@@ -657,7 +692,7 @@ function makeRenderer(cv, job) {
     const ph = sc.ph;
     if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.75 + 0.3 * k, lerp(0.3, 0.7, easeInOut(k)), lerp(0.38, 0.62, easeInOut(k)));
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
-    if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
+    if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
     footage(sc, k);
   }
 
@@ -1023,7 +1058,8 @@ async function exportOffline(job, cv, draw, hasAudio) {
     if (sc.clip) sc.frame = await clipFrame(sc.clip, t - sc.start);
     draw(t);
     await vsrc.add(t, 1 / FPS);
-    if (f % 10 === 0) { status(`Rendering… ${Math.round((f / frames) * 100)}%`, (f / frames) * 100); await new Promise((r) => setTimeout(r)); }
+    // on laisse le navigateur afficher l'image en cours (sinon l'aperçu reste figé ou noir sur mobile)
+    if (f % 6 === 0) { status(`Rendering… ${Math.round((f / frames) * 100)}%`, (f / frames) * 100); await new Promise((r) => { const id = setTimeout(r, 60); requestAnimationFrame(() => { clearTimeout(id); r(); }); }); }
   }
   await output.finalize();
   return new Blob([output.target.buffer], { type: 'video/mp4' });
@@ -1096,6 +1132,27 @@ async function exportRealtime(job, cv, draw) {
   return job.cancelled ? null : new Blob(chunks, { type: (rec.mimeType || 'video/webm').split(';')[0] });
 }
 
+// Écran d'attente dessiné dans le cadre vidéo tant que le montage n'a pas commencé (sinon le cadre reste noir).
+function waiting(cv, job) {
+  const ctx = cv.getContext('2d'), t0 = performance.now();
+  (function frame() {
+    if (job.cancelled || job.rendering || state.job !== job) return;
+    const W = cv.width, H = cv.height, t = (performance.now() - t0) / 1000;
+    const g = ctx.createLinearGradient(0, 0, W, H);
+    g.addColorStop(0, '#1a1340'); g.addColorStop(1, '#07060f');
+    ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 3; i++) {
+      ctx.strokeStyle = ['#6a5cff', '#c44dff', '#ff6b8b'][i]; ctx.lineWidth = W * 0.012; ctx.lineCap = 'round';
+      ctx.beginPath(); ctx.arc(W / 2, H * 0.44, W * (0.1 + i * 0.045), t * (2.2 - i * 0.5) + i, t * (2.2 - i * 0.5) + i + 1.9); ctx.stroke();
+    }
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.font = `700 ${Math.round(W * 0.052)}px ${FONT}`;
+    ctx.fillText('Creating your video', W / 2, H * 0.62);
+    ctx.fillStyle = 'rgba(255,255,255,.6)'; ctx.font = `500 ${Math.round(W * 0.034)}px ${FONT}`;
+    ctx.fillText($('#st-status').textContent.slice(0, 44), W / 2, H * 0.62 + W * 0.07);
+    requestAnimationFrame(frame);
+  })();
+}
+
 const cached = (map, key, make) => { if (!map.has(key)) map.set(key, make().catch((e) => { map.delete(key); throw e; })); return map.get(key); };
 
 async function produce(actx) {
@@ -1112,6 +1169,7 @@ async function produce(actx) {
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);
   result.pause();
   cv.hidden = false; result.hidden = true; result.removeAttribute('src');
+  waiting(cv, job);
   $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = $('#upsell').hidden = true;
 
   // formats courts : moins de scènes, pour que chacune reste lisible
@@ -1126,7 +1184,7 @@ async function produce(actx) {
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
-  const needClip = (s) => s.visual === 'footage' || s.visual === 'site';
+  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site') || (plan.type === 'ecom' && s.visual === 'footage' && !photoIds.length);
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
@@ -1188,6 +1246,8 @@ async function produce(actx) {
       else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;
       s.still = stills[i] || null;
     });
+    // e-commerce : une scène prévue en vidéo de stock devient une scène produit dès qu'une photo existe
+    if (plan.type === 'ecom' && best) scenes.forEach((s, i) => { if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; } });
     // sans photo, la scène retombe sur la vidéo ou le dégradé
     scenes.forEach((s) => { if (!s.ph && (s.visual === 'product' || s.visual === 'detail')) s.visual = 'footage'; });
 
@@ -1207,6 +1267,7 @@ async function produce(actx) {
     scenes.forEach((s) => { s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, s.speech / tl.rate, 0.3) : []; });
     const track = Music.byId(state.music);
     job.musicBuf = track ? await Music.render(track, job.total).catch(() => null) : null;
+    job.rendering = true;
     const draw = makeRenderer(cv, job);
     const hasAudio = voices.some(Boolean) || !!job.musicBuf;
 
@@ -1225,6 +1286,8 @@ async function produce(actx) {
     state.videoUrl = URL.createObjectURL(blob);
     result.src = state.videoUrl; result.hidden = false; cv.hidden = true;
     $('#b-dl').href = state.videoUrl; $('#b-dl').download = name;
+    $('#dl-free').href = state.videoUrl; $('#dl-free').download = name;
+    $('#b-dl').dataset.gate = paid ? '' : '1';
     const file = new File([blob], name, { type: blob.type });
     $('#b-share').hidden = !navigator.canShare?.({ files: [file] });
     $('#b-share').onclick = () => navigator.share({ files: [file], title: plan.brand }).catch(() => {});
@@ -1310,6 +1373,14 @@ fetch('/api/config').then((r) => r.json()).then(({ plans, reviews = [] }) => {
   });
 }).catch(() => { $('#pricing').hidden = true; });
 
+/* ---------- bandeau d'annonce ---------- */
+function announce(text) {
+  $('#topbar-text').textContent = text;
+  $('#topbar').hidden = false;
+}
+$('#topbar-go').addEventListener('click', () => openUpgrade($('#topbar-text').textContent));
+$('#topbar-x').addEventListener('click', () => { $('#topbar').hidden = true; });
+
 /* ---------- compte, profil, offre ---------- */
 const account = { user: null, history: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
 const isPaid = () => !!account.user && account.user.plan !== 'free';
@@ -1346,7 +1417,8 @@ function paintAccount() {
   $('#ac-switch').textContent = account.signup ? 'Already have an account? Sign in' : 'New here? Create an account';
   $('#ac-pass').autocomplete = account.signup ? 'new-password' : 'current-password';
 }
-const refreshAccount = () => fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; account.usage = j.usage; account.history = j.history || []; $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
+const refreshAccount = () => fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; account.usage = j.usage; account.history = j.history || [];
+  if (j.usage && j.usage.used >= j.usage.limit && !(j.user && j.user.plan === 'business')) announce(`You have used your ${j.usage.limit} ${j.user && j.user.plan !== 'free' ? '' : 'free '}videos this month. Upgrade to keep creating.`); $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
 // fenêtre d'offre : s'ouvre quand une option payante est demandée
 function openUpgrade(why, single) {
   $('#up-one').hidden = !single;
@@ -1412,3 +1484,41 @@ $('#ac-forgot').addEventListener('click', async () => {
   $('#ac-msg').textContent = 'If an account exists for this address, a reset link is on its way.';
 });
 if (account.reset) openAccount(false);
+
+/* ---------- téléchargement : choix sans filigrane avant de télécharger la version gratuite ---------- */
+$('#b-dl').addEventListener('click', (e) => {
+  if (!$('#b-dl').dataset.gate) return;
+  e.preventDefault();
+  $('#dl-pro-price').textContent = account.proPrice || '';
+  $('#dlgate').showModal();
+});
+$('#dl-one').addEventListener('click', () => { $('#dlgate').close(); $('#up-one').click(); });
+$('#dl-pro').addEventListener('click', () => { $('#dlgate').close(); openUpgrade('Every video in 1080p, without watermark.', true); });
+$('#dl-free').addEventListener('click', () => $('#dlgate').close());
+
+/* ---------- application installable (PWA) et notifications ---------- */
+let installEvent = null;
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(() => {});
+addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvent = e; $('#b-install').hidden = false; });
+addEventListener('appinstalled', () => { $('#b-install').hidden = true; });
+$('#b-install').addEventListener('click', async () => { if (!installEvent) return; installEvent.prompt(); await installEvent.userChoice.catch(() => {}); installEvent = null; $('#b-install').hidden = true; });
+// notifications : proposées dans le compte quand le navigateur les permet et qu'elles ne sont pas déjà actives
+const canPush = 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window;
+async function paintNotify() {
+  if (!canPush) return;
+  const reg = await navigator.serviceWorker.ready.catch(() => null), sub = reg && (await reg.pushManager.getSubscription().catch(() => null));
+  $('#ac-notify').hidden = !reg || !!sub || Notification.permission === 'denied';
+}
+$('#ac-notify').addEventListener('click', async () => {
+  try {
+    const { key } = await (await fetch('/api/push')).json();
+    if (!key || (await Notification.requestPermission()) !== 'granted') return paintNotify();
+    const reg = await navigator.serviceWorker.ready;
+    const raw = Uint8Array.from(atob(key.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+    const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: raw });
+    await api('/api/push', { action: 'subscribe', subscription: sub.toJSON() });
+    $('#ac-notify').textContent = 'Notifications are on';
+    setTimeout(paintNotify, 1500);
+  } catch (err) { console.warn('push', err); }
+});
+paintNotify();

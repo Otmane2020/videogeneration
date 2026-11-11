@@ -16,6 +16,8 @@ h2{margin:28px 0 12px}@media(min-width:760px){.kpis{grid-template-columns:repeat
   <h2>Last 14 days</h2><div class="bars" id="days"></div>
   <h2>Top pages today</h2><div class="bars" id="top"></div>
   <h2>Traffic sources today</h2><div class="bars" id="refs"></div>
+  <h2>Push notification</h2>
+  <div style="display:grid;gap:8px;max-width:520px"><input id="pt" placeholder="Title" maxlength="80"><input id="pb" placeholder="Message" maxlength="200"><input id="pu" placeholder="Link, e.g. /#pricing" value="/"><button class="btn" id="ps" type="button" style="margin:0">Send to all subscribers</button><p class="hint" id="pr"></p></div>
   <h2>Users</h2><div class="wrap"><table class="tbl"><thead><tr><th>Email</th><th>Plan</th><th>Videos</th><th>This month</th><th>Credits</th><th>Joined</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
 </div>
 <script>
@@ -42,6 +44,7 @@ async function load() {
     return tr;
   }));
 }
+$('#ps').onclick = async () => { const r = await fetch('/api/push', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'send', title: $('#pt').value, body: $('#pb').value, url: $('#pu').value }) }); const j = await r.json(); $('#pr').textContent = r.ok ? `Sent to ${j.sent} of ${j.subscribers} subscribers.` : j.error; };
 load();
 </script>
 </main></body></html>

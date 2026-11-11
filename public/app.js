@@ -1396,7 +1396,7 @@ async function produce(actx) {
       tc.getContext('2d').drawImage(cv, 0, 0, TW, TH);
       thumb = tc.toDataURL('image/jpeg', 0.72);
     } catch {}
-    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, thumb } })
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, captionStyle: job.captionStyle, templateStyle: job.templateStyle, thumb } })
       .then((r) => r.json()).then(async (j) => { if (j.id && blob) { try { await vidIdb.set(j.id, blob); await vidIdb.prune(15); } catch {} } refreshAccount(); }).catch(() => {});
   } catch (err) {
     console.error(err);

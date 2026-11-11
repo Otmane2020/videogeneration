@@ -250,18 +250,38 @@ module.exports = handler('POST', async (req, res) => {
       if (!u || u.plan === 'free') throw httpError(402, 'Meta Muse AI backdrop requires Pro plan');
     }
     const framing = format === '9:16'
-      ? 'Render as a tall 2:3 portrait composition intended to be center-cropped into a 9:16 mobile video. Keep the glowing arc, light source and empty product landing area inside the central safe crop; avoid important details near the left and right edges.'
+      ? 'Compose for a vertical 9:16 product video. Keep the hero placement area and the most important environmental details inside the central portrait-safe composition.'
       : format === '16:9'
-        ? 'Render as a wide 3:2 landscape composition intended to be center-cropped into a 16:9 video. Keep the glowing arc, light source and empty product landing area inside the central safe crop; avoid important details near the top and bottom edges.'
-        : 'Render as a balanced square 1:1 composition with the luminous arc and empty product landing area centered.';
+        ? 'Compose for a horizontal 16:9 product video. Keep the hero placement area and the most important environmental details inside the central landscape-safe composition.'
+        : 'Compose for a square 1:1 product video with a balanced, premium advertising composition.';
     const scene = clean(b.scene, 220);
     const category = clean(b.category, 60);
-    const prompt = `Create a premium photorealistic advertising BACKGROUND PLATE ONLY for a high-end ${category || 'consumer product'} product commercial.
-Visual direction: deep midnight navy and indigo studio atmosphere, luminous violet and lavender light ribbons forming a large elegant arc behind the hero area, soft atmospheric purple bloom, subtle cool highlights, glossy dark reflective floor with a restrained realistic reflection, cinematic studio lighting, premium luxury electronics campaign, refined gradients, realistic material and light falloff.
+    const productName = clean(b.productName, 120);
+    const description = clean(b.productDescription, 420);
+    const variant = clean(b.variant, 120);
+    const palette = clean(b.brandPalette, 100);
+    const prompt = `Act as an award-winning creative director and commercial product photographer. Create ONE beautiful, photorealistic advertising BACKGROUND ENVIRONMENT for the exact product shown in the attached reference image.
+
+PRODUCT TO UNDERSTAND
+Product name: ${productName || 'Identify it from the reference photo'}.
+Category: ${category || 'Infer the exact category from the reference photo'}.
+Product details: ${description || 'Read the visible product design, materials, finish and intended use from the reference photo'}.
+Selected variant: ${variant || 'Use the visible variant in the reference photo'}.
+Brand accent colours, only if useful: ${palette || 'Choose colours that harmonise with the actual product'}.
+
+PRODUCT-SPECIFIC ART DIRECTION
+First inspect the reference photo. Identify what the product actually is, its dominant colours, materials, finish, silhouette, target audience and real-world use. Then invent a distinct premium setting that makes sense for THIS product and makes it look desirable.
+Use the supplied campaign direction as a creative brief, not as a fixed template: ${scene || 'Invent the most fitting visual concept from the product itself'}.
+Choose the environment, architecture, surfaces, textures, lighting, colour palette and atmosphere dynamically from the product. A beauty product, a sofa, a watch, a pair of shoes, a kitchen appliance and a pair of headphones must NOT all receive the same studio, colour scheme or decorative motif. Avoid a repeated purple/neon/ring background unless the actual product and campaign brief clearly call for it. Do not use a generic one-style-fits-all backdrop.
+Create a polished, visually rich setting with believable depth and premium lighting. Subtle contextual details may appear at the edges when they reinforce the product's world, but they must never compete with or overlap the hero placement area.
+
+COMPOSITION
 ${framing}
-The lower-middle foreground must remain clean, open and empty so ClipMotion can composite the customer's original transparent product cutout there. Create depth with the environment and lighting, not with props.
-${scene ? `Additional mood direction: ${scene}.` : ''}
-The reference image, when supplied, is ONLY a guide for the product category, its palette and the campaign mood. Do not reproduce the referenced product. Do not draw any product, object, headphones, device, pedestal, furniture, person, hand, text, lettering, brand, logo, watermark, frame or mockup. No placeholder object. Output only the finished empty photographic environment.`;
+Leave a clear, attractive hero placement area in the centre/lower-middle, with a suitable surface, floor, plinth or natural setting chosen for this product. The area must have enough contrast and visual breathing room for ClipMotion to composite the customer's original transparent product cutout on top. This should look like a finished campaign photograph, not an empty flat colour or a blank studio wall.
+
+STRICT PRODUCT FIDELITY
+The reference is for product understanding and colour matching only. Do NOT draw, recreate, approximate, duplicate or insert the product itself. No replacement product, no silhouette, no placeholder object, no second competing hero item, no person or hand, no text, no letters, no logo, no brand mark, no watermark, no border and no mockup. The real product cutout will be composited by ClipMotion after this background is generated.
+Output only the finished, product-specific photographic environment.`;
     const generated = await museBackdrop({ prompt, referenceImage: b.referenceImage || null });
     return send(res, 200, generated.image, {
       'content-type': generated.mediaType,

@@ -1155,7 +1155,24 @@ async function produce(actx) {
 
     // photos produit : détourage quand le fond est uni, sinon la photo est utilisée telle quelle
     const byId = new Map();
-    photos.forEach((img, n) => { if (img) byId.set(photoIds[n], (cache['cut' + state.photoUrls[photoIds[n]]] ||= { img, cut: cutout(img) })); });
+    // détourage par modèle de segmentation (dans le navigateur) ; en cas d'échec, méthode par couleur
+    const kinds = new Map(plan.photos.map((p) => [p.index, p.kind]));
+    // seules les photos montrées « en vedette » sont détourées (le calcul prend quelques secondes par photo)
+    const hero = new Set(scenes.filter((x) => x.visual === 'product').map((x) => x.photo));
+    hero.add(photoIds.find((i) => kinds.get(i) === 'packshot') ?? photoIds[0]);
+    for (let n = 0; n < photos.length; n++) {
+      const img = photos[n], id = photoIds[n], key = 'cut' + state.photoUrls[id];
+      if (!img) continue;
+      if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null }); continue; }
+      if (!cache[key]) {
+        status('Cutting out your product…');
+        const cut = await Cutout.run(img, { force: kinds.get(id) === 'packshot', onProgress: (f) => status(`Loading the cut-out tool… ${Math.round(f * 100)}%`) })
+          .catch((e) => { console.warn('cutout', e); return cutout(img); });
+        if (job.cancelled) return;
+        cache[key] = { img, cut };
+      }
+      byId.set(id, cache[key]);
+    }
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
     // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
     if (best?.cut && $('#bgai').value === '1') {

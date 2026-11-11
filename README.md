@@ -20,6 +20,7 @@ Both: real logo and logo-derived palette, varied transitions, voice-over, word-b
 | Deepgram Aura | voice-over |
 | [Mediabunny](https://github.com/Vanilagy/mediabunny) (MPL-2.0, vendored in `public/vendor`) | H.264 MP4 encoding through WebCodecs |
 | mShots (WordPress.com) | mobile screenshot of the site |
+| [ormbg](https://huggingface.co/onnx-community/ormbg-ONNX) (Apache-2.0) with onnxruntime-web (MIT) | product cut-out, run in the browser; the exact background is repainted grey first so light products on light backgrounds keep their shape |
 | Poppins (OFL, in `public/fonts`) | video typography |
 
 ## Landing page, guides and SEO

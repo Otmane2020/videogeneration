@@ -4,16 +4,52 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#07060f">
-<title>ClipMotion — Paste a link, get video ads</title>
-<meta name="description" content="ClipMotion turns your website or product page into ready-to-post video ads with voice-over, captions and music.">
+<title>ClipMotion — AI Video Ad Generator for E-commerce &amp; SaaS</title>
+<meta name="description" content="Paste a product page or website link and ClipMotion creates a video ad with voice-over, captions and music. Built for e-commerce and SaaS. Free to try.">
+<link rel="canonical" href="https://clipmotion.ai/">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="ClipMotion">
+<meta property="og:title" content="ClipMotion — Paste a link, get video ads">
+<meta property="og:description" content="AI video ads for e-commerce and SaaS: script, voice-over, captions, music and MP4 export from a single link.">
+<meta property="og:url" content="https://clipmotion.ai/">
+<meta property="og:image" content="https://clipmotion.ai/demo/og.jpg">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ClipMotion — Paste a link, get video ads">
+<meta name="twitter:description" content="AI video ads for e-commerce and SaaS, generated from a single link.">
+<meta name="twitter:image" content="https://clipmotion.ai/demo/og.jpg">
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[
+{"@type":"Organization","@id":"https://clipmotion.ai/#org","name":"ClipMotion","url":"https://clipmotion.ai/"},
+{"@type":"WebSite","@id":"https://clipmotion.ai/#site","url":"https://clipmotion.ai/","name":"ClipMotion","publisher":{"@id":"https://clipmotion.ai/#org"}},
+{"@type":"SoftwareApplication","name":"ClipMotion","applicationCategory":"MultimediaApplication","operatingSystem":"Web","url":"https://clipmotion.ai/","description":"AI video ad generator that turns a product page or website link into a video ad with voice-over, captions and music.","offers":{"@type":"Offer","price":"0","priceCurrency":"USD"}},
+{"@type":"FAQPage","mainEntity":[
+{"@type":"Question","name":"Do I need an account?","acceptedAnswer":{"@type":"Answer","text":"No. Paste a link and your first ad is edited right away, in your browser."}},
+{"@type":"Question","name":"Does the AI change my product photos?","acceptedAnswer":{"@type":"Answer","text":"No. Only the plain background is removed. The product is never regenerated: its shape, logo and colours stay exactly as photographed."}},
+{"@type":"Question","name":"What if my site blocks automated reading?","acceptedAnswer":{"@type":"Answer","text":"Add your photos by hand in the next step and the ad is built from them."}},
+{"@type":"Question","name":"Where do the footage and music come from?","acceptedAnswer":{"@type":"Answer","text":"Stock clips come from a licensed royalty-free library, and the music is composed by ClipMotion, so there are no rights to clear."}}]}]}</script>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><defs><linearGradient id='g' x1='0' y1='0' x2='1' y2='1'><stop offset='0' stop-color='%236a5cff'/><stop offset='.55' stop-color='%23c44dff'/><stop offset='1' stop-color='%23ff6b8b'/></linearGradient></defs><rect width='32' height='32' rx='9' fill='url(%23g)'/><path d='M12 9l12 7-12 7z' fill='white'/></svg>">
 <link rel="stylesheet" href="/style.css">
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-link" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></symbol>
+<symbol id="i-scan" viewBox="0 0 24 24"><path d="M4 8V6a2 2 0 0 1 2-2h2M16 4h2a2 2 0 0 1 2 2v2M20 16v2a2 2 0 0 1-2 2h-2M8 20H6a2 2 0 0 1-2-2v-2M4 12h16"/></symbol>
+<symbol id="i-target" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><circle cx="12" cy="12" r="3.5"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></symbol>
+<symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3M9 21h6"/></symbol>
+<symbol id="i-film" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M10 9.5v5l4.5-2.5zM3 9h3M3 15h3M18 9h3M18 15h3"/></symbol>
+<symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5 12 15l4.5-4.5M5 20h14"/></symbol>
+<symbol id="i-bag" viewBox="0 0 24 24"><path d="M5 8h14l-1 12H6zM9 8V7a3 3 0 0 1 6 0v1"/></symbol>
+<symbol id="i-monitor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4M7 12l3-3 2.5 2 4-4"/></symbol>
+<symbol id="i-cube" viewBox="0 0 24 24"><path d="M12 3 4 7.5v9L12 21l8-4.5v-9zM4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+<symbol id="i-phone" viewBox="0 0 24 24"><rect x="7" y="2.5" width="10" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+<symbol id="i-palette" viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.5 0 2-1 2-2s-.6-1.6-.6-2.5c0-1 .8-1.5 1.8-1.5H17a4 4 0 0 0 4-4c0-4.4-4-8-9-8z"/><circle cx="7.8" cy="11" r="1"/><circle cx="11" cy="7.5" r="1"/><circle cx="15.5" cy="8.5" r="1"/></symbol>
+<symbol id="i-captions" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M7 14h4M13 14h4M7 10.5h2M11 10.5h6"/></symbol>
+<symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V6l10-2v12"/><circle cx="6.5" cy="18" r="2.5"/><circle cx="16.5" cy="16" r="2.5"/></symbol>
+<symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h9M17 7h3M4 17h3M11 17h9M4 12h3M11 12h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/><circle cx="9" cy="12" r="2"/></symbol>
+</defs></svg>
 <main id="app">
   <header>
     <a class="logo" href="/" aria-label="ClipMotion home"><span class="mark"></span>ClipMotion</a>
-    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="#faq">FAQ</a><a class="pillbtn" href="#top">Try it free</a></nav>
+    <nav class="nav" aria-label="Site"><a href="#how">How it works</a><a href="#examples">Examples</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><a class="pillbtn" href="#top">Try it free</a></nav>
     <ol class="steps" aria-label="Steps" hidden>
       <li data-s="1">Link</li><li data-s="2">Scan</li><li data-s="3">Setup</li><li data-s="4">Video</li>
     </ol>
@@ -22,57 +58,94 @@
   <section id="s-url" class="view landing">
     <div class="hero" id="top">
       <div class="hero-copy">
-        <p class="eyebrow">AI video ads · SaaS &amp; e-commerce</p>
+        <p class="eyebrow">AI video ad generator</p>
         <h1>Paste a link.<br><em>Get video ads.</em></h1>
-        <p class="lead">ClipMotion reads your website or product page, writes the script, records the voice-over and edits an ad ready for Reels, TikTok and YouTube.</p>
+        <p class="lead">ClipMotion turns a product page or a SaaS website into a ready-to-post video ad: script, voice-over, captions, music and motion, in the format you need.</p>
         <form id="f-url" novalidate>
           <label for="url" class="sr">Website or product page address</label>
           <div class="field">
             <input id="url" name="url" type="url" inputmode="url" autocomplete="url" autocapitalize="off" spellcheck="false" placeholder="yourstore.com/product" required>
-            <button class="btn" type="submit">Create my ads</button>
+            <button class="btn" type="submit">Create my video</button>
           </div>
         </form>
         <p class="error" id="e-url" role="alert" hidden></p>
         <ul class="trust"><li>No sign-up</li><li>Free to try</li><li>MP4 up to 1080p</li></ul>
       </div>
       <div class="hero-art" aria-hidden="true">
-        <div class="mock m1"><span class="bar"></span><i class="chip"></i><div class="prod"></div><b>Your product,</b><b class="alt">front and centre</b><small>voice-over · captions</small></div>
-        <div class="mock m2"><span class="bar"></span><i class="chip"></i><div class="screen"><u></u><u></u><u></u></div><b>Your site</b><b class="alt">in a live demo</b></div>
+        <figure class="demo d1"><img src="/demo/watch.jpg" alt="" width="576" height="1008"><figcaption><b>Built to last</b><b class="alt">a lifetime</b></figcaption></figure>
+        <figure class="demo d2"><img src="/demo/sneakers.jpg" alt="" width="576" height="1008"><figcaption><b>New drop</b><b class="alt">out now</b></figcaption></figure>
+        <figure class="demo d3"><img src="/demo/saas.jpg" alt="" width="576" height="1008"><figcaption><b>Your growth,</b><b class="alt">in one view</b></figcaption></figure>
       </div>
     </div>
 
     <section class="block" id="how">
       <p class="eyebrow">How it works</p>
-      <h2>Three steps, zero editing</h2>
-      <ol class="how">
-        <li><span>1</span><h3>Paste your link</h3><p>A SaaS site or a product page: ClipMotion collects copy, photos, variants, price, logo and brand colours.</p></li>
-        <li><span>2</span><h3>Confirm the essentials</h3><p>SaaS or e-commerce, product colour and size, the photos to use. Two taps and you are done.</p></li>
-        <li><span>3</span><h3>Download the MP4</h3><p>Pick your goal, format and length. Your ad is generated right away, and you can fine-tune text, visuals and music.</p></li>
+      <h2>From link to video ad in six automated steps</h2>
+      <ol class="flow">
+        <li><svg class="ic" aria-hidden="true"><use href="#i-link"/></svg><h3>1. Paste a link</h3><p>A product page or your SaaS website.</p></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-scan"/></svg><h3>2. Smart scan</h3><p>Copy, photos, variants, price, logo and brand colours.</p></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-target"/></svg><h3>3. Pick a goal</h3><p>Launch, problem → solution, awareness or sales.</p></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-mic"/></svg><h3>4. Script &amp; voice</h3><p>Written for your goal, in your site’s language.</p></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-film"/></svg><h3>5. Motion edit</h3><p>Animated scenes, captions, transitions and music.</p></li>
+        <li><svg class="ic" aria-hidden="true"><use href="#i-download"/></svg><h3>6. Export MP4</h3><p>9:16, 1:1 or 16:9, up to 1080p.</p></li>
       </ol>
+      <div class="engines">
+        <article>
+          <header><svg class="ic" aria-hidden="true"><use href="#i-bag"/></svg><h3>E-commerce engine</h3></header>
+          <p>Your product is the hero of every scene.</p>
+          <ol><li>Reads the product record: every photo, colour, size and price</li><li>Keeps only photos of this product</li><li>Removes the plain background, never the product</li><li>Stages it on a studio set or a custom AI scene</li><li>Adds close-ups, verified selling points and the price</li></ol>
+        </article>
+        <article>
+          <header><svg class="ic" aria-hidden="true"><use href="#i-monitor"/></svg><h3>SaaS engine</h3></header>
+          <p>Your brand and your product in action.</p>
+          <ol><li>Finds your logo and builds the palette from it</li><li>Captures your site and demos it inside a phone</li><li>Searches matching HD footage for the story</li><li>Writes a hook, the value and a clear call to action</li><li>Closes on your logo, tagline and button</li></ol>
+        </article>
+      </div>
     </section>
 
-    <section class="block">
-      <p class="eyebrow">What you get</p>
-      <h2>Ads that look like your brand, not a slideshow</h2>
+    <section class="block" id="examples">
+      <p class="eyebrow">Examples</p>
+      <h2>One tool for products and for software</h2>
+      <div class="gallery">
+        <figure class="demo"><img src="/demo/watch.jpg" alt="Example video ad frame for a wristwatch on a cinematic backdrop" loading="lazy" width="576" height="1008"><figcaption><b>Built to last</b><b class="alt">a lifetime</b><small>Watches &amp; jewellery</small></figcaption></figure>
+        <figure class="demo"><img src="/demo/sneakers.jpg" alt="Example video ad frame for sneakers under neon light" loading="lazy" width="576" height="1008"><figcaption><b>New drop</b><b class="alt">out now</b><small>Fashion &amp; sneakers</small></figcaption></figure>
+        <figure class="demo"><img src="/demo/saas.jpg" alt="Example video ad frame for a SaaS analytics app shown on a phone" loading="lazy" width="576" height="1008"><figcaption><b>Your growth,</b><b class="alt">in one view</b><small>SaaS &amp; apps</small></figcaption></figure>
+      </div>
+      <p class="hint center">Illustrative frames. Your video uses your own product photos, site and brand.</p>
+    </section>
+
+    <section class="block" id="features">
+      <p class="eyebrow">Features</p>
+      <h2>Everything an ad needs, already in place</h2>
       <div class="bento">
-        <article class="wide"><h3>Your real product, never distorted</h3><p>For e-commerce, the ad starts from your own photos. The background is removed, the product stays untouched, then it is staged on a studio set or a custom AI-generated backdrop.</p></article>
-        <article><h3>Your site, demoed</h3><p>For SaaS, your home page scrolls inside a phone, straight then tilted.</p></article>
-        <article><h3>Logo and brand colours</h3><p>The logo is pulled from your site and its colours style the whole video.</p></article>
-        <article><h3>Voice-over and captions</h3><p>A natural voice and word-by-word captions, in your site’s language.</p></article>
-        <article><h3>30 music tracks included</h3><p>Six moods, fitted to the exact length, ducking under the voice.</p></article>
-        <article class="wide"><h3>The right format, to the frame</h3><p>9:16, 1:1 or 16:9. 10, 15, 20 or 30 seconds. 720p or 1080p. A real MP4 file to download or share.</p></article>
+        <article class="wide"><svg class="ic" aria-hidden="true"><use href="#i-cube"/></svg><h3>Your real product, never distorted</h3><p>The ad starts from your own photos. The background is removed, the product stays untouched, then it is staged on a studio set or a custom AI-generated scene.</p></article>
+        <article><svg class="ic" aria-hidden="true"><use href="#i-phone"/></svg><h3>Your site, demoed</h3><p>Your home page scrolls inside a phone, straight then tilted.</p></article>
+        <article><svg class="ic" aria-hidden="true"><use href="#i-palette"/></svg><h3>Logo and brand colours</h3><p>The logo comes from your site and its colours style the whole video.</p></article>
+        <article><svg class="ic" aria-hidden="true"><use href="#i-captions"/></svg><h3>Voice-over and captions</h3><p>A natural voice and word-by-word captions that pop on the beat.</p></article>
+        <article><svg class="ic" aria-hidden="true"><use href="#i-music"/></svg><h3>30 music tracks</h3><p>Six moods, fitted to the exact length, ducking under the voice.</p></article>
+        <article class="wide"><svg class="ic" aria-hidden="true"><use href="#i-sliders"/></svg><h3>A studio to fine-tune</h3><p>Rewrite any line, swap a clip or a photo from the stock library, change the music, then update the video in seconds.</p></article>
       </div>
     </section>
 
     <section class="block" id="pricing">
       <p class="eyebrow">Pricing</p>
-      <h2>Start for free</h2>
+      <h2>Start for free, upgrade when you scale</h2>
       <div class="plans" id="plans"></div>
+    </section>
+
+    <section class="block" id="guides">
+      <p class="eyebrow">Guides</p>
+      <h2>Learn to make video ads that sell</h2>
+      <div class="posts">
+        <a href="/blog/product-page-to-video-ad"><h3>How to turn a product page into a video ad</h3><p>A step-by-step method for e-commerce, from photos to final export.</p></a>
+        <a href="/blog/saas-video-ads"><h3>Video ads for SaaS without a film crew</h3><p>How to show software clearly in 20 seconds.</p></a>
+        <a href="/blog/video-ad-formats-lengths"><h3>Video ad formats and lengths that fit each platform</h3><p>9:16, 1:1 or 16:9, and how long your ad should run.</p></a>
+      </div>
     </section>
 
     <section class="block" id="faq">
       <p class="eyebrow">FAQ</p>
-      <h2>Before you start</h2>
+      <h2>Questions before you start</h2>
       <details><summary>Do I need an account?</summary><p>No. Paste a link and your first ad is edited right away, in your browser.</p></details>
       <details><summary>Does the AI change my product photos?</summary><p>No. Only the plain background is removed. The product is never regenerated: its shape, logo and colours stay exactly as photographed.</p></details>
       <details><summary>What if my site blocks automated reading?</summary><p>Add your photos by hand in the next step and the ad is built from them.</p></details>
@@ -80,10 +153,10 @@
     </section>
 
     <section class="cta-end">
-      <h2>Your first ad in a few minutes</h2>
+      <h2>Your first video ad in a few minutes</h2>
       <a class="btn" href="#top" id="cta-end">Paste my link</a>
     </section>
-    <footer><span class="logo"><span class="mark"></span>ClipMotion</span><span>clipmotion.ai · AI video ads for SaaS and e-commerce</span></footer>
+    <footer><span class="logo"><span class="mark"></span>ClipMotion</span><nav aria-label="Footer"><a href="#how">How it works</a><a href="#pricing">Pricing</a><a href="/blog/">Guides</a><a href="#faq">FAQ</a></nav><span>© ClipMotion · clipmotion.ai</span></footer>
   </section>
 
   <section id="s-inspect" class="view" hidden>

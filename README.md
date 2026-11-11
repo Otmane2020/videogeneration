@@ -3,9 +3,9 @@
 Paste a link, get video ads. Mobile-first web app for **clipmotion.ai**: URL → scan → SaaS or e-commerce → three AI video ads with voice-over, captions and music.
 
 1. **Link** – paste a website or product page.
-2. **Scan** – the server reads the page: copy, logo and the full product record. Sources, in order: Shopify product JSON (`/products/<handle>.js`), WooCommerce variation data, structured data (Product / ProductGroup), zoom galleries, links and inline scripts. Images are upgraded to full size and de-duplicated; colours, sizes and per-variant prices are offered in the wizard.
-3. **Setup** – confirm SaaS or e-commerce; for e-commerce pick the variant and the photos, or add your own.
-4. **Ads** – the AI writes three ads; the video is exported frame by frame to MP4 in the browser (9:16, 1:1, 16:9; 720p/1080p; auto length or an exact 10/15/20/30 s).
+2. **Scan** – the server reads the page: copy, logo and the full product record. Sources, in order: Shopify product JSON (`/products/<handle>.js`), WooCommerce variation data, structured data (Product / ProductGroup), zoom galleries, links and inline scripts. Only photos of that product are kept (file names must carry the product reference), upgraded to full size and de-duplicated.
+3. **Setup** – confirm SaaS or e-commerce, pick the variant and photos (e-commerce), choose the goal of the video, the format, length and quality.
+4. **Video** – one ad is written for that goal and exported frame by frame to MP4 in the browser. An editor then lets the user rewrite text, swap a visual (video or photo search) and change the music before re-rendering.
 
 **SaaS**: stock footage plus the real site inside a phone (one straight demo, one tilted view).
 **E-commerce**: built from the real product photos. The AI picks usable photos; the plain background is removed (the product is never regenerated) and the product is staged on a code-drawn studio set or an optional AI-generated backdrop, with close-ups, verified badges and the listed price. Stock footage is optional.
@@ -22,9 +22,13 @@ Both: real logo and logo-derived palette, varied transitions, voice-over, word-b
 | mShots (WordPress.com) | mobile screenshot of the site |
 | Poppins (OFL, in `public/fonts`) | video typography |
 
-## Landing page and plans
+## Landing page, guides and SEO
 
-`public/index.html` holds the landing page (pitch, pricing, FAQ) and the wizard. Plans come from `/api/config`: set `PLANS_JSON` to change them and `CHECKOUT_PRO` / `CHECKOUT_BUSINESS` to plug in payment links (without a link the button reads "Coming soon"). Default prices are placeholders.
+`public/index.html` holds the landing page and the wizard; `public/blog/` holds three guides and an index; `robots.txt` and `sitemap.xml` point at `https://clipmotion.ai`. Demo visuals in `public/demo/` are AI-generated and unbranded.
+
+## Plans and payment
+
+Plans come from `/api/config` (`PLANS_JSON` to override; default prices are placeholders). Set `STRIPE_SECRET_KEY`, `STRIPE_PRICE_PRO` and `STRIPE_PRICE_BUSINESS` to enable Stripe Checkout through `/api/checkout`; until then paid plans show "Coming soon".
 
 ## Run
 

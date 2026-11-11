@@ -234,3 +234,67 @@ dialog#picker::backdrop { background: #000b; }
 .pk-grid button:hover, .pk-grid button:focus-visible { border-color: #a57bff; }
 .pk-grid img { width: 100%; height: 100%; object-fit: cover; display: block; }
 .pk-grid b { position: absolute; top: 5px; right: 5px; font-size: 10px; padding: 2px 6px; border-radius: 6px; background: #000a; color: #fff; }
+
+/* ---------- landing v2 : icônes, schéma du workflow, exemples ---------- */
+.ic { width: 26px; height: 26px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; color: #c9a5ff; flex: none; }
+.flow { list-style: none; padding: 0; display: grid; gap: 10px; counter-reset: none; }
+.flow li { position: relative; border: 1px solid var(--line); background: linear-gradient(180deg, #15122a, var(--card)); border-radius: 18px; padding: 16px 16px 16px 62px; }
+.flow .ic { position: absolute; left: 16px; top: 16px; width: 34px; height: 34px; padding: 6px; border-radius: 11px; background: #231a52; }
+.flow h3 { margin: 0 0 3px; font-size: 16px; color: var(--text); font-weight: 700; }
+.flow p { color: var(--mute); font-size: 14px; }
+.flow li:not(:last-child)::after { content: ""; position: absolute; left: 32px; bottom: -11px; width: 2px; height: 10px; background: var(--grad); }
+.engines { display: grid; gap: 12px; margin-top: 14px; }
+.engines article { border: 1px solid var(--line); border-radius: 20px; padding: 20px; background: linear-gradient(180deg, #15122a, var(--card)); }
+.engines header { position: static; display: flex; align-items: center; gap: 10px; margin: 0 0 6px; padding: 0; background: none; }
+.engines h3 { margin: 0; font-size: 18px; color: var(--text); font-weight: 700; }
+.engines p { color: var(--mute); font-size: 15px; margin-bottom: 10px; }
+.engines ol { list-style: none; padding: 0; counter-reset: s; font-size: 14.5px; }
+.engines ol li { counter-increment: s; position: relative; padding: 7px 0 7px 34px; color: #dcd8f5; border-top: 1px solid #1d1a33; }
+.engines ol li::before { content: counter(s); position: absolute; left: 0; top: 7px; width: 22px; height: 22px; border-radius: 50%; background: #231a52; color: #c9a5ff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.bento article .ic { margin-bottom: 12px; }
+.demo { position: relative; margin: 0; border-radius: 22px; overflow: hidden; border: 1px solid #ffffff22; background: #110f1f; box-shadow: 0 30px 60px #000a; aspect-ratio: 9/16; }
+.demo img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.demo figcaption { position: absolute; left: 0; right: 0; bottom: 0; padding: 40px 12px 14px; display: flex; flex-direction: column; align-items: center; gap: 5px; background: linear-gradient(transparent, #000c); }
+.demo b { font-size: clamp(12px, 2.4vw, 17px); font-weight: 800; padding: 4px 10px; border-radius: 8px; background: #6a5cff; color: #fff; transform: rotate(-1deg); }
+.demo b.alt { background: #ff6b8b; transform: rotate(1deg); }
+.demo small { margin-top: 6px; font-size: 11px; color: #fffc; letter-spacing: .06em; text-transform: uppercase; }
+.hero-art { height: auto; max-width: 460px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; align-items: center; }
+.hero-art::before { inset: 10% 0; }
+.hero-art .d1 { transform: rotate(-4deg) translateY(10px); } .hero-art .d2 { transform: translateY(-12px); z-index: 1; } .hero-art .d3 { transform: rotate(4deg) translateY(10px); }
+.gallery { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.center { text-align: center; margin-top: 12px; }
+.posts { display: grid; gap: 12px; }
+.posts a { display: block; border: 1px solid var(--line); border-radius: 20px; padding: 20px; background: linear-gradient(180deg, #15122a, var(--card)); text-decoration: none; color: inherit; transition: border-color .15s; }
+.posts a:hover { border-color: #a57bff; }
+.posts h3 { margin: 0 0 6px; font-size: 17px; color: var(--text); font-weight: 700; }
+.posts p { color: var(--mute); font-size: 14.5px; }
+.posts a::after { content: "Read the guide →"; display: block; margin-top: 12px; font-size: 13px; font-weight: 700; color: #c9a5ff; }
+footer nav { display: flex; flex-wrap: wrap; gap: 6px 16px; } footer nav a { color: var(--mute); text-decoration: none; } footer nav a:hover { color: var(--text); }
+@media (min-width: 760px) {
+  .flow { grid-template-columns: repeat(6, 1fr); }
+  .flow li { padding: 62px 14px 16px; }
+  .flow li:not(:last-child)::after { left: auto; right: -11px; bottom: auto; top: 32px; width: 10px; height: 2px; }
+  .engines { grid-template-columns: 1fr 1fr; }
+  .gallery { gap: 18px; max-width: 760px; margin: 0 auto; }
+  .posts { grid-template-columns: repeat(3, 1fr); }
+  .hero-art { max-width: 520px; }
+}
+
+/* ---------- articles ---------- */
+.post { max-width: 720px; margin: 0 auto; }
+.post h1, .h-blog { font-size: clamp(32px, 7vw, 52px); margin-bottom: 6px; }
+.post h2 { font-size: clamp(22px, 4vw, 28px); margin: 38px 0 12px; }
+.post h3 { font-size: 18px; margin: 24px 0 8px; color: var(--text); font-weight: 700; }
+.post p, .post li { font-size: 17px; line-height: 1.65; color: #d6d2ee; }
+.post p { margin-bottom: 16px; }
+.post ul, .post ol { padding-left: 22px; margin-bottom: 18px; }
+.post li { margin-bottom: 8px; }
+.post a { color: #c9a5ff; }
+.post .eyebrow a { color: inherit; text-decoration: none; }
+.post .cta-end p { color: #fffd; margin: 0 auto 18px; max-width: 30em; }
+.post .cta-end .btn { color: #140f2e; }
+
+.engines header { justify-content: flex-start; }
+.hero-art .demo b { white-space: nowrap; font-size: clamp(9px, 1.25vw, 13px); padding: 3px 7px; }
+.hero-art .demo figcaption { padding: 24px 6px 10px; gap: 4px; }
+@media (max-width: 759px) { .hero-art .demo b { font-size: clamp(9px, 2.6vw, 13px); } }

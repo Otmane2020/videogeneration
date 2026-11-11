@@ -10,14 +10,16 @@ try {
   }
 } catch { /* pas de .env */ }
 
-const api = Object.fromEntries(['inspect', 'analyze', 'videos', 'tts', 'media', 'shot', 'backdrop', 'config'].map((n) => [`/api/${n}`, require(`./api/${n}.js`)]));
-const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.mjs': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2' };
+const api = Object.fromEntries(['inspect', 'analyze', 'videos', 'tts', 'media', 'shot', 'backdrop', 'config', 'checkout'].map((n) => [`/api/${n}`, require(`./api/${n}.js`)]));
+const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.mjs': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.jpg': 'image/jpeg', '.png': 'image/png', '.xml': 'application/xml', '.txt': 'text/plain; charset=utf-8' };
 const PUBLIC = path.join(__dirname, 'public');
 
 http.createServer((req, res) => {
   const { pathname } = new URL(req.url, 'http://x');
   if (api[pathname]) return api[pathname](req, res);
-  const file = path.join(PUBLIC, path.normalize(pathname === '/' ? '/index.html' : pathname));
+  // comme sur Vercel (cleanUrls) : /blog/ -> index.html, /blog/guide -> guide.html
+  const clean = pathname.endsWith('/') ? pathname + 'index.html' : path.extname(pathname) ? pathname : pathname + '.html';
+  const file = path.join(PUBLIC, path.normalize(clean));
   if (!file.startsWith(PUBLIC + path.sep)) { res.writeHead(403); return res.end(); }
   fs.readFile(file, (err, data) => {
     if (err) { res.writeHead(404, { 'content-type': 'text/plain' }); return res.end('Not found'); }

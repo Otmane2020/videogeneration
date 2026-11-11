@@ -1178,6 +1178,11 @@ async function produce(actx) {
 
 /* ---------- page d'accueil : offres ---------- */
 $('#cta-end').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
+if (new URLSearchParams(location.search).get('checkout') === 'success') {
+  const n = Object.assign(document.createElement('p'), { className: 'notice', textContent: 'Thank you! Your payment went through. Your plan will be activated shortly.' });
+  $('.hero-copy').prepend(n);
+  history.replaceState(null, '', location.pathname);
+}
 fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
   const box = $('#plans');
   plans.forEach((p) => {
@@ -1192,7 +1197,15 @@ fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
     el.append(ul);
     // payer n'est proposé que si un lien de paiement est configuré
     if (p.id === 'free') el.append(Object.assign(document.createElement('a'), { className: 'btn', href: '#top', textContent: 'Try it free' }));
-    else if (p.checkout) el.append(Object.assign(document.createElement('a'), { className: 'btn', href: p.checkout, rel: 'noopener', textContent: `Choose ${p.name}` }));
+    else if (p.checkout === 'api') {
+      const b = Object.assign(document.createElement('button'), { className: 'btn', type: 'button', textContent: `Choose ${p.name}` });
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try { location.href = (await (await api('/api/checkout', { plan: p.id })).json()).url; }
+        catch (err) { b.disabled = false; b.textContent = err.message; }
+      });
+      el.append(b);
+    } else if (p.checkout) el.append(Object.assign(document.createElement('a'), { className: 'btn', href: p.checkout, rel: 'noopener', textContent: `Choose ${p.name}` }));
     else el.append(Object.assign(document.createElement('button'), { className: 'btn ghost', type: 'button', disabled: true, textContent: 'Coming soon' }));
     box.append(el);
   });

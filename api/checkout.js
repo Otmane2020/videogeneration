@@ -7,8 +7,9 @@ const { user } = require('../lib/auth');
 // (STRIPE_AMOUNT_PRO, en centimes) facturé chaque mois, sans rien créer au préalable dans Stripe.
 const PLAN = (plan) => {
   const up = String(plan).toUpperCase();
-  const price = process.env['STRIPE_PRICE_' + up], amount = parseInt(process.env['STRIPE_AMOUNT_' + up] || { PRO: '1900' }[up] || '', 10);
-  return ['pro', 'business'].includes(plan) ? { price: /^price_\w+$/.test(price || '') ? price : '', amount: amount > 0 ? amount : 0 } : null;
+  const price = process.env['STRIPE_PRICE_' + up], amount = parseInt(process.env['STRIPE_AMOUNT_' + up] || { PRO: '1900', BUSINESS: '4900', SINGLE: '99' }[up] || '', 10);
+  // « single » : export d'une vidéo sans filigrane, payé à l'unité
+  return ['pro', 'business', 'single'].includes(plan) ? { price: /^price_\w+$/.test(price || '') ? price : '', amount: amount > 0 ? amount : 0 } : null;
 };
 const ready = (plan) => { const p = PLAN(plan); return !!process.env.STRIPE_SECRET_KEY && !!p && !!(p.price || p.amount); };
 
@@ -22,17 +23,16 @@ module.exports = handler('POST', async (req, res) => {
   const host = String(req.headers.host || '');
   if (!/^[\w.-]+(:\d+)?$/.test(host)) throw httpError(400, 'Invalid host');
   const origin = (/^(localhost|127\.)/.test(host) ? 'http://' : 'https://') + host;
-  const once = process.env.STRIPE_MODE === 'payment';
+  const once = plan === 'single' || process.env.STRIPE_MODE === 'payment';
   const body = new URLSearchParams({
     mode: once ? 'payment' : 'subscription', 'line_items[0][quantity]': '1',
-    success_url: `${origin}/?checkout=success`, cancel_url: `${origin}/#pricing`,
-    allow_promotion_codes: 'true', 'metadata[plan]': plan, client_reference_id: u.id, customer_email: u.email,
+    success_url: plan === 'single' ? `${origin}/paid` : `${origin}/?checkout=success`, cancel_url: plan === 'single' ? `${origin}/paid?cancelled=1` : `${origin}/#pricing`, 'metadata[plan]': plan, client_reference_id: u.id, customer_email: u.email,
   });
   if (p.price) body.set('line_items[0][price]', p.price);
   else {
     body.set('line_items[0][price_data][currency]', (process.env.STRIPE_CURRENCY || 'usd').toLowerCase());
     body.set('line_items[0][price_data][unit_amount]', String(p.amount));
-    body.set('line_items[0][price_data][product_data][name]', `ClipMotion ${plan[0].toUpperCase() + plan.slice(1)}`);
+    body.set('line_items[0][price_data][product_data][name]', plan === 'single' ? 'ClipMotion video export without watermark' : `ClipMotion ${plan[0].toUpperCase() + plan.slice(1)}`);
     if (!once) body.set('line_items[0][price_data][recurring][interval]', 'month');
   }
   const r = await fetch('https://api.stripe.com/v1/checkout/sessions', {

@@ -250,6 +250,7 @@ $('#b-gen').addEventListener('click', async () => {
   } catch (err) {
     show('s-opts', 4);
     fail($('#e-opts'), err.message);
+    if (/videos? (this month|of your plan)/.test(err.message)) openUpgrade(err.message);
     actx.close().catch(() => {});
   }
 });
@@ -1102,7 +1103,8 @@ async function produce(actx) {
   stopPreview();
   const [W, H] = FORMATS[state.fmt], target = +$('#dur').value;
   // offre gratuite : 720p au plus et filigrane
-  const paid = isPaid();
+  const paid = unlocked();
+  if (state.unlockedAd === state.ad && state.ad) $('#res').value = '1080';
   if (!paid && $('#res').value !== '720') { $('#res').value = '720'; $$('[data-for=res] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '720'))); }
   const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid });
   const cv = $('#cv'), result = $('#result');
@@ -1276,6 +1278,8 @@ fetch('/api/config').then((r) => r.json()).then(({ plans }) => {
 /* ---------- compte, profil, offre ---------- */
 const account = { user: null, history: [], signup: false, reset: new URLSearchParams(location.search).get('reset'), proPrice: '' };
 const isPaid = () => !!account.user && account.user.plan !== 'free';
+// vidéo débloquée à l'unité : valable pour cette pub, retouches comprises
+const unlocked = () => isPaid() || (!!state.ad && state.unlockedAd === state.ad);
 const PLAN_NAME = { free: 'Starter (free)', pro: 'Pro', business: 'Business' };
 function paintAccount() {
   const u = account.user;
@@ -1289,6 +1293,7 @@ function paintAccount() {
     $('#ac-mail').textContent = u.email;
     $('#ac-plan').textContent = `${PLAN_NAME[u.plan] || u.plan} plan` + (u.plan === 'free' ? ' · 720p with watermark' : ' · 1080p, no watermark');
     $('#ac-up').hidden = u.plan !== 'free';
+    $('#ac-usage').textContent = account.usage ? ` · ${account.usage.used}/${account.usage.limit} videos this month` : '';
     const list = $('#ac-history');
     list.textContent = '';
     if (!account.history.length) list.append(Object.assign(document.createElement('li'), { className: 'empty', textContent: 'Your finished videos will be listed here.' }));
@@ -1305,9 +1310,10 @@ function paintAccount() {
   $('#ac-switch').textContent = account.signup ? 'Already have an account? Sign in' : 'New here? Create an account';
   $('#ac-pass').autocomplete = account.signup ? 'new-password' : 'current-password';
 }
-const refreshAccount = () => fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; account.history = j.history || []; $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
+const refreshAccount = () => fetch('/api/auth').then((r) => r.json()).then((j) => { account.user = j.user; account.usage = j.usage; account.history = j.history || []; $('#b-account').hidden = !j.enabled; paintAccount(); }).catch(() => {});
 // fenêtre d'offre : s'ouvre quand une option payante est demandée
-function openUpgrade(why) {
+function openUpgrade(why, single) {
+  $('#up-one').hidden = !single;
   $('#up-why').textContent = why || 'Get the most out of every video.';
   $('#up-price').textContent = account.proPrice;
   fail($('#up-err'), '');
@@ -1320,7 +1326,29 @@ async function startCheckout(errEl) {
 }
 $('#up-go').addEventListener('click', () => startCheckout($('#up-err')));
 $('#ac-up').addEventListener('click', () => { $('#account').close(); openUpgrade('You are on the free Starter plan.'); });
-$('#b-nomark').addEventListener('click', () => openUpgrade('Free videos are exported in 720p with a watermark.'));
+$('#b-nomark').addEventListener('click', () => openUpgrade('Free videos are exported in 720p with a watermark.', true));
+// Export à l'unité : le paiement s'ouvre dans un nouvel onglet pour ne pas perdre la vidéo en cours ;
+// dès que le paiement est confirmé, la vidéo est remontée en 1080p sans filigrane.
+$('#up-one').addEventListener('click', async () => {
+  if (!account.user) { $('#upgrade').close(); return openAccount(true); }
+  const tab = window.open('', '_blank');
+  try {
+    const { url } = await (await api('/api/checkout', { plan: 'single' })).json();
+    if (tab) tab.location = url; else location.href = url;
+  } catch (err) { tab?.close(); return fail($('#up-err'), err.message); }
+  $('#upgrade').close();
+  status('Waiting for your payment…');
+  const ad = state.ad;
+  for (let i = 0; i < 120 && state.ad === ad; i++) {
+    await new Promise((r) => setTimeout(r, 3000));
+    await refreshAccount();
+    if (account.user?.credits > 0) {
+      const { ok } = await (await api('/api/auth', { action: 'spend' })).json();
+      if (ok) { state.unlockedAd = ad; cancelJob(); return produce(newAudio()); }
+    }
+  }
+  status('Payment not confirmed yet. If you paid, tap “Remove watermark” again in a moment.');
+});
 function openAccount(signup) { account.signup = !!signup; fail($('#ac-err'), ''); paintAccount(); $('#account').showModal(); }
 $('#b-account').addEventListener('click', () => openAccount(false));
 $('#ac-switch').addEventListener('click', () => { account.signup = !account.signup; fail($('#ac-err'), ''); paintAccount(); });

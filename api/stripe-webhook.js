@@ -17,7 +17,9 @@ module.exports = async (req, res) => {
     const good = crypto.createHmac('sha256', secret).update(`${header.t}.${raw}`).digest('hex');
     if (good.length !== header.v1.length || !crypto.timingSafeEqual(Buffer.from(good), Buffer.from(header.v1)) || Math.abs(Date.now() / 1000 - +header.t) > 300) return end(400, { error: 'Bad signature' });
     const event = JSON.parse(raw), o = event.data?.object || {};
-    if (event.type === 'checkout.session.completed' && /^[0-9a-f-]{36}$/.test(o.client_reference_id || '') && ['pro', 'business'].includes(o.metadata?.plan)) {
+    if (event.type === 'checkout.session.completed' && /^[0-9a-f-]{36}$/.test(o.client_reference_id || '') && o.metadata?.plan === 'single') {
+      await sql('UPDATE users SET credits = credits + 1 WHERE id = $1', [o.client_reference_id]);
+    } else if (event.type === 'checkout.session.completed' && /^[0-9a-f-]{36}$/.test(o.client_reference_id || '') && ['pro', 'business'].includes(o.metadata?.plan)) {
       const rows = await sql('UPDATE users SET plan = $1, stripe_customer = $2 WHERE id = $3 RETURNING email', [o.metadata.plan, String(o.customer || ''), o.client_reference_id]);
       if (rows[0]) await sendMail(rows[0].email, 'planActive', { plan: o.metadata.plan[0].toUpperCase() + o.metadata.plan.slice(1) });
     } else if (event.type === 'customer.subscription.deleted' && o.customer) {

@@ -243,7 +243,7 @@
       <button class="btn ghost" id="b-share" type="button" hidden>Share</button>
     </div>
     <button class="btn ghost" id="b-edit" type="button" hidden>Edit video</button>
-    <button class="link" id="b-nomark" type="button" hidden>Remove the watermark and export in 1080p</button>
+    <button class="btn ghost" id="b-nomark" type="button" hidden>Remove watermark · $0.99</button>
     <button class="link" id="b-again" type="button" hidden>Try another goal or format</button>
     <button class="link" type="button" data-back>New link</button>
   </section>
@@ -266,7 +266,7 @@
 <dialog id="account" aria-labelledby="ac-title">
   <form method="dialog" class="pk-head"><h3 id="ac-title">Sign in</h3><button class="link" value="close" aria-label="Close">Close</button></form>
   <div id="ac-in" hidden>
-    <div class="profile"><span class="avatar" id="ac-avatar"></span><div><b id="ac-mail"></b><span id="ac-plan"></span></div></div>
+    <div class="profile"><span class="avatar" id="ac-avatar"></span><div><b id="ac-mail"></b><span id="ac-plan"></span><span id="ac-usage"></span></div></div>
     <button class="btn" id="ac-up" type="button">Upgrade to Pro</button>
     <h3>Your videos</h3>
     <ul class="history" id="ac-history"></ul>
@@ -289,6 +289,7 @@
   <ul class="perks"><li>1080p export</li><li>No watermark</li><li>Custom AI scenes behind your product</li><li>History of your videos</li></ul>
   <p class="price" id="up-price"></p>
   <button class="btn" id="up-go" type="button">Upgrade now</button>
+  <button class="btn ghost" id="up-one" type="button" hidden>Just this video, no watermark · $0.99</button>
   <p class="error" id="up-err" role="alert" hidden></p>
 </dialog>
 

@@ -2,6 +2,7 @@
 const { send, readJson, httpError, safeFetch, readCapped, handler } = require('../lib/util');
 const { generateJson } = require('../lib/llm');
 const { capture } = require('./shot');
+const { consume } = require('../lib/quota');
 
 const COMMON = `You are a senior performance-marketing creative director who writes short vertical video ads (TikTok / Reels / Shorts).
 Return ONLY a JSON object. Write headline, voiceover, tagline, cta, badge in the requested language; "query" is always English.
@@ -167,6 +168,8 @@ function normalize(d, page, type, seen) {
 module.exports = handler('POST', async (req, res) => {
   const { page, type, photos, variant, intent } = await readJson(req);
   const goal = GOALS[intent] || GOALS.launch;
+  if (!page || typeof page !== 'object' || !page.url) throw httpError(400, 'Missing page scan');
+  await consume(req); // quota mensuel de l'offre
   if (!page || typeof page !== 'object' || !page.url) throw httpError(400, 'Missing page scan');
   if (!['saas', 'ecom'].includes(type)) throw httpError(400, 'Invalid type');
   const pr = page.product && typeof page.product === 'object' ? page.product : null;

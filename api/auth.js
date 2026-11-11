@@ -3,6 +3,7 @@ const { send, readJson, httpError } = require('../lib/util');
 const { sql } = require('../lib/db');
 const { hash, check, cookieFor, clear, user, resetToken, resetCheck } = require('../lib/auth');
 const { sendMail } = require('../lib/mail');
+const { usage } = require('../lib/quota');
 
 const originOf = (req) => { const h = String(req.headers.host || ''); return /^[\w.-]+(:\d+)?$/.test(h) ? (/^(localhost|127\.)/.test(h) ? 'http://' : 'https://') + h : 'https://clipmotion.ai'; };
 
@@ -12,12 +13,19 @@ module.exports = async (req, res) => {
       const u = await user(req).catch(() => null);
       // profil : offre et historique des vidéos réussies
       const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
-      return send(res, 200, { user: u && { email: u.email, plan: u.plan }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
+      const q = process.env.DATABASE_URL ? await usage(req, u).catch(() => null) : null;
+      return send(res, 200, { user: u && { email: u.email, plan: u.plan, credits: u.credits || 0 }, usage: q && { used: q.used, limit: q.limit }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
     }
     if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
     const body = await readJson(req);
     const { action, email, password, token } = body;
     if (action === 'logout') return send(res, 200, { user: null }, { 'set-cookie': clear });
+    if (action === 'spend') {
+      // utilise un export à l'unité acheté : la vidéo en cours sort sans filigrane
+      const u = await user(req);
+      const rows = u ? await sql('UPDATE users SET credits = credits - 1 WHERE id = $1 AND credits > 0 RETURNING credits', [u.id]) : [];
+      return send(res, 200, { ok: !!rows[0] });
+    }
     if (action === 'log') {
       // une vidéo vient d'être montée : on l'ajoute à l'historique du compte
       const u = await user(req);

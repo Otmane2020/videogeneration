@@ -132,6 +132,9 @@ const bank = (kind, q) => cached(kind + '|' + q, async () => {
 
 // Plans de secours : requêtes sûres, vérifiées, quand rien de pertinent ne sort des requêtes de la scène.
 const SAFE = {
+  // Requêtes de secours filmables pour les SaaS : métiers, clients et situations réelles.
+  // Elles ne servent que lorsque les requêtes précises n'ont pas trouvé assez de plans fiables.
+  saas: ['developer coding laptop', 'customer service headset', 'team planning meeting', 'business analyst charts', 'sales team discussion', 'small business owner working'],
   technology: ['typing laptop', 'business meeting', 'woman laptop', 'office team', 'man phone', 'office computer'],
   lifestyle: ['online shopping', 'woman shopping', 'gift box', 'happy friends', 'delivery package', 'home family'],
 };

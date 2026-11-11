@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Admin | ClipMotion</title><link rel="stylesheet" href="/style.css">
+<style>
+#app{max-width:1080px}.kpis{display:grid;grid-template-columns:repeat(2,1fr);gap:8px}.kpi{border:1px solid var(--line);background:var(--card);border-radius:16px;padding:14px}.kpi b{display:block;font-size:26px}.kpi span{font-size:12.5px;color:var(--mute)}.kpi small{color:#c9a5ff}
+.bars{display:grid;gap:6px}.bars div{display:grid;grid-template-columns:86px 1fr 70px;gap:8px;align-items:center;font-size:13px}.bars i{display:block;height:10px;border-radius:5px;background:var(--grad)}
+.tbl{width:100%;border-collapse:collapse;font-size:13.5px}.tbl th,.tbl td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}.tbl th{color:var(--mute);font-weight:600}.wrap{overflow-x:auto}
+.tbl select,.tbl button{font:inherit;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:#0b0a16;color:var(--text)}.tbl button{cursor:pointer}
+h2{margin:28px 0 12px}@media(min-width:760px){.kpis{grid-template-columns:repeat(4,1fr)}}
+</style></head>
+<body><main id="app">
+<header><a class="logo" href="/"><span class="mark"></span><span class="wm">Clip<b>Motion</b></span></a><span class="hint" id="who"></span></header>
+<p class="error" id="err" hidden></p>
+<div id="dash" hidden>
+  <h1 style="font-size:30px">Admin</h1>
+  <h2>Today</h2><div class="kpis" id="kpis"></div>
+  <h2>Last 14 days</h2><div class="bars" id="days"></div>
+  <h2>Top pages today</h2><div class="bars" id="top"></div>
+  <h2>Traffic sources today</h2><div class="bars" id="refs"></div>
+  <h2>Users</h2><div class="wrap"><table class="tbl"><thead><tr><th>Email</th><th>Plan</th><th>Videos</th><th>This month</th><th>Credits</th><th>Joined</th><th></th></tr></thead><tbody id="users"></tbody></table></div>
+</div>
+<script>
+const $ = (s) => document.querySelector(s), el = (t, p = {}) => Object.assign(document.createElement(t), p);
+const post = (b) => fetch('/api/admin', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(b) }).then(async (r) => { if (!r.ok) throw new Error((await r.json()).error); });
+async function load() {
+  const r = await fetch('/api/admin'), j = await r.json();
+  if (!r.ok) { $('#err').hidden = false; $('#err').textContent = r.status === 403 ? 'This page is for administrators. Sign in on the home page with an admin account.' : j.error; return; }
+  $('#dash').hidden = false; $('#who').textContent = j.me;
+  const t = j.today, y = j.yesterday;
+  $('#kpis').replaceChildren(...[['Page views', t.views, y.views], ['Visitors', t.visitors, y.visitors], ['Sign-ups', t.signups, y.signups], ['Videos', t.videos, y.videos], ['Purchases', t.purchases, y.purchases], ['Accounts', t.users], ['Paying', t.paid]].map(([n, v, p]) => { const k = el('div', { className: 'kpi' }); k.append(el('b', { textContent: v }), el('span', { textContent: n }), p === undefined ? '' : el('small', { textContent: ` · yesterday ${p}` })); return k; }));
+  const bars = (box, rows, label, val, extra) => { const max = Math.max(1, ...rows.map(val)); box.replaceChildren(...(rows.length ? rows : [null]).map((r) => { const d = el('div'); if (!r) { d.textContent = 'No data yet'; return d; } const bar = el('i'); bar.style.width = (val(r) / max * 100) + '%'; d.append(el('span', { textContent: label(r) }), bar, el('span', { textContent: extra(r) })); return d; })); };
+  bars($('#days'), j.days, (r) => r.day.slice(5), (r) => r.views, (r) => `${r.views} / ${r.visitors}`);
+  bars($('#top'), t.top, (r) => r.path, (r) => r.n, (r) => r.n);
+  bars($('#refs'), t.refs, (r) => r.ref, (r) => r.n, (r) => r.n);
+  $('#users').replaceChildren(...j.users.map((u) => {
+    const tr = el('tr'), sel = el('select');
+    ['free', 'pro', 'business'].forEach((p) => sel.append(el('option', { value: p, textContent: p, selected: p === u.plan })));
+    sel.onchange = () => post({ action: 'plan', id: u.id, plan: sel.value }).then(load).catch((e) => alert(e.message));
+    const reset = el('button', { textContent: 'Reset quota' }); reset.onclick = () => post({ action: 'reset', id: u.id }).then(load);
+    const del = el('button', { textContent: 'Delete' }); del.onclick = () => confirm(`Delete ${u.email}?`) && post({ action: 'delete', id: u.id }).then(load).catch((e) => alert(e.message));
+    const td = (c) => { const x = el('td'); x.append(c); return x; }, act = el('td'); act.append(reset, ' ', del);
+    tr.append(td(u.email), td(sel), td(String(u.videos)), td(String(u.used)), td(String(u.credits)), td(u.created), act);
+    return tr;
+  }));
+}
+load();
+</script>
+</main></body></html>

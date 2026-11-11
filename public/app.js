@@ -1328,6 +1328,7 @@ function paintAccount() {
     $('#ac-mail').textContent = u.email;
     $('#ac-plan').textContent = `${PLAN_NAME[u.plan] || u.plan} plan` + (u.plan === 'free' ? ' · 720p with watermark' : ' · 1080p, no watermark');
     $('#ac-up').hidden = u.plan !== 'free';
+    $('#ac-admin').hidden = !u.admin;
     $('#ac-usage').textContent = account.usage ? ` · ${account.usage.used}/${account.usage.limit} videos this month` : '';
     const list = $('#ac-history');
     list.textContent = '';

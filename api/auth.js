@@ -2,7 +2,7 @@
 const { send, readJson, httpError } = require('../lib/util');
 const { sql } = require('../lib/db');
 const { hash, check, cookieFor, clear, user, resetToken, resetCheck } = require('../lib/auth');
-const { sendMail } = require('../lib/mail');
+const { sendMail, admins, notifyAdmins } = require('../lib/mail');
 const { usage } = require('../lib/quota');
 
 const originOf = (req) => { const h = String(req.headers.host || ''); return /^[\w.-]+(:\d+)?$/.test(h) ? (/^(localhost|127\.)/.test(h) ? 'http://' : 'https://') + h : 'https://clipmotion.ai'; };
@@ -24,7 +24,7 @@ module.exports = async (req, res) => {
       // profil : offre et historique des vidéos réussies
       const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
       const q = process.env.DATABASE_URL ? await usage(req, u).catch(() => null) : null;
-      return send(res, 200, { user: u && { email: u.email, plan: u.plan, credits: u.credits || 0 }, usage: q && { used: q.used, limit: q.limit }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
+      return send(res, 200, { user: u && { email: u.email, plan: u.plan, credits: u.credits || 0, admin: admins().includes(u.email) }, usage: q && { used: q.used, limit: q.limit }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
     }
     if (req.method !== 'POST') return send(res, 405, { error: 'Method not allowed' });
     const body = await readJson(req);
@@ -68,7 +68,7 @@ module.exports = async (req, res) => {
       // un seul compte gratuit par adresse IP (FREE_ACCOUNTS_PER_IP pour assouplir)
       const ip = String(req.headers['x-real-ip'] || req.headers['x-forwarded-for'] || '').split(',')[0].trim().slice(0, 60);
       const max = parseInt(process.env.FREE_ACCOUNTS_PER_IP || '1', 10);
-      if (ip && max > 0) {
+      if (ip && max > 0 && !admins().includes(mail)) {
         const n = await sql("SELECT count(*)::int AS n FROM users WHERE signup_ip = $1 AND plan = 'free'", [ip]);
         if (n[0].n >= max) throw httpError(403, 'A free account already exists on this network. Sign in to it, or upgrade it to Pro.');
       }
@@ -76,6 +76,7 @@ module.exports = async (req, res) => {
       if (!rows[0]) throw httpError(409, 'An account already exists for this email. Sign in instead.');
       u = rows[0];
       await sendMail(mail, 'welcome', { origin: originOf(req) });
+      await notifyAdmins('New sign-up', [mail]);
     } else if (action === 'login') {
       const rows = await sql('SELECT id, email, plan, pass FROM users WHERE email = $1', [mail]);
       // même message que l'adresse existe ou non

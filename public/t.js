@@ -1,0 +1,2 @@
+// Balise de mesure d'audience ClipMotion (sans cookie)
+try { navigator.sendBeacon ? navigator.sendBeacon('/api/track', new Blob([JSON.stringify({ path: location.pathname, ref: document.referrer })], { type: 'application/json' })) : fetch('/api/track', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ path: location.pathname, ref: document.referrer }), keepalive: true }); } catch (e) {}

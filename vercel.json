@@ -1,4 +1,5 @@
 {
   "cleanUrls": true,
-  "functions": { "api/*.js": { "maxDuration": 60 } }
+  "functions": { "api/*.js": { "maxDuration": 60 } },
+  "crons": [{ "path": "/api/report", "schedule": "0 7 * * *" }]
 }

@@ -3,7 +3,7 @@
 const { send, readJson, httpError, handler } = require('../lib/util');
 const { user } = require('../lib/auth');
 const { sql } = require('../lib/db');
-const { sendMail } = require('../lib/mail');
+const { sendMail, notifyAdmins } = require('../lib/mail');
 
 const stripe = async (path, body) => {
   const r = await fetch('https://api.stripe.com/v1/' + path, {
@@ -30,6 +30,7 @@ async function confirm(sessionId, u) {
       await sendMail(u.email, 'planActive', { plan: plan[0].toUpperCase() + plan.slice(1) });
     }
   }
+  if (first[0]) await notifyAdmins('New purchase', [`${u.email} · ${plan} · ${((o.amount_total || 0) / 100).toFixed(2)} ${String(o.currency || '').toUpperCase()}`]);
   return { granted: true, plan };
 }
 

@@ -10,7 +10,7 @@ try {
   }
 } catch { /* pas de .env */ }
 
-const api = Object.fromEntries(['inspect', 'analyze', 'videos', 'tts', 'media', 'shot', 'backdrop', 'config', 'checkout', 'auth', 'stripe-webhook'].map((n) => [`/api/${n}`, require(`./api/${n}.js`)]));
+const api = Object.fromEntries(['inspect', 'analyze', 'videos', 'tts', 'media', 'shot', 'backdrop', 'config', 'checkout', 'auth', 'stripe-webhook', 'track', 'admin', 'report', 'inbound'].map((n) => [`/api/${n}`, require(`./api/${n}.js`)]));
 const TYPES = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8', '.svg': 'image/svg+xml', '.json': 'application/json', '.webmanifest': 'application/manifest+json', '.mjs': 'text/javascript; charset=utf-8', '.woff2': 'font/woff2', '.jpg': 'image/jpeg', '.png': 'image/png', '.xml': 'application/xml', '.txt': 'text/plain; charset=utf-8' };
 const PUBLIC = path.join(__dirname, 'public');
 

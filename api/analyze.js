@@ -34,7 +34,8 @@ ${SHAPE_HEAD}
  "ads": [                             // exactly 1 ad, built for the goal given below
   {"angle": string,                   // e.g. "Problem → solution", "Social proof", "Offer"
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook
-     {"headline": string,             // on-screen text, max 6 words, punchy
+     {"role": "hook"|"context"|"demo"|"outcome",
+      "headline": string,             // on-screen text, max 6 words, punchy
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "english_queries": [string, string, string],  // stock-footage searches, English words only

@@ -89,8 +89,53 @@ async function orBackdrop(prompt, ratio) {
 }
 
 // ─── Détourage serveur ────────────────────────────────────────────────────────
-// Priorité : Clipdrop (100/jour gratuits) → remove.bg (50/mois) → erreur
+// Priorité : ClearBackdrop → Clipdrop → remove.bg. Les services tiers restent côté serveur.
+async function clearBackdrop(imageUrl) {
+  const key = process.env.CLEARBACKDROP_API_KEY;
+  if (!key) return null;
+  try {
+    const image = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (!image.ok) throw new Error(`source image ${image.status}`);
+    const type = (image.headers.get('content-type') || 'image/jpeg').split(';')[0].trim().toLowerCase();
+    if (!/^image\/(jpeg|png|webp|heic|avif|gif|bmp|tiff)$/.test(type)) throw new Error('unsupported source image type');
+    const declared = Number(image.headers.get('content-length') || 0);
+    if (declared > 15 * 1024 * 1024) throw new Error('source image exceeds ClearBackdrop 15 MB limit');
+    const bytes = Buffer.from(await image.arrayBuffer());
+    if (!bytes.length || bytes.length > 15 * 1024 * 1024) throw new Error('source image is empty or exceeds 15 MB');
+    const form = new FormData();
+    form.append('image', new Blob([bytes], { type }), 'clipmotion-product');
+    const response = await fetch('https://clearbackdrop.com/api/v1/remove-background', {
+      method: 'POST',
+      headers: { 'X-API-Key': key },
+      body: form,
+      signal: AbortSignal.timeout(60000),
+    });
+    if (!response.ok) {
+      const detail = (await response.text().catch(() => '')).slice(0, 240);
+      console.warn('ClearBackdrop removebg', response.status, detail);
+      return null;
+    }
+    const contentType = (response.headers.get('content-type') || '').split(';')[0].trim().toLowerCase();
+    if (contentType.startsWith('image/')) return Buffer.from(await response.arrayBuffer());
+    const data = await response.json().catch(() => ({}));
+    const resultUrl = data.result_url || data.url;
+    if (data.success && /^https:\/\/clearbackdrop\.com\//i.test(resultUrl || '')) {
+      const result = await fetch(resultUrl, { signal: AbortSignal.timeout(20000) });
+      if (result.ok && (result.headers.get('content-type') || '').startsWith('image/')) return Buffer.from(await result.arrayBuffer());
+    }
+    console.warn('ClearBackdrop returned an unexpected response');
+    return null;
+  } catch (error) {
+    console.warn('ClearBackdrop error', error.message);
+    return null;
+  }
+}
+
+// Priorité : ClearBackdrop (API key) → Clipdrop → remove.bg
 async function removeBg(imageUrl) {
+  const clear = await clearBackdrop(imageUrl);
+  if (clear) return clear;
+
   // 1. Clipdrop par Stability AI — 100 appels/jour gratuits
   //    Clé : https://platform.stability.ai/account/keys
   const clipKey = process.env.CLIPDROP_API_KEY;

@@ -1418,7 +1418,21 @@ const unlocked = () => isPaid() || (!!state.ad && state.unlockedAd === state.ad)
 const PLAN_NAME = { free: 'Starter (free)', pro: 'Pro', business: 'Business' };
 function paintAccount() {
   const u = account.user;
-  $('#b-account').textContent = u ? (u.plan === 'free' ? 'Account' : `Account · ${PLAN_NAME[u.plan] || u.plan}`) : 'Sign in';
+  // Nav : connecté → avatar circulaire avec initiale + masquer "Try it free"
+  //       déconnecté → bouton "Sign in" + afficher "Try it free"
+  const navTry = document.getElementById('nav-try');
+  if (u) {
+    $('#b-account').dataset.avatar = u.email[0].toUpperCase();
+    $('#b-account').title = u.email;
+    $('#b-account').classList.add('nav-avatar');
+    if (navTry) navTry.hidden = true;
+  } else {
+    delete $('#b-account').dataset.avatar;
+    $('#b-account').title = '';
+    $('#b-account').classList.remove('nav-avatar');
+    if (navTry) navTry.hidden = false;
+  }
+  $('#b-account').textContent = u ? '' : 'Sign in';
   $('#ac-in').hidden = !u; $('#ac-form').hidden = !!u;
   $('#ac-title').textContent = u ? 'Your account' : account.reset ? 'Choose a new password' : account.signup ? 'Create your account' : 'Sign in';
   $('#ac-email').hidden = $('label[for="ac-email"]').hidden = $('#ac-switch').hidden = $('#ac-forgot').hidden = !!account.reset;

@@ -88,31 +88,54 @@ async function orBackdrop(prompt, ratio) {
   return { type: m[1], buf: Buffer.from(m[2], 'base64') };
 }
 
-// ─── Détourage serveur via remove.bg ─────────────────────────────────────────
+// ─── Détourage serveur ────────────────────────────────────────────────────────
+// Priorité : Clipdrop (100/jour gratuits) → remove.bg (50/mois) → erreur
 async function removeBg(imageUrl) {
-  const key = process.env.REMOVEBG_API_KEY;
-  if (!key) throw httpError(503, 'REMOVEBG_API_KEY not set');
-  // remove.bg accepte une URL ou une image base64 ; on lui passe l'URL directement
-  const form = new URLSearchParams({
-    image_url: imageUrl,
-    size: 'auto',
-    type: 'product',       // optimisé pour les produits e-commerce
-    type_level: '2',
-    format: 'png',
-    bg_color: '',          // fond transparent
-  });
-  const r = await fetch('https://api.remove.bg/v1.0/removebg', {
-    method: 'POST',
-    signal: AbortSignal.timeout(30000),
-    headers: { 'x-api-key': key, 'content-type': 'application/x-www-form-urlencoded' },
-    body: form.toString(),
-  });
-  if (!r.ok) {
+  // 1. Clipdrop par Stability AI — 100 appels/jour gratuits
+  //    Clé : https://platform.stability.ai/account/keys
+  const clipKey = process.env.CLIPDROP_API_KEY;
+  if (clipKey) {
+    // Clipdrop accepte un fichier binaire en multipart ; on doit d'abord télécharger l'image
+    const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
+    if (!imgResp.ok) throw httpError(502, `Cannot fetch image: ${imgResp.status}`);
+    const imgBuf = Buffer.from(await imgResp.arrayBuffer());
+    const ct = imgResp.headers.get('content-type') || 'image/jpeg';
+    // Multipart form-data manuel (Node n'a pas FormData natif dans toutes les versions)
+    const boundary = '----ClipDropBoundary' + Date.now().toString(16);
+    const disposition = `Content-Disposition: form-data; name="image_file"; filename="product.jpg"\r\nContent-Type: ${ct}\r\n`;
+    const body = Buffer.concat([
+      Buffer.from(`--${boundary}\r\n${disposition}\r\n`),
+      imgBuf,
+      Buffer.from(`\r\n--${boundary}--\r\n`),
+    ]);
+    const r = await fetch('https://clipdrop-api.co/remove-background/v1', {
+      method: 'POST',
+      signal: AbortSignal.timeout(30000),
+      headers: { 'x-api-key': clipKey, 'content-type': `multipart/form-data; boundary=${boundary}` },
+      body,
+    });
+    if (r.ok) return Buffer.from(await r.arrayBuffer()); // PNG transparent
+    console.warn('Clipdrop removebg', r.status, await r.text().catch(() => ''));
+    // Si quota dépassé (402/429) on tombe sur remove.bg
+  }
+
+  // 2. remove.bg — 50 crédits/mois gratuits
+  //    Clé : https://www.remove.bg/api
+  const rmbgKey = process.env.REMOVEBG_API_KEY;
+  if (rmbgKey) {
+    const form = new URLSearchParams({ image_url: imageUrl, size: 'auto', type: 'product', format: 'png' });
+    const r = await fetch('https://api.remove.bg/v1.0/removebg', {
+      method: 'POST',
+      signal: AbortSignal.timeout(30000),
+      headers: { 'x-api-key': rmbgKey, 'content-type': 'application/x-www-form-urlencoded' },
+      body: form.toString(),
+    });
+    if (r.ok) return Buffer.from(await r.arrayBuffer());
     const msg = await r.json().catch(() => ({}));
     throw httpError(502, `remove.bg ${r.status}: ${msg?.errors?.[0]?.title || 'failed'}`);
   }
-  const buf = Buffer.from(await r.arrayBuffer());
-  return buf; // PNG transparent
+
+  throw httpError(503, 'No background removal API key configured (CLIPDROP_API_KEY or REMOVEBG_API_KEY)');
 }
 
 // ─── Handler principal ────────────────────────────────────────────────────────

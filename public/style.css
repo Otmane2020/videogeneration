@@ -68,6 +68,9 @@ input::placeholder { color: #6c6890; }
 .opts select, .music select { width: 100%; min-height: 50px; padding: 0 12px; font: inherit; font-size: 16px; border-radius: 14px; border: 1px solid var(--line); background: var(--card); color: var(--text); }
 .notice { margin-top: 14px; padding: 12px 14px; border-radius: 12px; background: #2a2152; color: #e6dcff; font-size: 14px; border: 1px solid #4a3d8f; }
 .navbtn { background: none; border: 1px solid var(--line); color: var(--text); font: inherit; font-size: 14px; padding: 8px 14px; border-radius: 99px; cursor: pointer; }
+/* Avatar circulaire dans la nav (utilisateur connecté) */
+.navbtn.nav-avatar { width: 36px; height: 36px; padding: 0; border: none; border-radius: 50%; background: var(--grad); color: #fff; font-weight: 700; font-size: 15px; display: flex; align-items: center; justify-content: center; }
+.navbtn.nav-avatar::before { content: attr(data-avatar); }
 dialog#account { width: min(420px, 94vw); border: 1px solid var(--line); border-radius: 22px; background: #0d0b1a; color: var(--text); padding: 18px; }
 dialog#account::backdrop { background: #000b; }
 #account label { margin-top: 10px; } #account input { font-size: 16px; padding: 13px; }

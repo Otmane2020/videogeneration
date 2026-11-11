@@ -435,3 +435,5 @@ dialog#dlgate { width: min(440px, 94vw); border: 1px solid #a57bff; border-radiu
 .choice i { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-style: normal; font-weight: 800; font-size: 15px; max-width: 76px; text-align: right; }
 .choice.best { border-color: transparent; background: var(--grad); } .choice.best span { color: #ffffffd9; }
 .choice.plain { background: none; } .choice.plain b { font-size: 14px; font-weight: 600; }
+
+.seg button small{display:block;font-size:11px;font-weight:500;opacity:.65;margin-top:1px}

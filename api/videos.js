@@ -104,12 +104,12 @@ const SOURCES = {
       // pas de tags chez Pexels : le titre du plan, lu dans son adresse, en tient lieu
       return std && { id: 'p' + h.id, g: 'p' + h.user?.id, kind: 'video', std: shape(std), full: full ? shape(full) : null, lite: files[0].link, thumb: h.image || '', duration: h.duration, tags: String(h.url || '').split('/video/')[1] || '' };
     })],
-    [coverrKey, async (q) => (await coverr(q)).filter((h) => h.duration >= 5 && h.duration <= 90).map((h) => {
+    [coverrKey, async (q) => (await coverr(q)).filter((h) => !h.is_ai_generated && +h.duration >= 5 && +h.duration <= 90).map((h) => {
       const url = h.urls?.mp4 || h.urls?.mp4_download || h.urls?.mp4_preview;
       if (!url) return null;
       const w = h.max_width || (h.is_vertical ? 1080 : 1920), hh = h.max_height || (h.is_vertical ? 1920 : 1080);
       const tags = [].concat(h.tags || [], h.title || '').join(', ');
-      return { id: 'c' + h.id, g: 'c' + (h.id || ''), kind: 'video', std: { url, width: w, height: hh }, full: Math.min(w, hh) >= 1080 ? { url, width: w, height: hh } : null, lite: h.urls?.mp4_preview || url, thumb: h.thumbnail || h.poster || '', duration: h.duration, tags };
+      return { id: 'c' + h.id, g: 'c' + (h.id || ''), kind: 'video', std: { url, width: w, height: hh }, full: Math.min(w, hh) >= 1080 ? { url, width: w, height: hh } : null, lite: h.urls?.mp4_preview || url, thumb: h.thumbnail || h.poster || '', duration: +h.duration, tags };
     }).filter(Boolean)],
   ],
   photo: [

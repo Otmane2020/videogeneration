@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], neutral: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -111,7 +111,6 @@ function setType(t) {
   // SaaS : on montre la marque (logo), pas une image de produit
   $('#card-product').hidden = t !== 'ecom';
   $('#card-brand').hidden = t === 'ecom';
-  $('#opt-stock').hidden = t !== 'saas';
   $('#opt-bg').hidden = t !== 'ecom';
   setIntent(t === 'ecom' ? 'launch' : 'problem');
   renderPhotos();
@@ -265,12 +264,13 @@ $('#b-gen').addEventListener('click', async () => {
     // Plans d'illustration : sans eux, la pub se monte quand même. Chaque scène SaaS reçoit les siens, quel que soit
     // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
     // besoin que pour ses scènes vidéo. Derrière le téléphone : un fond sobre, pas une scène qui distrait.
-    const NEUTRAL = ['dark abstract background', 'bokeh lights night', 'abstract light background'];
+    // SaaS : au moins 5 plans (une par scène + l'écran final), choisis automatiquement
+    const closing = ['team celebrating office', 'business team handshake', 'office'];
     const wanted = state.ad.scenes.map((s) => (ecom && s.visual !== 'footage' ? null : s.queries || []));
-    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : NEUTRAL], fallback: ecom ? 'lifestyle' : 'technology', hd: $('#res').value === '1080' })
+    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : closing], fallback: ecom ? 'lifestyle' : 'technology', hd: $('#res').value === '1080' })
       .then((r) => r.json()).then(({ results }) => results).catch(() => []);
     state.clipLists = wanted.map((_, i) => lists[i] || []);
-    state.neutral = lists[wanted.length] || [];
+    state.ctaList = lists[wanted.length] || [];
     await produce(actx);
   } catch (err) {
     show('s-opts', 4);
@@ -327,7 +327,7 @@ const picker = { scene: 0, kind: 'video' };
 function openPicker(i) {
   picker.scene = i;
   $('#pk-q').value = state.ad.scenes[i].queries?.[0] || '';
-  showResults(picker.kind === 'video' ? (state.visuals[i] === 'site' ? state.neutral : state.clipLists[i]) || [] : []);
+  showResults(picker.kind === 'video' ? state.clipLists[i] || [] : []);
   if (picker.kind !== 'video') searchPicker();
   $('#picker').showModal();
 }
@@ -1218,16 +1218,10 @@ async function produce(actx) {
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
   const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
-  // SaaS : nombre de scènes en vidéo choisi par l'utilisateur ; les autres montrent le site
-  const stock = plan.type === 'saas' ? +$('#stock').value : -1;
-  if (stock >= 0) {
-    const order = [0, 3, 2, 1, 4].filter((i) => i < keep).slice(0, stock);
-    scenes.forEach((s, i) => { if (!s.kind) s.visual = order.includes(i) ? 'footage' : 'site'; });
-  }
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
-  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site') || (plan.type === 'ecom' && s.visual === 'footage' && !photoIds.length);
+  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site' || s.kind === 'cta') || (plan.type === 'ecom' && s.visual === 'footage' && !photoIds.length);
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
@@ -1240,9 +1234,9 @@ async function produce(actx) {
     const lite = navigator.connection && (navigator.connection.saveData || /2g|3g/.test(navigator.connection.effectiveType || ''));
     // visuel de chaque scène : celui choisi à la main, sinon le meilleur résultat de la recherche
     state.visuals = scenes.map((s) => s.visual);
-    const auto = await pickClips(scenes.map((s, i) => (s.kind ? [] : s.visual === 'site' ? state.neutral : state.clipLists[i]) || []), H > W);
+    const auto = await pickClips(scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? state.ctaList : []) : state.clipLists[i]) || []), H > W);
     if (job.cancelled) return;
-    const used = (state.used = scenes.map((s, i) => (s.kind ? null : s.pick || auto[i] || null)));
+    const used = (state.used = scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? auto[i] || null : null) : s.pick || auto[i] || null)));
     const voice = (text) => (text ? cached(cache.voice, plan.language + '|' + text, () => loadVoice(text, plan.language)) : Promise.resolve(null));
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([
       Promise.all(scenes.map((s, i) => tick(used[i]?.kind === 'video' && needClip(s) ? cached(cache.blob, used[i].url, () => fetchBlob(media(lite ? used[i].lite : used[i].url))) : Promise.resolve(null)))),
@@ -1329,7 +1323,7 @@ async function produce(actx) {
     const first = blobs.findIndex(Boolean), firstStill = stills.find(Boolean) || null;
     if (offline) {
       const opened = await Promise.all(blobs.map((b) => (b ? openClip(job.MB, b, cv.width, cv.height) : null)));
-      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[first] || null : opened[i]; });
+      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[i] || opened[first] || null : opened[i]; });
     }
     scenes[scenes.length - 1].still = first < 0 ? firstStill : null;
     scenes.forEach((s, i) => {
@@ -1349,7 +1343,7 @@ async function produce(actx) {
     if (job.cancelled) return;
     if (!blob) {
       const vids = await Promise.all(blobs.map((b) => (b ? loadVideoEl(b) : null)));
-      scenes.forEach((s, i) => { s.frame = null; s.video = s.kind === 'cta' ? vids[first] || null : vids[i]; });
+      scenes.forEach((s, i) => { s.frame = null; s.video = s.kind === 'cta' ? vids[i] || vids[first] || null : vids[i]; });
       blob = await exportRealtime(job, cv, draw);
     }
     if (job.cancelled) return;

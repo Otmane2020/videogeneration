@@ -417,3 +417,5 @@ dialog::backdrop, dialog#picker::backdrop, dialog#account::backdrop, dialog#upgr
 .upsell .row { display: grid; grid-template-columns: 1.4fr 1fr; gap: 8px; }
 .upsell .btn { margin: 0; min-height: 50px; padding: 12px 8px; font-size: 15px; }
 .upsell small { display: block; margin-top: 8px; color: #cfc8f0; font-size: 12.5px; }
+
+#upgrade label { margin-top: 6px; } #upgrade input { font-size: 16px; padding: 12px; text-transform: uppercase; }

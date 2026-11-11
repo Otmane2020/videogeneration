@@ -1259,8 +1259,12 @@ $$('.engtabs button').forEach((b) => b.addEventListener('click', () => {
 $('#sticky-cta').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
 $('#cta-end').addEventListener('click', () => setTimeout(() => $('#url').focus({ preventScroll: true }), 400));
 if (new URLSearchParams(location.search).get('checkout') === 'success') {
-  const n = Object.assign(document.createElement('p'), { className: 'notice', textContent: 'Thank you! Your payment went through. Your plan will be activated shortly.' });
+  // retour de paiement : on fait confirmer la session, puis le compte passe à l'offre payée
+  const n = Object.assign(document.createElement('p'), { className: 'notice', textContent: 'Confirming your payment…' });
   $('.hero-copy').prepend(n);
+  api('/api/checkout', { confirm: new URLSearchParams(location.search).get('session_id') }).then((r) => r.json())
+    .then((j) => { n.textContent = j.granted ? `Thank you! Your ${j.plan === 'business' ? 'Business' : 'Pro'} plan is active.` : 'We could not confirm this payment yet.'; refreshAccount(); })
+    .catch((e) => { n.textContent = e.message; });
   history.replaceState(null, '', location.pathname);
 }
 fetch('/api/config').then((r) => r.json()).then(({ plans, reviews = [] }) => {
@@ -1352,7 +1356,7 @@ function openUpgrade(why, single) {
 }
 async function startCheckout(errEl) {
   if (!account.user) { $('#upgrade').close(); return openAccount(true); }
-  try { location.href = (await (await api('/api/checkout', { plan: 'pro' })).json()).url; }
+  try { location.href = (await (await api('/api/checkout', { plan: 'pro', promo: $('#up-promo').value.trim() || undefined })).json()).url; }
   catch (err) { fail(errEl, err.message); }
 }
 $('#up-go').addEventListener('click', () => startCheckout($('#up-err')));
@@ -1366,7 +1370,7 @@ $('#up-one').addEventListener('click', async () => {
   if (!account.user) { $('#upgrade').close(); return openAccount(true); }
   const tab = window.open('', '_blank');
   try {
-    const { url } = await (await api('/api/checkout', { plan: 'single' })).json();
+    const { url } = await (await api('/api/checkout', { plan: 'single', promo: $('#up-promo').value.trim() || undefined })).json();
     if (tab) tab.location = url; else location.href = url;
   } catch (err) { tab?.close(); return fail($('#up-err'), err.message); }
   $('#upgrade').close();

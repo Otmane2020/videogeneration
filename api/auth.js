@@ -11,6 +11,16 @@ module.exports = async (req, res) => {
   try {
     if (req.method === 'GET') {
       const u = await user(req).catch(() => null);
+      // fin d'abonnement sans webhook : contrôle auprès de Stripe, une fois par jour au plus
+      if (u && u.plan !== 'free' && u.stripe_sub && process.env.STRIPE_SECRET_KEY && (!u.plan_checked_at || Date.now() - new Date(u.plan_checked_at) > 864e5)) {
+        const { stripe } = require('./checkout');
+        const r = await stripe('subscriptions/' + u.stripe_sub).catch(() => null);
+        if (r?.ok) {
+          const live = ['active', 'trialing', 'past_due'].includes(r.json.status);
+          await sql('UPDATE users SET plan = $1, plan_checked_at = now() WHERE id = $2', [live ? u.plan : 'free', u.id]);
+          if (!live) { u.plan = 'free'; await sendMail(u.email, 'planEnded'); }
+        }
+      }
       // profil : offre et historique des vidéos réussies
       const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
       const q = process.env.DATABASE_URL ? await usage(req, u).catch(() => null) : null;

@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], neutral: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -262,11 +262,15 @@ $('#b-gen').addEventListener('click', async () => {
     state.ad = plan.ads[0];
     setMusic(ecom ? 'm6' : 'm1');
     status('Finding the right visuals…', 10);
-    // les plans d'illustration ne servent qu'aux scènes « vidéo » : sans eux, la pub se monte quand même
-    // derrière le téléphone : un fond sobre, pas une scène qui distrait
-    const NEUTRAL = ['dark abstract background', 'bokeh lights night', 'technology background'];
-    state.clipLists = await api('/api/videos', { scenes: state.ad.scenes.map((s) => (s.visual === 'site' ? NEUTRAL : s.queries)), fallback: ecom ? 'lifestyle' : 'technology', hd: $('#res').value === '1080' })
-      .then((r) => r.json()).then(({ results }) => results).catch(() => state.ad.scenes.map(() => []));
+    // Plans d'illustration : sans eux, la pub se monte quand même. Chaque scène SaaS reçoit les siens, quel que soit
+    // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
+    // besoin que pour ses scènes vidéo. Derrière le téléphone : un fond sobre, pas une scène qui distrait.
+    const NEUTRAL = ['dark abstract background', 'bokeh lights night', 'abstract light background'];
+    const wanted = state.ad.scenes.map((s) => (ecom && s.visual !== 'footage' ? null : s.queries || []));
+    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : NEUTRAL], fallback: ecom ? 'lifestyle' : 'technology', hd: $('#res').value === '1080' })
+      .then((r) => r.json()).then(({ results }) => results).catch(() => []);
+    state.clipLists = wanted.map((_, i) => lists[i] || []);
+    state.neutral = lists[wanted.length] || [];
     await produce(actx);
   } catch (err) {
     show('s-opts', 4);
@@ -323,7 +327,7 @@ const picker = { scene: 0, kind: 'video' };
 function openPicker(i) {
   picker.scene = i;
   $('#pk-q').value = state.ad.scenes[i].queries?.[0] || '';
-  showResults(picker.kind === 'video' ? state.clipLists[i] || [] : []);
+  showResults(picker.kind === 'video' ? (state.visuals[i] === 'site' ? state.neutral : state.clipLists[i]) || [] : []);
   if (picker.kind !== 'video') searchPicker();
   $('#picker').showModal();
 }
@@ -346,7 +350,7 @@ async function searchPicker() {
   $('#pk-msg').textContent = 'Searching…';
   $('#pk-grid').textContent = '';
   try {
-    const { results } = await (await api('/api/videos', { scenes: [[q]], fallback: q, kind: picker.kind, hd: $('#res').value === '1080' })).json();
+    const { results } = await (await api('/api/videos', { scenes: [[q]], loose: true, kind: picker.kind, hd: $('#res').value === '1080' })).json();
     showResults(results[0] || []);
   } catch { $('#pk-msg').textContent = 'Search is unavailable right now.'; }
 }
@@ -416,14 +420,34 @@ function mixAudio(ctx, out, job, t0 = 0) {
 
 /* ---------- chargement des médias ---------- */
 // Un plan différent par scène ; en vertical on préfère les vidéos tournées en vertical.
-function pickClips(lists, portrait) {
-  const used = new Set();
-  return lists.map((list) => {
-    const sorted = portrait ? [...list].sort((a, b) => (b.h > b.w) - (a.h > a.w)) : list;
-    const c = sorted.find((x) => !used.has(x.id)) || sorted[0] || null;
-    if (c) used.add(c.id);
-    return c;
-  });
+// Un plan à fond vert (maquette d'écran à incruster) n'est pas toujours signalé par ses mots-clés : sa vignette le trahit.
+const greenSeen = new Map();
+function greenScreen(clip) {
+  if (!greenSeen.has(clip.id)) greenSeen.set(clip.id, (clip.thumb ? loadImage(media(clip.thumb), 16) : Promise.resolve(null)).then((im) => {
+    if (!im) return false;
+    const g = Object.assign(document.createElement('canvas'), { width: 32, height: 32 }).getContext('2d', { willReadFrequently: true });
+    g.drawImage(im, 0, 0, 32, 32);
+    const d = g.getImageData(0, 0, 32, 32).data;
+    let n = 0;
+    for (let i = 0; i < d.length; i += 4) if (d[i + 1] > 150 && d[i + 1] - Math.max(d[i], d[i + 2]) > 70) n++;
+    return n > 60; // plus de 6 % de vert d'incrustation
+  }).catch(() => false));
+  return greenSeen.get(clip.id);
+}
+// Un plan par scène : le plus pertinent (`rel`), vertical de préférence pour un format vertical, jamais deux fois le même.
+// Deux plans d'un même auteur se ressemblent souvent : on en change quand cela ne coûte rien en pertinence.
+async function pickClips(lists, portrait) {
+  const used = new Set(), authors = new Set(), picks = [];
+  const sorted = lists.map((list) => [...list].sort((a, b) => (b.rel || 0) - (a.rel || 0) || (portrait ? (b.h > b.w) - (a.h > a.w) : 0)));
+  sorted.forEach((list) => list.slice(0, 3).forEach(greenScreen)); // les vignettes des favoris se chargent ensemble
+  for (const list of sorted) {
+    const free = list.filter((x) => !used.has(x.id)), floor = Math.min(free[0]?.rel || 0, 2);
+    let c = null;
+    for (const x of [...free.filter((x) => !authors.has(x.g) && (x.rel || 0) >= floor), ...free, ...list]) if (!(await greenScreen(x))) { c = x; break; }
+    if (c) { used.add(c.id); authors.add(c.g); }
+    picks.push(c);
+  }
+  return picks;
 }
 const fetchBlob = async (url) => {
   const r = await fetch(url);
@@ -1215,7 +1239,9 @@ async function produce(actx) {
     job.MB = window.VideoEncoder ? await import('/vendor/mediabunny.min.mjs').catch(() => null) : null;
     const lite = navigator.connection && (navigator.connection.saveData || /2g|3g/.test(navigator.connection.effectiveType || ''));
     // visuel de chaque scène : celui choisi à la main, sinon le meilleur résultat de la recherche
-    const auto = pickClips(state.clipLists || [], H > W);
+    state.visuals = scenes.map((s) => s.visual);
+    const auto = await pickClips(scenes.map((s, i) => (s.kind ? [] : s.visual === 'site' ? state.neutral : state.clipLists[i]) || []), H > W);
+    if (job.cancelled) return;
     const used = (state.used = scenes.map((s, i) => (s.kind ? null : s.pick || auto[i] || null)));
     const voice = (text) => (text ? cached(cache.voice, plan.language + '|' + text, () => loadVoice(text, plan.language)) : Promise.resolve(null));
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([

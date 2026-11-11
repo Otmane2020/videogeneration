@@ -5,13 +5,18 @@ const { capture } = require('./shot');
 const { consume } = require('../lib/quota');
 
 const COMMON = `You are a senior performance-marketing creative director who writes short vertical video ads (TikTok / Reels / Shorts).
-Return ONLY a JSON object. Write headline, voiceover, tagline, cta, badge in the requested language; "query" is always English.
+Return ONLY a JSON object. Write headline, voiceover, tagline, cta, badge in the requested language; "english_queries" are always English.
 Never invent prices, discounts, figures, materials, features or testimonials that are not in the page content. No hashtags, no emoji.
 The whole ad lasts about 20 seconds: each voiceover is ONE short spoken sentence of 5 to 9 words.
-For "queries" you act as a professional stock-footage researcher. Give 3 search queries per scene, from most specific to most generic, 1 to 3 words each. Queries are ALWAYS IN ENGLISH, whatever the language of the ad (never French, Spanish or German words); the last query is a single very common English word (for example "office", "city", "woman", "laptop").
-Think about what a camera can really film that evokes THIS business and THIS sentence: people, places, screens, gestures, objects of the trade.
-Example for an SEO software: ["google search laptop", "website analytics screen", "marketing team office"]. Example for a running shoe: ["runner tying shoes", "jogging city morning", "running track"].
-Never use abstract words (success, growth, innovation, solution), brand names, or words that only describe graphics (icon, animation, logo, infographic).`;
+For "english_queries" you act as a stock-footage researcher. The library holds real filmed videos, each tagged with a few plain English keywords (for example "woman, laptop, office, typing"); a query only finds a video whose tags contain its words.
+Queries are ALWAYS IN ENGLISH, whatever the language of the ad: never a French, Spanish, German or Italian word. Give 3 queries for EVERY scene, whatever its visual; each one starts with the noun naming its subject:
+ 1. two or three common words: who or what is filmed, then where or doing what, as close to this scene as possible;
+ 2. two common words for a different shot that also fits the scene;
+ 3. one single concrete noun: a person, a place or an object of this trade (for example "restaurant", "developer", "doctor", "warehouse", "laptop").
+Film the world of the CUSTOMERS of this business: their job, their workplace, their tools, the people they serve. Never try to film the software itself. Each scene gets its own shots: do not repeat a query in another scene.
+Examples. Restaurant booking software: ["waiter serving table", "chef kitchen", "restaurant"]. Invoicing tool for freelancers: ["freelancer laptop coffee", "accountant calculator", "invoice"]. Error monitoring for developers: ["developer coding night", "programmer keyboard", "developer"]. Appointment booking for doctors: ["doctor patient", "woman phone", "doctor"]. Running shoe: ["runner tying shoes", "jogging city", "runner"].
+Use only words a camera can film and a librarian would tag: people (woman, team, chef, developer), objects (laptop, phone, calculator, camera), places (office, kitchen, shop, street), actions (typing, meeting, shopping, cooking).
+Never use: brand or product names; words about software and interfaces (app, software, platform, dashboard, website, page, screen, interface, button, click, link, feature, integration, automation, workflow, AI, data, cloud, export, signup); abstract words (success, growth, innovation, solution, chaos, fast); words that describe graphics (icon, animation, logo, infographic). In the library those words bring back clouds in the sky, insects or car dashboards.`;
 
 const SHAPE_HEAD = `{
  "brand": string,                     // short brand name
@@ -30,7 +35,7 @@ ${SHAPE_HEAD}
      {"headline": string,             // on-screen text, max 6 words, punchy
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
-      "queries": [string, string, string],
+      "english_queries": [string, string, string],  // stock-footage searches, English words only
       "visual": "footage"|"site"}     // stock footage, or a phone showing the real website
    ],
    "cta": string,                     // button label, max 4 words
@@ -58,7 +63,7 @@ ${SHAPE_HEAD}
       "visual": "product"|"detail"|"footage",  // product = the product presented on the backdrop; detail = slow close-up travelling over a photo; footage = stock video
       "photo": number,                // index of the usable photo to show (ignored for footage)
       "badge": string,                // optional: one verified fact from the page, max 4 words (material, size, warranty...), else ""
-      "queries": [string, string, string]}
+      "english_queries": [string, string, string]}  // stock-footage searches, English words only
    ],
    "cta": string,                     // button label, max 4 words
    "ctaVoiceover": string}
@@ -78,6 +83,15 @@ const GOALS = {
 };
 // requêtes de banque d'images : lettres simples uniquement (les accents sont repliés, pas supprimés)
 const cleanQ = (v) => str(v, 50).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim();
+// Mots qu'aucune caméra ne filme (interface, notions abstraites) : dans une banque d'images ils ramènent des nuages, des insectes ou des tableaux de bord de voiture.
+const UNFILMABLE = new Set('app apps application software saas platform dashboard website site web page screen interface ui ux button click link feature features integration automation workflow ai api crm erp seo signup login export download upload cloud data bug pipeline funnel tool tools system solution product products service services content idea ideas process result results performance quality management strategy growth success innovation'.split(' '));
+// Requêtes d'une scène : sans le nom de la marque ni vocabulaire d'interface. Une requête réduite à un mot par ce nettoyage est écartée.
+function stockQueries(list, brands) {
+  return list.map(cleanQ).map((q) => {
+    const kept = brands.reduce((t, b) => t.replace(b, ' '), q).split(' ').filter((w) => w && !UNFILMABLE.has(w.toLowerCase()));
+    return kept.length > 1 || kept.length === q.split(' ').length ? kept.join(' ') : '';
+  }).filter(Boolean).filter((q, i, a) => a.indexOf(q) === i).slice(0, 3);
+}
 
 // Charge les visuels pour la vision ; garde l'indice d'origine de chacun.
 async function loadImages(sources) {
@@ -101,7 +115,7 @@ function fallback(page, type, nPhotos) {
   const lines = [page.product?.name, ...page.h1, ...page.h2, page.title, page.description].map((s) => str(s, 90)).filter(Boolean);
   const pick = (i) => lines[i % Math.max(lines.length, 1)] || page.siteName;
   const short = (s) => s.split(' ').slice(0, 6).join(' ');
-  const q = type === 'ecom' ? ['shopping happy', 'unboxing package', 'lifestyle home', 'online shopping phone'] : ['team office laptop', 'typing computer', 'business meeting', 'data dashboard'];
+  const q = type === 'ecom' ? ['shopping happy', 'unboxing package', 'lifestyle home', 'online shopping phone'] : ['team office laptop', 'typing computer', 'business meeting', 'woman phone'];
   const angles = fr ? ['Découverte', 'Bénéfices', 'Passez à l’action'] : ['Discovery', 'Benefits', 'Take action'];
   const visual = (i) => (type === 'ecom' ? (nPhotos ? (i % 2 ? 'detail' : 'product') : 'footage') : i === 1 || i === 3 ? 'site' : 'footage');
   return {
@@ -125,6 +139,9 @@ function normalize(d, page, type, seen) {
     const p = photos[Number(n)];
     return p && p.usable ? p.index : usable.length ? usable[0].index : -1;
   };
+  // le nom de la marque (en un mot ou en toutes lettres) n'a rien à faire dans une recherche de plans
+  const brands = [d.brand, page.siteName, String(page.url).replace(/^https?:\/\//, '').split(/[/:?#]/)[0].split('.').slice(-2)[0]].map((n) => cleanQ(n)).filter((n) => n.length > 2)
+    .map((n) => new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s*') + '\\b', 'gi'));
   const ads = (Array.isArray(d.ads) ? d.ads : []).map((ad, a) => ({
     angle: str(ad.angle, 40) || fb.ads[a % 3].angle,
     scenes: (Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s) => {
@@ -134,7 +151,7 @@ function normalize(d, page, type, seen) {
       return {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         badge: type === 'ecom' ? str(s.badge, 34) : '',
-        queries: [...(Array.isArray(s.queries) ? s.queries : []), s.query].map(cleanQ).filter(Boolean).slice(0, 3),
+        queries: stockQueries([s.english_queries, s.queries, s.query].flat(), brands),
       };
     }).filter((s) => s.headline),
     cta: str(ad.cta, 30) || fb.ads[0].cta,

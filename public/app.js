@@ -258,7 +258,7 @@ $('#b-gen').addEventListener('click', async () => {
     // la variante choisie fixe le prix affiché et le texte de la pub
     const v = ecom ? variantOf() : null;
     const page = v?.price ? { ...state.page, product: { ...state.page.product, price: v.price } } : state.page;
-    const plan = (state.plan = await (await api('/api/analyze', { page, type: state.type, intent: state.intent, photos: ecom ? list.map((p) => p.send) : undefined, variant: ecom && Object.keys(state.variant).length ? state.variant : undefined })).json());
+    const plan = (state.plan = await (await api('/api/analyze', { page, type: state.type, intent: state.intent, format: state.fmt, photos: ecom ? list.map((p) => p.send) : undefined, variant: ecom && Object.keys(state.variant).length ? state.variant : undefined })).json());
     const brand = await state.logo;
     if (brand?.colors) Object.assign(plan.palette, brand.colors);
     plan.palette = safePalette(plan.palette);

@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: 'karaoke', templateStyle: 'cinematic', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -70,6 +70,9 @@ $('#f-url').addEventListener('submit', async (e) => {
 $$('[data-back]').forEach((b) => b.addEventListener('click', () => { cancelJob(); show('s-url', 1); }));
 
 /* ---------- 3. réglages ---------- */
+$('#caption-style')?.addEventListener('change', (e) => { state.captionStyle = e.target.value; });
+$('#template-style')?.addEventListener('change', (e) => { state.templateStyle = e.target.value; });
+
 function renderSetup() {
   const p = state.page;
   $('#site-host').textContent = $('#brand-host').textContent = p.host;
@@ -648,6 +651,8 @@ function makeRenderer(cv, job) {
   const tmp = document.createElement('canvas'), refl = document.createElement('canvas');
   let ctx = main;
   const { scenes, plan, shot, logo } = job;
+  const captionStyle = job.captionStyle || 'karaoke';
+  const templateStyle = job.templateStyle || 'cinematic';
   const P = plan.palette.primary, A = plan.palette.accent;
   const wide = W > H, square = W === H;
   const pad = wide ? 64 : 44;
@@ -886,43 +891,60 @@ function makeRenderer(cv, job) {
 
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
     const tx = wide ? pad + textW / 2 : W / 2;
-    // sous-titres : petit groupe de mots centré, le mot prononcé grossit et prend la couleur d'accent
+    // Sous-titres stylables : le rendu reste incrusté dans le MP4 exporté.
     const chunk = sc.words.find((c) => local < c[c.length - 1].t1 + 0.2) || null;
-    if (chunk && local >= chunk[0].t0 - 0.1) {
-      const size = wide ? 38 : 44;
-      ctx.font = `800 ${size}px ${FONT}`;
-      const texts = chunk.map((wd) => wd.w.toUpperCase()), widths = texts.map((t) => ctx.measureText(t).width + size * 0.42);
-      const total = widths.reduce((a, b2) => a + b2, 0), fit = Math.min(1, (textW + 20) / total);
-      const inK = backOut((local - chunk[0].t0 + 0.1) / 0.18);
-      let x = tx - (total * fit) / 2;
-      ctx.lineJoin = 'round';
-      chunk.forEach((wd, n) => {
-        const on = local >= wd.t0 && local < wd.t1, pop = on ? 1 + 0.14 * (1 - easeOut((local - wd.t0) / 0.16)) + 0.06 : 1;
-        const cxw = x + (widths[n] * fit) / 2;
-        ctx.save();
-        ctx.translate(cxw, bottom); ctx.scale(fit * pop * (0.7 + 0.3 * inK), fit * pop * (0.7 + 0.3 * inK));
-        ctx.lineWidth = 10; ctx.strokeStyle = 'rgba(0,0,0,.85)'; ctx.strokeText(texts[n], 0, 0);
-        ctx.fillStyle = on ? A : local >= wd.t1 ? '#fff' : 'rgba(255,255,255,.7)';
-        ctx.fillText(texts[n], 0, 0);
-        ctx.restore();
-        x += widths[n] * fit;
-      });
+    if (chunk && local >= chunk[0].t0 - 0.1 && window.ClipMotionCaptions) {
+      window.ClipMotionCaptions.draw(ctx, chunk, local, { x: tx, y: bottom, width: textW, wide, accent: A, font: FONT, style: captionStyle, backOut, easeOut });
     }
-    // titre en bandeaux de couleur : chaque ligne arrive en rebond, légèrement penchée, puis se redresse
+    // Template de composition : chaque variante change réellement le traitement du titre dans la vidéo.
     ctx.font = `800 ${headSize}px ${FONT}`;
     lines.forEach((l, i) => {
       const e = backOut((local - 0.1 - i * 0.12) / 0.38);
       if (e <= 0) return;
-      const last = i === lines.length - 1, w = ctx.measureText(l).width + 36;
+      const last = i === lines.length - 1, w = Math.min(textW - 12, ctx.measureText(l).width + 42);
+      const y = top + i * lh + (lh - 8) / 2;
       ctx.save();
       ctx.globalAlpha = clamp(e * 1.4);
-      ctx.translate(tx, top + i * lh + (lh - 8) / 2);
-      ctx.rotate((1 - Math.min(1, e)) * (i % 2 ? 0.07 : -0.07) + (i % 2 ? 0.012 : -0.012));
-      ctx.scale(0.55 + 0.45 * e, 0.55 + 0.45 * e);
-      ctx.fillStyle = last ? A : P;
-      rr(-w / 2, -(lh - 8) / 2, w, lh - 8, 14); ctx.fill();
-      ctx.fillStyle = onColor(last ? A : P);
-      ctx.fillText(l, 0, headSize * 0.36);
+      ctx.translate(tx, y);
+      if (templateStyle === 'editorial') {
+        ctx.font = `700 ${Math.round(headSize * 0.96)}px Georgia, serif`;
+        ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 18;
+        ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+      } else if (templateStyle === 'minimal') {
+        ctx.textAlign = 'center'; ctx.fillStyle = '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 16;
+        ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+      } else if (templateStyle === 'neon') {
+        ctx.textAlign = 'center'; ctx.shadowColor = A; ctx.shadowBlur = 24;
+        ctx.lineWidth = 3; ctx.strokeStyle = '#fff'; ctx.strokeText(l, 0, headSize * 0.34, textW - 20);
+        ctx.fillStyle = A; ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+      } else if (templateStyle === 'split') {
+        ctx.textAlign = 'center'; ctx.fillStyle = last ? A : '#fff';
+        ctx.shadowColor = '#000'; ctx.shadowBlur = 14;
+        ctx.fillText(l, 0, headSize * 0.34, textW - 20);
+        ctx.fillStyle = last ? '#fff' : A;
+        ctx.fillRect(-w / 2, headSize * 0.48, w, Math.max(4, headSize * 0.055));
+      } else if (templateStyle === 'social') {
+        ctx.textAlign = 'center'; ctx.fillStyle = '#101018';
+        rr(-w / 2, -(lh - 4) / 2, w, lh - 4, 12); ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else if (templateStyle === 'product') {
+        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(8,7,18,.78)';
+        rr(-w / 2 - 12, -(lh - 4) / 2, w + 24, lh - 4, 18); ctx.fill();
+        ctx.fillStyle = last ? A : '#fff'; ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else if (templateStyle === 'bold') {
+        ctx.textAlign = 'center'; ctx.fillStyle = last ? A : P;
+        rr(-w / 2, -(lh - 4) / 2, w, lh - 4, 7); ctx.fill();
+        ctx.fillStyle = onColor(last ? A : P); ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else {
+        ctx.rotate((1 - Math.min(1, e)) * (i % 2 ? 0.07 : -0.07) + (i % 2 ? 0.012 : -0.012));
+        ctx.scale(0.55 + 0.45 * e, 0.55 + 0.45 * e);
+        ctx.fillStyle = last ? A : P;
+        rr(-w / 2, -(lh - 8) / 2, w, lh - 8, 14); ctx.fill();
+        ctx.fillStyle = onColor(last ? A : P);
+        ctx.textAlign = 'center'; ctx.fillText(l, 0, headSize * 0.36, textW - 24);
+      }
       ctx.restore();
     });
   }
@@ -1206,7 +1228,7 @@ async function produce(actx) {
   const paid = unlocked();
   if (state.unlockedAd === state.ad && state.ad) $('#res').value = '1080';
   if (!paid && $('#res').value !== '720') { $('#res').value = '720'; $$('[data-for=res] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '720'))); }
-  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid });
+  const job = (state.job = { cancelled: false, actx, plan, host: page.host, size: [W, H], scale: +$('#res').value / 720, watermark: !paid, captionStyle: state.captionStyle, templateStyle: state.templateStyle });
   const cv = $('#cv'), result = $('#result');
   const scale = job.scale;
   cv.width = Math.round(W * scale); cv.height = Math.round(H * scale);

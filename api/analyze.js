@@ -47,6 +47,7 @@ ${SHAPE_HEAD}
 }
 Choose ONE videoTemplate that fits the product and audience: "product-demo", "problem-solution", "feature-showcase", "startup-launch", "customer-story", or "corporate". Do not use the same generic story for every SaaS.
 Choose ONE captionStyle for this audience: "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Prefer readable, restrained captions; avoid neon unless the brand genuinely calls for it.
+Make captionStyle format-aware: vertical 9:16 needs large, short, safe-area captions; square 1:1 needs compact balanced captions; horizontal 16:9 should prefer clean lower-third or editorial treatments that do not obstruct the footage.
 Narrative and footage rules:
 - Exactly four scenes, each with a different purpose and a distinct real-world shot. The first scene must be an immediate human/customer hook, not a generic computer close-up.
 - Use "site" for exactly two scenes, preferably scenes 2 and 3, to show the real captured website inside the phone. Do not invent a dashboard or fabricate UI.
@@ -86,7 +87,7 @@ ${SHAPE_HEAD}
    "ctaVoiceover": string}
  ]
 }
-Choose ONE videoTemplate that suits this exact product: "editorial-product", "product-spotlight", or "lifestyle-product". Choose ONE captionStyle from "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Do not force a generic visual style on every product.
+Choose ONE videoTemplate that suits this exact product: "editorial-product", "product-spotlight", or "lifestyle-product". Choose ONE captionStyle from "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Do not force a generic visual style on every product. Make the caption treatment fit the selected video format and keep the product fully visible.
 Visual rules: every scene is "product" or "detail": the ad is made only from the customer's real product photos. Vary photo, scale, crop and camera movement; never show the same photo with the same visual twice in a row. Use "footage" only if no photo at all is usable. The scene setting and colours must suit the actual product category and materials.`;
 
 const LANGS = { fr: 'French', en: 'English', es: 'Spanish', de: 'German', it: 'Italian', nl: 'Dutch', pt: 'Portuguese', ar: 'Arabic', ja: 'Japanese' };
@@ -261,7 +262,8 @@ function normalize(d, page, type, seen, intent) {
 }
 
 module.exports = handler('POST', async (req, res) => {
-  const { page, type, photos, variant, intent } = await readJson(req);
+  const { page, type, photos, variant, intent, format: requestedFormat } = await readJson(req);
+  const format = ['9:16', '1:1', '16:9'].includes(requestedFormat) ? requestedFormat : '9:16';
   const goal = GOALS[intent] || GOALS.launch;
   if (!page || typeof page !== 'object' || !page.url) throw httpError(400, 'Missing page scan');
   await consume(req); // quota mensuel de l'offre
@@ -292,6 +294,7 @@ module.exports = handler('POST', async (req, res) => {
   }
   const user = `Goal of this ad: ${goal}
 Language for all on-screen and spoken copy: ${LANGS[p.lang] || 'English'}
+Final video format: ${format} (${format === '9:16' ? 'vertical mobile' : format === '1:1' ? 'square' : 'horizontal landscape'}). Choose the caption treatment and composition for this exact frame.
 URL: ${p.url}
 Site name: ${p.siteName}
 Title: ${p.title}

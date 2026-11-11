@@ -5,6 +5,25 @@ const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
 const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', uploads: [], photoUrls: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
+// IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
+const vidIdb = (() => {
+  let db = null;
+  const open = () => db ? Promise.resolve(db) : new Promise((res, rej) => {
+    const r = indexedDB.open('clipmotion-vids', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('v');
+    r.onsuccess = () => { db = r.result; res(db); };
+    r.onerror = () => rej(r.error);
+  });
+  const tx = async (mode, fn) => { const d = await open(); return new Promise((res, rej) => { const t = d.transaction('v', mode); t.onerror = () => rej(t.error); fn(t.objectStore('v'), res); }); };
+  return {
+    set: (id, blob) => tx('readwrite', (s, res) => { const r = s.put({ blob, ts: Date.now() }, String(id)); r.onsuccess = () => res(); }),
+    get: (id) => tx('readonly', (s, res) => { const r = s.get(String(id)); r.onsuccess = () => res(r.result?.blob || null); }),
+    keys: () => tx('readonly', (s, res) => { const r = s.getAllKeys(); r.onsuccess = () => res(r.result); }),
+    del: (id) => tx('readwrite', (s, res) => { const r = s.delete(String(id)); r.onsuccess = () => res(); }),
+    prune: async (keep) => { const ks = await vidIdb.keys(); if (ks.length <= keep) return; const old = ks.sort().slice(0, ks.length - keep); await Promise.all(old.map((k) => vidIdb.del(k))); },
+  };
+})();
+
 async function api(path, body) {
   const r = await fetch(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   if (!r.ok) throw new Error((await r.json().catch(() => ({}))).error || `Error ${r.status}`);
@@ -1335,7 +1354,8 @@ async function produce(actx) {
       tc.getContext('2d').drawImage(cv, 0, 0, TW, TH);
       thumb = tc.toDataURL('image/jpeg', 0.72);
     } catch {}
-    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, thumb } }).then(refreshAccount).catch(() => {});
+    api('/api/auth', { action: 'log', gen: { brand: plan.brand, url: page.url, kind: plan.type, intent: state.intent, format: state.fmt, seconds: job.total, resolution: `${cv.width}x${cv.height}`, thumb } })
+      .then((r) => r.json()).then(async (j) => { if (j.id && blob) { try { await vidIdb.set(j.id, blob); await vidIdb.prune(15); } catch {} } refreshAccount(); }).catch(() => {});
   } catch (err) {
     console.error(err);
     if (!job.cancelled) { status('Something went wrong while editing. Please try again.', 100); $('#b-again').hidden = false; }
@@ -1362,7 +1382,7 @@ if (new URLSearchParams(location.search).get('checkout') === 'success') {
   const n = Object.assign(document.createElement('p'), { className: 'notice', textContent: 'Confirming your payment…' });
   $('.hero-copy').prepend(n);
   api('/api/checkout', { confirm: new URLSearchParams(location.search).get('session_id') }).then((r) => r.json())
-    .then((j) => { n.textContent = j.granted ? `Thank you! Your ${j.plan === 'business' ? 'Business' : 'Pro'} plan is active.` : 'We could not confirm this payment yet.'; refreshAccount(); })
+    .then((j) => { n.textContent = j.granted ? (j.plan === 'single' ? 'Payment confirmed! Your video will export without watermark.' : `Thank you! Your ${j.plan === 'business' ? 'Business' : 'Pro'} plan is active.`) : 'We could not confirm this payment yet.'; refreshAccount(); })
     .catch((e) => { n.textContent = e.message; });
   history.replaceState(null, '', location.pathname);
 }
@@ -1472,7 +1492,23 @@ function paintAccount() {
       left.append(Object.assign(document.createElement('small'), { textContent: `${new Date(h.created_at).toLocaleDateString()} · ${h.format} · ${Math.round(h.seconds)} s · ${h.resolution}` }));
       const again = Object.assign(document.createElement('button'), { type: 'button', textContent: 'Create again' });
       again.addEventListener('click', () => { $('#account').close(); show('s-url', 1); $('#url').value = h.url; $('#f-url').requestSubmit(); });
-      li.append(left, again); list.append(li);
+      const acts = document.createElement('div');
+      acts.style.cssText = 'display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:4px';
+      acts.append(again);
+      // boutons download + preview chargés depuis IndexedDB
+      if (h.id) {
+        vidIdb.get(h.id).then((blob) => {
+          if (!blob) return;
+          const ext = blob.type.includes('mp4') ? '.mp4' : '.webm';
+          const fname = (h.brand || 'video').normalize('NFD').toLowerCase().replace(/[^a-z0-9]+/g, '-') + ext;
+          const url = URL.createObjectURL(blob);
+          const dl = Object.assign(document.createElement('a'), { href: url, download: fname, className: 'btn ghost', textContent: '↓ Download', style: 'font-size:12px;padding:4px 10px' });
+          const prev = Object.assign(document.createElement('button'), { type: 'button', className: 'btn ghost', textContent: '▶ Preview', style: 'font-size:12px;padding:4px 10px' });
+          prev.addEventListener('click', () => { const v = Object.assign(document.createElement('video'), { src: url, controls: true, autoplay: true, style: 'max-width:min(90vw,360px);max-height:70vh;border-radius:12px;background:#000' }); const overlay = Object.assign(document.createElement('div'), { style: 'position:fixed;inset:0;z-index:9999;background:rgba(0,0,0,.85);display:flex;align-items:center;justify-content:center' }); overlay.addEventListener('click', (e) => { if (e.target === overlay) { v.pause(); overlay.remove(); } }); overlay.append(v); document.body.append(overlay); });
+          acts.append(dl, prev);
+        }).catch(() => {});
+      }
+      li.append(left, acts); list.append(li);
     });
   }
   $('#ac-go').textContent = account.reset ? 'Save password' : account.signup ? 'Create account' : 'Sign in';

@@ -22,7 +22,7 @@ module.exports = async (req, res) => {
         }
       }
       // profil : offre et historique des vidéos réussies
-      const history = u ? await sql('SELECT created_at, brand, url, kind, intent, format, seconds, resolution, thumb FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
+      const history = u ? await sql('SELECT id, created_at, brand, url, kind, intent, format, seconds, resolution, thumb FROM generations WHERE user_id = $1 ORDER BY created_at DESC LIMIT 30', [u.id]).catch(() => []) : [];
       const q = process.env.DATABASE_URL ? await usage(req, u).catch(() => null) : null;
       return send(res, 200, { user: u && { email: u.email, plan: u.plan, credits: u.credits || 0, admin: admins().includes(u.email) }, usage: q && { used: q.used, limit: q.limit }, history, enabled: !!(process.env.DATABASE_URL && process.env.SESSION_SECRET) });
     }
@@ -43,8 +43,8 @@ module.exports = async (req, res) => {
       const g = body.gen || {}, t = (v, n) => String(v ?? '').slice(0, n);
       // thumb : data URL d'une vignette 60×108 (ou 108×60) JPEG envoyée par le client (~3 KB max)
       const thumb = typeof g.thumb === 'string' && g.thumb.startsWith('data:image/') ? g.thumb.slice(0, 20000) : null;
-      await sql('INSERT INTO generations (user_id, brand, url, kind, intent, format, seconds, resolution, thumb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [u.id, t(g.brand, 80), t(g.url, 400), t(g.kind, 10), t(g.intent, 20), t(g.format, 8), Math.min(120, Math.max(0, +g.seconds || 0)), t(g.resolution, 12), thumb]);
-      return send(res, 200, { saved: true });
+      const rows = await sql('INSERT INTO generations (user_id, brand, url, kind, intent, format, seconds, resolution, thumb) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id', [u.id, t(g.brand, 80), t(g.url, 400), t(g.kind, 10), t(g.intent, 20), t(g.format, 8), Math.min(120, Math.max(0, +g.seconds || 0)), t(g.resolution, 12), thumb]);
+      return send(res, 200, { saved: true, id: rows[0]?.id || null });
     }
     if (action === 'reset') {
       const pw2 = String(password || ''), id = String(token || '').split('.')[0];

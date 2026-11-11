@@ -14,10 +14,18 @@ function cached(key, fn) {
   });
 }
 
-// --- Pixabay ---
+// --- Pixabay (rotation entre PIXABAY_API_KEY et PIXABAY_API_KEY_2) ---
+let _pkIdx = 0;
+function pixabayKey() {
+  const keys = [process.env.PIXABAY_API_KEY, process.env.PIXABAY_API_KEY_2].filter(Boolean);
+  if (!keys.length) return null;
+  return keys[(_pkIdx++) % keys.length];
+}
 async function pixabayCall(path, params) {
+  const pk = pixabayKey();
+  if (!pk) throw new Error('pixabay: no key');
   const u = new URL('https://pixabay.com/api/' + path);
-  u.search = new URLSearchParams({ key: process.env.PIXABAY_API_KEY, safesearch: 'true', per_page: '24', ...params });
+  u.search = new URLSearchParams({ key: pk, safesearch: 'true', per_page: '24', ...params });
   const r = await fetch(u, { signal: AbortSignal.timeout(12000) });
   if (!r.ok) throw new Error(`pixabay ${r.status}`);
   return (await r.json()).hits || [];

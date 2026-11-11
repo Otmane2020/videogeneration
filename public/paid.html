@@ -1,15 +1,67 @@
 <!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Payment | ClipMotion</title><link rel="stylesheet" href="/style.css"></head>
-<body><main id="app" style="max-width:520px;text-align:center;padding-top:18vh">
-<span class="logo" style="justify-content:center;font-size:22px"><span class="mark"></span><span class="wm">Clip<b>Motion</b></span></span>
-<h1 style="font-size:32px;margin:26px 0 10px" id="t">Confirming your purchase…</h1>
-<p class="lead" id="m"></p>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="robots" content="noindex"><title>Payment | ClipMotion</title><link rel="stylesheet" href="/style.css">
+<style>
+  .paid-wrap{display:flex;flex-direction:column;align-items:center;gap:18px}
+  .paid-icon{font-size:56px;animation:pop .4s cubic-bezier(.26,1.5,.5,1) both}
+  @keyframes pop{from{transform:scale(0);opacity:0}to{transform:scale(1);opacity:1}}
+  .countdown{font-size:13px;color:var(--muted,#888);margin-top:4px}
+  .countdown b{color:var(--fg,#fff)}
+  #back-btn{margin-top:8px}
+</style>
+</head>
+<body><main id="app" style="max-width:520px;text-align:center;padding-top:16vh">
+<div class="paid-wrap">
+  <span class="logo" style="justify-content:center;font-size:22px"><span class="mark"></span><span class="wm">Clip<b>Motion</b></span></span>
+  <div class="paid-icon" id="ic">⏳</div>
+  <h1 style="font-size:32px;margin:0" id="t">Confirming your purchase…</h1>
+  <p class="lead" style="margin:0" id="m"></p>
+  <p class="countdown" id="cd" hidden></p>
+  <a id="back-btn" class="btn" href="/" hidden>Go back &amp; export your video →</a>
+</div>
 <script>
-const q = new URLSearchParams(location.search), t = document.getElementById('t'), m = document.getElementById('m');
-if (q.get('cancelled')) { t.textContent = 'Payment cancelled'; m.textContent = 'Nothing was charged. You can close this tab and go back to your video.'; }
-else fetch('/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: q.get('session_id') }) }).then((r) => r.json()).then((j) => {
-  t.textContent = j.granted ? 'All set' : 'Purchase not confirmed';
-  m.textContent = j.granted ? 'Go back to your ClipMotion tab: your video is being exported without the watermark.' : (j.error || 'We could not confirm this purchase. If you were charged, contact us.');
-}).catch(() => { t.textContent = 'Purchase not confirmed'; });
+const q = new URLSearchParams(location.search);
+const t = document.getElementById('t'), m = document.getElementById('m'), ic = document.getElementById('ic');
+const cdEl = document.getElementById('cd'), btn = document.getElementById('back-btn');
+
+function startRedirect(sid) {
+  const dest = '/?checkout=success&session_id=' + encodeURIComponent(sid);
+  btn.href = dest; btn.hidden = false;
+  let n = 4;
+  cdEl.hidden = false;
+  cdEl.innerHTML = 'Redirecting in <b>' + n + '</b> s…';
+  const iv = setInterval(() => {
+    n--;
+    if (n <= 0) { clearInterval(iv); location.href = dest; }
+    else cdEl.innerHTML = 'Redirecting in <b>' + n + '</b> s…';
+  }, 1000);
+}
+
+if (q.get('cancelled')) {
+  ic.textContent = '↩️';
+  t.textContent = 'Payment cancelled';
+  m.textContent = 'Nothing was charged.';
+  btn.textContent = '← Back to ClipMotion'; btn.href = '/'; btn.hidden = false;
+} else {
+  const sid = q.get('session_id') || '';
+  fetch('/api/checkout', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: sid }) })
+    .then((r) => r.json()).then((j) => {
+      if (j.granted) {
+        ic.textContent = '✅';
+        t.textContent = 'Payment confirmed!';
+        m.textContent = 'Your export is ready without watermark.';
+        startRedirect(sid);
+      } else {
+        ic.textContent = '⚠️';
+        t.textContent = 'Purchase not confirmed';
+        m.textContent = j.error || 'We could not confirm this purchase. If you were charged, contact us.';
+        btn.textContent = '← Back to ClipMotion'; btn.href = '/'; btn.hidden = false;
+      }
+    }).catch(() => {
+      ic.textContent = '⚠️';
+      t.textContent = 'Connection error';
+      m.textContent = 'Could not reach the server. Please try again.';
+      btn.textContent = '← Back to ClipMotion'; btn.href = '/'; btn.hidden = false;
+    });
+}
 </script>
 </main></body></html>

@@ -1,0 +1,21 @@
+# ClipMotion
+
+> ClipMotion (clipmotion.ai) is a web app that turns a product page or a SaaS website link into a ready-to-post video ad: script, voice-over, word-by-word captions, music and MP4 export, in 9:16, 1:1 or 16:9. No filming and no account needed to try it.
+
+## What it does
+- E-commerce: builds the ad from the seller's real product photos. Only the plain background is removed; the product is never regenerated, so shape, logo and colours stay exactly as photographed.
+- SaaS: combines relevant filmed HD stock footage of the customer's situation, a capture of the real website in a phone frame, real logos of integrated tools joined by animated arrows, and the brand's own logo and colours.
+- Voice-over and captions in the page's language, music composed by ClipMotion, licensed royalty-free footage.
+- Free preview with a watermark; clean export per video from $0.99, or through a subscription.
+
+## Guides
+- [How to choose an AI video ad generator: a 9-point checklist](https://clipmotion.ai/blog/how-to-choose-ai-video-ad-generator)
+- [How to make a video ad from a URL in five minutes](https://clipmotion.ai/blog/make-video-ad-from-url)
+- [Video ad script templates: six formulas for 15 to 30 second ads](https://clipmotion.ai/blog/video-ad-script-templates)
+- [How to turn a product page into a video ad](https://clipmotion.ai/blog/product-page-to-video-ad)
+- [Video ads for SaaS without a film crew](https://clipmotion.ai/blog/saas-video-ads)
+- [Video ad formats and lengths that fit each platform](https://clipmotion.ai/blog/video-ad-formats-lengths)
+
+## Links
+- [Home and app](https://clipmotion.ai/)
+- [Sitemap](https://clipmotion.ai/sitemap.xml)

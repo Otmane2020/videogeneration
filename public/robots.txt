@@ -1,5 +1,50 @@
+# ClipMotion : tout le contenu public est ouvert aux moteurs de recherche et aux assistants IA.
 User-agent: *
 Allow: /
 Disallow: /api/
+Disallow: /admin
+Disallow: /paid
+Disallow: /footage
+
+# Assistants et moteurs IA : explicitement bienvenus sur les pages publiques
+User-agent: GPTBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: OAI-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: ChatGPT-User
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: ClaudeBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: Claude-SearchBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: PerplexityBot
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: Google-Extended
+Allow: /
+Disallow: /api/
+Disallow: /admin
+
+User-agent: Applebot-Extended
+Allow: /
+Disallow: /api/
+Disallow: /admin
 
 Sitemap: https://clipmotion.ai/sitemap.xml

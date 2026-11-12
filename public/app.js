@@ -553,8 +553,8 @@ function loadVideoEl(blob) {
     v.load();
   });
 }
-async function loadVoice(text, lang) {
-  const buf = await (await api('/api/tts', { text, lang })).arrayBuffer();
+async function loadVoice(text, lang, voice) {
+  const buf = await (await api('/api/tts', { text, lang, voice })).arrayBuffer();
   return new Promise((ok, ko) => new OfflineAudioContext(1, 1, 48000).decodeAudioData(buf, ok, ko));
 }
 
@@ -1459,7 +1459,21 @@ async function produce(actx) {
     const credit = (list) => { job.credits = [...new Set(list.filter((u) => u?.cr).map((u) => `${u.au || 'Unknown author'} (${u.lic})`))]; };
     const used = (state.used = scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? auto[i] || null : null) : s.pick || auto[i] || null)));
     credit(used);
-    const voice = (text) => (text ? cached(cache.voice, plan.language + '|' + text, () => loadVoice(text, plan.language)) : Promise.resolve(null));
+    const VOICE_POOL = {
+      en: ['aura-2-thalia-en', 'aura-2-asteria-en', 'aura-2-atlas-en', 'aura-2-aurora-en', 'aura-2-aries-en', 'aura-2-ophelia-en', 'aura-2-phoebe-en'],
+      es: ['aura-2-celeste-es', 'aura-2-carina-es', 'aura-2-aquila-es', 'aura-2-luciano-es', 'aura-2-antonia-es', 'aura-2-diana-es'],
+      fr: ['aura-2-agathe-fr', 'aura-2-hector-fr'],
+      de: ['aura-2-viktoria-de', 'aura-2-julius-de', 'aura-2-lara-de'],
+      nl: ['aura-2-beatrix-nl', 'aura-2-sander-nl', 'aura-2-leda-nl'],
+      it: ['aura-2-livia-it', 'aura-2-dionisio-it', 'aura-2-maia-it'],
+      ja: ['aura-2-uzume-ja', 'aura-2-ebisu-ja', 'aura-2-izanami-ja'],
+    };
+    const voiceLang = String(plan.language || '').toLowerCase().split(/[-_]/)[0];
+    const voicePool = VOICE_POOL[voiceLang] || [];
+    if (!voicePool.length) throw new Error(`Deepgram Aura-2 does not support voice-over in “${plan.language || 'unknown'}”.`);
+    // One random voice per finished video: consistent voice across all scenes.
+    const voiceModel = voicePool[Math.floor(Math.random() * voicePool.length)];
+    const voice = (text) => (text ? cached(cache.voice, voiceModel + '|' + text, () => loadVoice(text, plan.language, voiceModel)) : Promise.resolve(null));
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([
       Promise.all(scenes.map((s, i) => tick(used[i]?.kind === 'video' && needClip(s) ? cached(cache.blob, used[i].url, () => fetchBlob(media(lite ? used[i].lite : used[i].url))) : Promise.resolve(null)))),
       Promise.all(scenes.map((s, i) => (used[i]?.kind === 'photo' && needClip(s) ? loadImage(media(used[i].url)) : null))),

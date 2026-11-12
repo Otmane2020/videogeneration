@@ -1805,7 +1805,7 @@ async function produce(actx) {
   $('#st-actions').hidden = $('#b-edit').hidden = $('#b-again').hidden = $('#upsell').hidden = true;
 
   // formats courts : moins de scènes, pour que chacune reste lisible
-  const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
+  const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : !target && !paid ? Math.min(ad.scenes.length, 5) : ad.scenes.length; // « Auto » reste sous les 20 s hors offre Pro
   const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s, icons: (s.logos || []).map((l) => (state.icons?.[l.name.toLowerCase()] ? { img: state.icons[l.name.toLowerCase()], name: l.name } : null)).filter(Boolean), iconImg: state.ui?.[s.icon] || null })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;

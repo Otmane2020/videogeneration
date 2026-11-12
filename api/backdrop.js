@@ -199,6 +199,81 @@ module.exports = handler('POST', async (req, res) => {
     return send(res, 200, png, { 'content-type': 'image/png', 'cache-control': 'private, max-age=3600' });
   }
 
+  // ── Action : Meta Muse Image, scène e-commerce complète avec product placement ──
+  if (action === 'muse-scene') {
+    const b = await readJson(req);
+    if (b.type !== 'ecom') throw httpError(400, 'Muse product scenes are only enabled for e-commerce videos');
+    const format = ['9:16', '1:1', '16:9'].includes(b.format) ? b.format : '9:16';
+    if (process.env.DATABASE_URL && process.env.SESSION_SECRET) {
+      const u = await user(req).catch(() => null);
+      if (!u || u.plan === 'free') throw httpError(402, 'Muse product scenes require Pro');
+    }
+    const framing = format === '9:16'
+      ? 'Vertical 9:16 portrait advertising composition for Reels, TikTok and Shorts. Keep the product fully inside the portrait-safe area.'
+      : format === '16:9'
+        ? 'Horizontal 16:9 commercial advertising composition. Keep the product fully inside the landscape-safe area.'
+        : 'Square 1:1 premium e-commerce advertising composition.';
+    const role = ['hook', 'context', 'demo', 'outcome', 'cta'].includes(b.role) ? b.role : 'product';
+    const sceneBrief = clean(b.sceneBrief, 260);
+    const headline = clean(b.headline, 90);
+    const voiceover = clean(b.voiceover, 180);
+    const category = clean(b.category, 60);
+    const productName = clean(b.productName, 120);
+    const description = clean(b.productDescription, 420);
+    const variant = clean(b.variant, 120);
+    const palette = clean(b.brandPalette, 100);
+    const direction = {
+      hook: 'A scroll-stopping hero shot: show the product immediately, with strong perspective and a compelling real-world setting.',
+      context: 'Show the product naturally worn, held, installed or used in the real situation it was designed for. Make the use instantly understandable.',
+      demo: 'A close, tactile commercial shot that makes a real product detail, material, finish, fit or useful feature desirable and visible.',
+      outcome: 'An aspirational but believable lifestyle moment showing the product as part of the customer’s life.',
+      cta: 'A memorable final hero shot of the same exact product, in a beautiful real-world setting, with clean visual space for the call to action.',
+    }[role];
+    const prompt = `Create ONE finished, photorealistic, premium E-COMMERCE AD CAMPAIGN IMAGE. This must be a complete photograph with the actual product integrated into a believable scene — NOT an empty background, NOT a packshot on a podium, NOT a collage, and NOT a graphic.
+
+EXACT PRODUCT — USE THE ATTACHED PHOTO AS THE IDENTITY REFERENCE
+Product: ${productName || 'Identify the exact product in the reference photo'}.
+Category: ${category || 'Infer the category from the reference photo'}.
+Description: ${description || 'Use only details visible in the reference photo'}.
+Selected variant: ${variant || 'The exact visible variant in the reference photo'}.
+Brand colours, only as subtle styling guidance: ${palette || 'Choose a palette that complements the real product'}.
+
+The attached reference is the customer's real SKU. Reproduce THAT product as faithfully as possible: same silhouette, proportions, construction, colour, material, finish, distinctive details and visible markings. Do not substitute a similar product, invent a different variant, redesign it, simplify it, or add features. Keep it immediately recognisable as the photographed item. Show one hero product only unless the reference clearly depicts a set.
+
+REAL-WORLD PRODUCT PLACEMENT — THIS IS ESSENTIAL
+Place the product in the way a customer would genuinely wear, hold, apply, install or use it. Infer the correct usage from the actual item:
+- watch or bracelet: correctly worn on a realistic adult wrist, with the watch face and strap clearly visible;
+- shoes or clothing: genuinely worn by an adult model, with the product clearly visible;
+- handbag or backpack: naturally carried or worn, not floating beside a person;
+- furniture or home decor: correctly installed in a beautifully styled, believable lived-in interior;
+- cosmetics or skincare: naturally held or applied in a tasteful beauty setting;
+- headphones or eyewear: correctly worn by an adult model;
+- kitchen, sport or electronic equipment: shown being used for its real purpose.
+If the product is not wearable, do not invent a person holding it. Choose a context that makes physical sense for this exact item.
+
+SHOT DIRECTION
+Scene role: ${role}.
+Creative direction: ${sceneBrief || direction}.
+On-screen headline concept: ${headline || 'Product-focused visual hook'}.
+Voice-over context: ${voiceover || 'Show why this product is desirable'}.
+Interpret the direction visually; do not print any of this copy inside the image. Make each scene feel like a different camera shot in the same coherent campaign, not the same composition repeated.
+
+ART DIRECTION
+${framing}
+Premium real commercial photography, natural human anatomy and believable contact between people and product, realistic shadows and reflections, tactile materials, considered lens choice, depth, lighting and colour grading. Product is the unmistakable hero and occupies a substantial part of the frame. The environment must support the product rather than compete with it. Use a distinctive setting tailored to this category; avoid generic purple neon, floating rings, empty studio walls and stock-photo clichés.
+
+No text, no captions, no price, no labels, no added logo, no watermark, no borders, no UI, no split screen, no collage, no duplicated product, no floating product, no extra fingers, no malformed hands. Preserve existing genuine product branding only when it is visible in the reference.
+Return only the finished advertising photograph.`;
+    const generated = await museBackdrop({ prompt, referenceImage: b.referenceImage || null });
+    return send(res, 200, generated.image, {
+      'content-type': generated.mediaType,
+      'cache-control': 'no-store',
+      'x-image-model': 'meta/muse-image',
+      'x-scene-role': role,
+      ...(generated.cost ? { 'x-image-cost-usd': String(generated.cost) } : {}),
+    });
+  }
+
   // ── Action : Meta Muse Image, décor e-commerce unique ───────────────────────
   if (action === 'muse') {
     const b = await readJson(req);

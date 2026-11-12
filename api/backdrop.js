@@ -1,11 +1,11 @@
 // Deux actions :
 //   POST /api/backdrop           → génère un décor publicitaire (CF Workers AI gratuit ou OpenRouter payant)
-//   POST /api/backdrop?a=removebg → détourage serveur via remove.bg (clé REMOVEBG_API_KEY)
+//   POST /api/backdrop?a=removebg → détourage serveur (ClearBackdrop, Clipdrop ou remove.bg)
 //
 // Le vrai produit détouré est toujours posé côté client par-dessus le décor,
 // donc sa forme, son logo et ses détails ne sont jamais altérés.
 
-const { send, readJson, httpError, handler } = require('../lib/util');
+const { send, readJson, httpError, safeFetch, readCapped, handler } = require('../lib/util');
 const { user } = require('../lib/auth');
 
 // ─── Décors ──────────────────────────────────────────────────────────────────
@@ -89,53 +89,56 @@ async function orBackdrop(prompt, ratio) {
 }
 
 // ─── Détourage serveur ────────────────────────────────────────────────────────
-// Priorité : Clipdrop (100/jour gratuits) → remove.bg (50/mois) → erreur
-async function removeBg(imageUrl) {
-  // 1. Clipdrop par Stability AI — 100 appels/jour gratuits
-  //    Clé : https://platform.stability.ai/account/keys
-  const clipKey = process.env.CLIPDROP_API_KEY;
-  if (clipKey) {
-    // Clipdrop accepte un fichier binaire en multipart ; on doit d'abord télécharger l'image
-    const imgResp = await fetch(imageUrl, { signal: AbortSignal.timeout(15000) });
-    if (!imgResp.ok) throw httpError(502, `Cannot fetch image: ${imgResp.status}`);
-    const imgBuf = Buffer.from(await imgResp.arrayBuffer());
-    const ct = imgResp.headers.get('content-type') || 'image/jpeg';
-    // Multipart form-data manuel (Node n'a pas FormData natif dans toutes les versions)
-    const boundary = '----ClipDropBoundary' + Date.now().toString(16);
-    const disposition = `Content-Disposition: form-data; name="image_file"; filename="product.jpg"\r\nContent-Type: ${ct}\r\n`;
-    const body = Buffer.concat([
-      Buffer.from(`--${boundary}\r\n${disposition}\r\n`),
-      imgBuf,
-      Buffer.from(`\r\n--${boundary}--\r\n`),
-    ]);
-    const r = await fetch('https://clipdrop-api.co/remove-background/v1', {
-      method: 'POST',
-      signal: AbortSignal.timeout(30000),
-      headers: { 'x-api-key': clipKey, 'content-type': `multipart/form-data; boundary=${boundary}` },
-      body,
-    });
-    if (r.ok) return Buffer.from(await r.arrayBuffer()); // PNG transparent
-    console.warn('Clipdrop removebg', r.status, await r.text().catch(() => ''));
-    // Si quota dépassé (402/429) on tombe sur remove.bg
+// Chaîne : ClearBackdrop (80/jour gratuits) → Clipdrop (100/jour) → remove.bg (50/mois). Si tout échoue, le navigateur détoure lui-même.
+// L'image est une adresse publique (récupérée sans jamais atteindre le réseau interne) ou une image envoyée en data URL.
+async function loadSource(src) {
+  const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(src);
+  if (m) {
+    const buf = Buffer.from(m[2], 'base64');
+    if (buf.length > 8e6) throw httpError(413, 'Image too large');
+    return { buf, type: m[1] };
   }
+  const r = await safeFetch(src, {}, 15000);
+  const type = (r.headers.get('content-type') || '').split(';')[0];
+  if (!r.ok || !/^image\/(jpeg|png|webp)$/.test(type)) { r.body?.cancel().catch(() => {}); throw httpError(502, 'Cannot use this image'); }
+  const { buf, truncated } = await readCapped(r, 8e6);
+  if (truncated) throw httpError(413, 'Image too large');
+  return { buf, type };
+}
 
-  // 2. remove.bg — 50 crédits/mois gratuits
-  //    Clé : https://www.remove.bg/api
-  const rmbgKey = process.env.REMOVEBG_API_KEY;
-  if (rmbgKey) {
-    const form = new URLSearchParams({ image_url: imageUrl, size: 'auto', type: 'product', format: 'png' });
-    const r = await fetch('https://api.remove.bg/v1.0/removebg', {
-      method: 'POST',
-      signal: AbortSignal.timeout(30000),
-      headers: { 'x-api-key': rmbgKey, 'content-type': 'application/x-www-form-urlencoded' },
-      body: form.toString(),
-    });
-    if (r.ok) return Buffer.from(await r.arrayBuffer());
-    const msg = await r.json().catch(() => ({}));
-    throw httpError(502, `remove.bg ${r.status}: ${msg?.errors?.[0]?.title || 'failed'}`);
+const PROVIDERS = [
+  ['ClearBackdrop', () => process.env.CLEARBACKDROP_API_KEY, ({ buf, type }, key) => {
+    const fd = new FormData();
+    fd.append('image', new Blob([buf], { type }), 'product.jpg');
+    return fetch('https://clearbackdrop.com/api/v1/remove-background', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
+  }],
+  ['Clipdrop', () => process.env.CLIPDROP_API_KEY, ({ buf, type }, key) => {
+    const fd = new FormData();
+    fd.append('image_file', new Blob([buf], { type }), 'product.jpg');
+    return fetch('https://clipdrop-api.co/remove-background/v1', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
+  }],
+  ['remove.bg', () => process.env.REMOVEBG_API_KEY, ({ buf, type }, key) => {
+    const fd = new FormData();
+    fd.append('image_file', new Blob([buf], { type }), 'product.jpg');
+    fd.append('size', 'auto'); fd.append('type', 'product'); fd.append('format', 'png');
+    return fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
+  }],
+];
+
+async function removeBg(src) {
+  const on = PROVIDERS.filter(([, key]) => key());
+  if (!on.length) throw httpError(503, 'No background removal API key configured');
+  const img = await loadSource(src);
+  for (const [name, key, call] of on) {
+    try {
+      const r = await call(img, key());
+      const out = Buffer.from(await r.arrayBuffer());
+      // un vrai PNG uniquement (une page d'erreur ou un quota dépassé passe au fournisseur suivant)
+      if (r.ok && out.subarray(1, 4).toString() === 'PNG') return out;
+      console.warn(name, 'removebg', r.status, out.subarray(0, 120).toString('utf8').replace(/\s+/g, ' '));
+    } catch (e) { console.warn(name, 'removebg', e.message); }
   }
-
-  throw httpError(503, 'No background removal API key configured (CLIPDROP_API_KEY or REMOVEBG_API_KEY)');
+  throw httpError(502, 'Background removal unavailable');
 }
 
 // ─── Handler principal ────────────────────────────────────────────────────────
@@ -146,8 +149,7 @@ module.exports = handler('POST', async (req, res) => {
   if (action === 'removebg') {
     const b = await readJson(req);
     if (!b.url || typeof b.url !== 'string') throw httpError(400, 'url required');
-    // Sécurité : on n'accepte que des URL http/https
-    if (!/^https?:\/\//i.test(b.url)) throw httpError(400, 'invalid url');
+    if (!/^(https?:\/\/|data:image\/)/i.test(b.url)) throw httpError(400, 'invalid url');
     const png = await removeBg(b.url);
     return send(res, 200, png, { 'content-type': 'image/png', 'cache-control': 'private, max-age=3600' });
   }

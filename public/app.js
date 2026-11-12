@@ -251,6 +251,7 @@ $('#b-gen').addEventListener('click', async () => {
   try {
     const list = ecom ? photoList() : [];
     state.photoUrls = list.map((p) => p.show);
+    state.photoSrc = list.map((p) => p.send); // adresse d'origine ou data URL : ce que le serveur peut récupérer
     // la variante choisie fixe le prix affiché et le texte de la pub
     const v = ecom ? variantOf() : null;
     const page = v?.price ? { ...state.page, product: { ...state.page.product, price: v.price } } : state.page;
@@ -1264,8 +1265,8 @@ async function produce(actx) {
       if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null }); continue; }
       if (!cache[key]) {
         status('Cutting out your product…');
-        // 1. Essai côté serveur via remove.bg (meilleure qualité sur les objets complexes)
-        const srcUrl = state.photoUrls?.[id];
+        // 1. Essai côté serveur (ClearBackdrop / Clipdrop / remove.bg), sinon modèle du navigateur
+        const srcUrl = state.photoSrc?.[id];
         let cut = srcUrl
           ? await api('/api/backdrop?a=removebg', { url: srcUrl })
               .then(async (r) => {

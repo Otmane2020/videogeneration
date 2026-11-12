@@ -5,6 +5,19 @@
 .bars{display:grid;gap:6px}.bars div{display:grid;grid-template-columns:86px 1fr 70px;gap:8px;align-items:center;font-size:13px}.bars i{display:block;height:10px;border-radius:5px;background:var(--grad)}
 .tbl{width:100%;border-collapse:collapse;font-size:13.5px}.tbl th,.tbl td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--line)}.tbl th{color:var(--mute);font-weight:600}.wrap{overflow-x:auto}
 .tbl select,.tbl button{font:inherit;font-size:13px;padding:6px 8px;border-radius:8px;border:1px solid var(--line);background:#0b0a16;color:var(--text)}.tbl button{cursor:pointer}
+
+/* ---- Analytics ---- */
+.an-head{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;flex-wrap:wrap;margin:6px 0 14px}.an-head h2{margin:0}.an-live{color:var(--mute);font-size:13.5px;display:flex;align-items:center;gap:7px;margin-top:4px}.an-live i{width:8px;height:8px;border-radius:50%;background:#46d68c;box-shadow:0 0 0 4px rgba(70,214,140,.18)}
+.an select{font:inherit;font-size:13.5px;padding:8px 12px;border-radius:12px;border:1px solid var(--line);background:var(--card);color:var(--text);cursor:pointer}
+.an-tabs{display:grid;grid-template-columns:repeat(2,1fr);border:1px solid var(--line);background:var(--card);border-radius:18px;overflow:hidden}
+.an-tabs button{font:inherit;text-align:left;padding:13px 15px;background:none;border:0;border-bottom:3px solid transparent;color:var(--text);cursor:pointer}.an-tabs button+button{border-left:1px solid var(--line)}.an-tabs span{display:block;font-size:13.5px}.an-tabs b{display:block;font-size:20px;margin-top:2px;color:var(--mute)}
+.an-tabs button[aria-pressed=true]{border-bottom-color:#a259ff;background:rgba(124,92,255,.08)}.an-tabs button[aria-pressed=true] b{color:var(--text)}
+@media(min-width:760px){.an-tabs{grid-template-columns:repeat(6,1fr)}}
+.card{border:1px solid var(--line);background:var(--card);border-radius:18px;padding:18px;margin-top:12px}.card h3{margin:0 0 4px;font-size:15px}.card .sub{color:var(--mute);font-size:13px}
+.big{font-size:30px;font-weight:700;margin:2px 0 8px}.chart{position:relative}.chart svg{display:block;width:100%;height:auto;overflow:visible}.chart .tip{position:absolute;pointer-events:none;background:#14102e;border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:12.5px;white-space:nowrap;transform:translate(-50%,-110%);opacity:0;transition:opacity .12s}
+.two{display:grid;gap:12px}@media(min-width:860px){.two{grid-template-columns:1fr 1fr}}
+.rows{display:grid;gap:6px;margin-top:10px}.row{position:relative;display:flex;justify-content:space-between;gap:10px;padding:8px 11px;border-radius:9px;font-size:13.5px;overflow:hidden}.row::before{content:"";position:absolute;inset:0;width:var(--w);background:linear-gradient(90deg,rgba(106,92,255,.34),rgba(196,77,255,.2));border-radius:9px}.row span{position:relative;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.row em{position:relative;font-style:normal;font-variant-numeric:tabular-nums}
+.empty{color:var(--mute);font-size:13.5px;padding:8px 2px}
 h2{margin:28px 0 12px}@media(min-width:760px){.kpis{grid-template-columns:repeat(4,1fr)}}
 </style></head>
 <body><main id="app">
@@ -12,6 +25,14 @@ h2{margin:28px 0 12px}@media(min-width:760px){.kpis{grid-template-columns:repeat
 <p class="error" id="err" hidden></p>
 <div id="dash" hidden>
   <h1 style="font-size:30px">Admin</h1>
+  <section class="an" id="an">
+    <div class="an-head"><div><h2>Analytics</h2><div class="an-live"><i></i><span id="an-live">0 visitors now</span> · <span>clipmotion.ai</span></div></div>
+      <select id="an-range" aria-label="Period"><option value="1">Last 24 hours</option><option value="7">Last 7 days</option><option value="30" selected>Last 30 days</option><option value="90">Last 90 days</option></select></div>
+    <div class="an-tabs" id="an-tabs"></div>
+    <div class="card"><div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px"><div><div class="sub" id="an-metric-l">Visits</div><div class="big" id="an-total">0</div></div><select id="an-metric" aria-label="Metric"><option value="views">Visits</option><option value="visitors">Visitors</option></select></div><div class="chart" id="an-chart"></div></div>
+    <div class="two"><div class="card"><h3>Sources</h3><div class="rows" id="an-src"></div></div><div class="card"><h3>Pages</h3><div class="rows" id="an-pages"></div></div></div>
+    <div class="card"><h3>Visitor profile</h3><div class="two" style="margin-top:8px"><div><div class="sub">Country</div><div class="rows" id="an-cty"></div></div><div><div class="sub">Devices</div><div class="rows" id="an-dev"></div></div></div></div>
+  </section>
   <h2>Today</h2><div class="kpis" id="kpis"></div>
   <h2>Last 14 days</h2><div class="bars" id="days"></div>
   <h2>Top pages today</h2><div class="bars" id="top"></div>
@@ -44,7 +65,52 @@ async function load() {
     return tr;
   }));
 }
+
+/* ---- Analytics ---- */
+const AN = { range: 30, channel: 'all', metric: 'views', data: null };
+const CH = [['all', 'All'], ['seo', 'SEO & AEO'], ['social', 'Social'], ['referral', 'Referrals'], ['direct', 'Direct'], ['paid', 'Ads']];
+const flag = (c) => /^[A-Z]{2}$/.test(c) ? String.fromCodePoint(...[...c].map((x) => 127397 + x.charCodeAt(0))) : '🌐';
+const cname = (c) => { try { return new Intl.DisplayNames(['en'], { type: 'region' }).of(c) || c; } catch { return c; } };
+function rows(box, list, fmt = (r) => r.label) {
+  const max = Math.max(1, ...list.map((r) => r.n)), total = list.reduce((a, r) => a + r.n, 0) || 1;
+  box.replaceChildren(...(list.length ? list : [null]).map((r) => { if (!r) return el('div', { className: 'empty', textContent: 'No data yet' }); const d = el('div', { className: 'row' }); d.style.setProperty('--w', (r.n / max * 100) + '%'); d.append(el('span', { textContent: fmt(r) }), el('em', { textContent: r.pct ? Math.round(r.n / total * 100) + ' %' : r.n })); return d; }));
+}
+function drawChart(series, key) {
+  const W = 900, H = 260, L = 34, B = 26, T = 12, R = 8, n = series.length, vals = series.map((p) => p[key]);
+  const top = Math.max(4, Math.ceil(Math.max(...vals) / 4) * 4), x = (i) => L + (n === 1 ? (W - L - R) / 2 : i * (W - L - R) / (n - 1)), y = (v) => T + (H - T - B) * (1 - v / top);
+  let d = `M${x(0)},${y(vals[0])}`; for (let i = 1; i < n; i++) { const cx = (x(i - 1) + x(i)) / 2; d += ` C${cx},${y(vals[i - 1])} ${cx},${y(vals[i])} ${x(i)},${y(vals[i])}`; }
+  const grid = [0, 1, 2, 3, 4].map((k) => { const v = top / 4 * k; return `<line x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}" stroke="currentColor" stroke-opacity=".09" stroke-dasharray="4 5"/><text x="${L - 8}" y="${y(v) + 4}" text-anchor="end" font-size="12" fill="currentColor" fill-opacity=".55">${Math.round(v)}</text>`; }).join('');
+  const step = Math.max(1, Math.round(n / 7)), lab = series.map((p, i) => ((i % step === 0 && n - 1 - i >= step * 0.6) || i === n - 1) && n > 1 ? `<text x="${x(i)}" y="${H - 6}" text-anchor="middle" font-size="12" fill="currentColor" fill-opacity=".55">${new Date(p.day + 'T00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })}</text>` : '').join('');
+  const box = $('#an-chart');
+  box.innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Visits over time"><defs><linearGradient id="g1" x1="0" x2="1"><stop offset="0" stop-color="#6a5cff"/><stop offset=".52" stop-color="#c44dff"/><stop offset="1" stop-color="#ff6b8b"/></linearGradient><linearGradient id="g2" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="#8f5cff" stop-opacity=".38"/><stop offset="1" stop-color="#8f5cff" stop-opacity="0"/></linearGradient></defs>${grid}${lab}<path d="${d} L${x(n - 1)},${y(0)} L${x(0)},${y(0)} Z" fill="url(#g2)"/><path d="${d}" fill="none" stroke="url(#g1)" stroke-width="3" stroke-linecap="round"/><line id="an-cur" y1="${T}" y2="${y(0)}" stroke="currentColor" stroke-opacity=".5" stroke-dasharray="3 4" style="display:none"/><circle id="an-dot" r="5" fill="#fff" stroke="#a259ff" stroke-width="3" style="display:none"/></svg><div class="tip" id="an-tip"></div>`;
+  const svg = box.querySelector('svg'), tip = $('#an-tip'), cur = $('#an-cur'), dot = $('#an-dot');
+  const move = (e) => {
+    const r = svg.getBoundingClientRect(), px = ((e.touches ? e.touches[0].clientX : e.clientX) - r.left) / r.width * W;
+    const i = Math.max(0, Math.min(n - 1, Math.round((px - L) / ((W - L - R) / Math.max(1, n - 1))))), p = series[i];
+    cur.setAttribute('x1', x(i)); cur.setAttribute('x2', x(i)); cur.style.display = ''; dot.setAttribute('cx', x(i)); dot.setAttribute('cy', y(vals[i])); dot.style.display = '';
+    tip.style.left = (x(i) / W * r.width) + 'px'; tip.style.top = (y(vals[i]) / H * r.height) + 'px'; tip.style.opacity = 1;
+    tip.textContent = `${new Date(p.day + 'T00:00').toLocaleDateString('en', { month: 'short', day: 'numeric' })} · ${vals[i]} ${key === 'views' ? 'visits' : 'visitors'}`;
+  };
+  svg.addEventListener('mousemove', move); svg.addEventListener('touchmove', move, { passive: true });
+  svg.addEventListener('mouseleave', () => { tip.style.opacity = 0; cur.style.display = dot.style.display = 'none'; });
+}
+function paintAnalytics() {
+  const j = AN.data; if (!j) return;
+  $('#an-live').textContent = `${j.live} visitor${j.live === 1 ? '' : 's'} now`;
+  $('#an-tabs').replaceChildren(...CH.map(([k, l]) => { const b = el('button', { type: 'button' }); b.setAttribute('aria-pressed', String(k === AN.channel)); b.append(el('span', { textContent: l }), el('b', { textContent: j.channels[k] })); b.onclick = () => { AN.channel = k; loadAnalytics(); }; return b; }));
+  $('#an-total').textContent = j[AN.metric]; $('#an-metric-l').textContent = AN.metric === 'views' ? 'Visits' : 'Visitors';
+  drawChart(j.series, AN.metric);
+  rows($('#an-src'), j.sources); rows($('#an-pages'), j.pages);
+  rows($('#an-cty'), j.countries.map((r) => ({ ...r, pct: 1, label: r.label })), (r) => `${flag(r.label)}  ${r.label === '??' ? 'Unknown' : cname(r.label)}`);
+  rows($('#an-dev'), j.devices.map((r) => ({ ...r, pct: 1 })), (r) => r.label[0].toUpperCase() + r.label.slice(1));
+}
+async function loadAnalytics() {
+  const r = await fetch(`/api/admin?v=analytics&range=${AN.range}&channel=${AN.channel}`); if (!r.ok) return;
+  AN.data = await r.json(); paintAnalytics();
+}
+$('#an-range').onchange = (e) => { AN.range = +e.target.value; loadAnalytics(); };
+$('#an-metric').onchange = (e) => { AN.metric = e.target.value; paintAnalytics(); };
 $('#ps').onclick = async () => { const r = await fetch('/api/push', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ action: 'send', title: $('#pt').value, body: $('#pb').value, url: $('#pu').value }) }); const j = await r.json(); $('#pr').textContent = r.ok ? `Sent to ${j.sent} of ${j.subscribers} subscribers.` : j.error; };
-load();
+load().then(loadAnalytics);
 </script>
 </main></body></html>

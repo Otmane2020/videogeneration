@@ -39,6 +39,7 @@ ${SHAPE_HEAD}
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "english_queries": [string, string, string],  // stock-footage searches, English words only
+      "logos_layout": "flow"|"group",  // "flow" only when the sentence describes data or actions going from one tool to another (arrows are drawn); otherwise "group" (a set of platforms, no arrows)
       "logos": [{"name": string, "domain": string}],  // real outside brands shown as logos joined by arrows, in the order of the sentence; [] when none
       "visual": "footage"|"site"}     // stock footage, or a phone showing the real website
    ],
@@ -49,7 +50,7 @@ ${SHAPE_HEAD}
 Choose ONE videoTemplate that fits the product and audience: "product-demo", "problem-solution", "feature-showcase", "startup-launch", "customer-story", or "corporate". Do not use the same generic story for every SaaS.
 Choose ONE captionStyle for this audience: "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Prefer readable, restrained captions; avoid neon unless the brand genuinely calls for it.
 Make captionStyle format-aware: vertical 9:16 needs large, short, safe-area captions; square 1:1 needs compact balanced captions; horizontal 16:9 should prefer clean lower-third or editorial treatments that do not obstruct the footage.
-Logos: when a scene explains an integration, a tool the customer already uses, a platform or a well-known product (an AI assistant, a payment provider, a chat tool, a marketplace…), list up to 3 REAL products or companies in "logos", as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content or in your own voice-over: never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
+Logos: when a scene explains an integration, a tool the customer already uses, a platform or a well-known product (an AI assistant, a payment provider, a chat tool, a marketplace…), list up to 3 REAL products or companies in "logos", as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content AND mentioned by the scene's own headline or voice-over (write them in the sentence so viewers hear what they see): never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
 Narrative and footage rules:
 - Exactly four scenes, each with a different purpose and a distinct real-world shot. The first scene must be an immediate human/customer hook, not a generic computer close-up.
 - Use "site" for exactly two scenes, preferably scenes 2 and 3, to show the real captured website inside the phone. Do not invent a dashboard or fabricate UI.
@@ -159,6 +160,21 @@ function cleanLogos(list, own) {
   return out.slice(0, 3).map(({ name, domain }) => ({ name, domain }));
 }
 
+// Une scène de logos par vidéo (les autres gardent le mockup du site ou le plan filmé), et seulement des marques qui concernent la scène :
+// citées dans sa phrase, ou, pour la scène de démonstration, présentes sur la page.
+function limitLogos(scenes, pageText) {
+  const hay = (t) => String(t || '').toLowerCase();
+  const page = hay(pageText);
+  const first = (n) => hay(n).split(/[^a-z0-9]+/).filter((w) => w.length >= 3)[0] || '';
+  scenes.forEach((sc) => {
+    const text = hay(`${sc.headline} ${sc.voiceover}`);
+    sc.logos = (sc.logos || []).filter((l) => { const w = first(l.name); return w && (text.includes(w) || (sc.role === 'demo' && page.includes(w))); });
+  });
+  const best = scenes.reduce((b, sc, i) => (sc.logos.length > (scenes[b]?.logos.length || 0) ? i : b), -1);
+  scenes.forEach((sc, i) => { if (i !== best) sc.logos = []; });
+  return scenes;
+}
+
 // requêtes de banque d'images : lettres simples uniquement (les accents sont repliés, pas supprimés)
 const cleanQ = (v) => str(v, 50).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim();
 // Mots qu'aucune caméra ne filme (interface, notions abstraites) : dans une banque d'images ils ramènent des nuages, des insectes ou des tableaux de bord de voiture.
@@ -232,7 +248,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
   let adsSceneIndex = 0;
   const ads = (Array.isArray(d.ads) ? d.ads : []).map((ad, a) => ({
     angle: str(ad.angle, 40) || fb.ads[a % 3].angle,
-    scenes: (Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s, si) => {
+    scenes: limitLogos((Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s, si) => {
       let visual = 'footage', photo = -1;
       if (type === 'saas') visual = s.visual === 'site' ? 'site' : 'footage';
       // e-commerce : tant qu'une photo du produit existe, la scène est faite de photos, jamais de plans de stock
@@ -245,10 +261,11 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
         logos: type !== 'saas' ? [] : cleanLogos(s.logos, [d.brand, page.siteName]),
+        logosLayout: s.logos_layout === 'flow' ? 'flow' : 'group',
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries,
       };
-    }).filter((s) => s.headline),
+    }).filter((s) => s.headline), [page.title, page.description, ...page.h1, ...page.h2, page.text].join(' ')),
     cta: str(ad.cta, 30) || fb.ads[0].cta,
     ctaVoiceover: str(ad.ctaVoiceover, 120) || fb.ads[0].ctaVoiceover,
   })).filter((ad) => ad.scenes.length >= 2).slice(0, 1);

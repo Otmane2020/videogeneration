@@ -920,7 +920,8 @@ function makeRenderer(cv, job) {
   // Scène de logos : de vraies marques en grand, au centre, reliées par des flèches qui se dessinent, avec leur nom dessous.
   function iconStage(sc, local, box) {
     const items = sc.icons.slice(0, 3).map((i) => ({ img: i.img, label: i.name }));
-    if (items.length === 1 && logo) items.push({ img: logo, label: plan.brand, dark: job.logoLight });
+    const flow = sc.logosLayout === 'flow';
+    if (flow && items.length === 1 && logo) items.push({ img: logo, label: plan.brand, dark: job.logoLight });
     // instant d'apparition de chaque tuile : au mot prononcé, sans jamais coller aux autres
     sc.icons.slice(0, 3).forEach((ic, i) => { items[i].at = Math.max(0.2 + i * 0.3, (ic.t0 || 0) - 0.3); if (i) items[i].at = Math.max(items[i].at, items[i - 1].at + 0.3); });
     if (items.length > sc.icons.slice(0, 3).length) items[items.length - 1].at = items[items.length - 2].at + 0.45;
@@ -937,7 +938,7 @@ function makeRenderer(cv, job) {
     ctx.save(); ctx.globalAlpha = clamp(local / 0.5); ctx.fillStyle = glow; ctx.fillRect(cx - s * 2.2, cy - s * 2.2, s * 4.4, s * 4.4); ctx.restore();
 
     // flèches : un trait qui se dessine, une pointe, puis des points qui circulent dans le sens du flux
-    for (let i = 0; i < n - 1; i++) {
+    for (let i = 0; i < n - 1 && flow; i++) { // flèches seulement quand la phrase décrit un flux d'un outil vers un autre
       const t0 = items[i].at + 0.3, p = easeOut(clamp((local - t0) / 0.5));
       if (p <= 0) continue;
       const xa = x0 + (i + 1) * s + i * gap + s * 0.1, xb = x0 + (i + 1) * (s + gap) - s * 0.1, xe = lerp(xa, xb, p), lw = s * 0.07;

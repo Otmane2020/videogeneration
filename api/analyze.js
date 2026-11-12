@@ -80,7 +80,7 @@ ${SHAPE_HEAD}
  "photos": [{"index": number, "kind": "packshot"|"lifestyle"|"other", "usable": boolean}],  // packshot = product alone on a plain background; lifestyle = product in a real setting; usable=false for banners, logos, text-only or unrelated images
  "ads": [                             // exactly 1 ad, built for the goal given below
   {"angle": string,
-   "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook that already shows the product
+   "scenes": [                        // 4 scenes (one scene per usable photo, up to 6, when more than 4 usable photos are attached); the first one is a scroll-stopping hook that already shows the product
      {"headline": string,             // on-screen text, max 6 words; numbers, prices and years in DIGITS with their symbol ("28 900 €", "2021", "-30 %"), never in words
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
@@ -95,7 +95,7 @@ ${SHAPE_HEAD}
  ]
 }
 Choose ONE videoTemplate that suits this exact product: "editorial-product", "product-spotlight", or "lifestyle-product". Choose ONE captionStyle from "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Do not force a generic visual style on every product. Make the caption treatment fit the selected video format and keep the product fully visible.
-Visual rules: every scene is "product" or "detail": the ad is made only from the customer's real product photos. Vary photo, scale, crop and camera movement; never show the same photo with the same visual twice in a row. Use "footage" only if no photo at all is usable. The scene setting and colours must suit the actual product category and materials.`;
+Visual rules: every scene is "product" or "detail": the ad is made only from the customer's real product photos. Use the WHOLE gallery: every usable photo must appear in at least one scene before any photo is shown twice. Vary photo, scale, crop and camera movement; never show the same photo with the same visual twice in a row. Use "footage" only if no photo at all is usable. The scene setting and colours must suit the actual product category and materials.`;
 
 const LANGS = { fr: 'French', en: 'English', es: 'Spanish', de: 'German', it: 'Italian', nl: 'Dutch', pt: 'Portuguese', ar: 'Arabic', ja: 'Japanese' };
 const str = (v, max) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, max);
@@ -273,6 +273,18 @@ const NUMW = '(?:zéro|zero|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|o
 const SPELLED_PRICE = new RegExp(`\\b${NUMW}(?:[-\\s]+(?:(?:et|and)[-\\s]+)?${NUMW})*\\s*(?:euros?|dollars?|livres?|pounds?|€|\\$|£)(?:\\s+${NUMW}(?:[-\\s]+(?:(?:et|and)[-\\s]+)?${NUMW})*)?`, 'gi');
 const digitHeadline = (h, price) => (price ? h.replace(SPELLED_PRICE, price) : h);
 
+function spreadPhotos(scenes, pool) {
+  if (pool.length < 2) return;
+  const seen = new Set();
+  scenes.forEach((s) => {
+    if (s.visual === 'footage' || s.photo < 0) return;
+    if (seen.has(s.photo)) {
+      const free = pool.find((i) => !seen.has(i));
+      if (free !== undefined) { s.photo = free; s.focus = null; } // le point visé concernait l'ancienne photo
+    }
+    seen.add(s.photo);
+  });
+}
 // Pastille « fait vérifié » : gardée seulement si ses mots figurent dans la page (texte, titre, description, fiche produit).
 const fold = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ');
 function verified(badge, page) {
@@ -308,7 +320,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
   let adsSceneIndex = 0;
   const ads = (Array.isArray(d.ads) ? d.ads : []).map((ad, a) => ({
     angle: str(ad.angle, 40) || fb.ads[a % 3].angle,
-    scenes: limitLogos((Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s, si) => {
+    scenes: limitLogos((Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, type === 'ecom' ? 6 : 5).map((s, si) => {
       let visual = 'footage', photo = -1;
       if (type === 'saas') visual = s.visual === 'site' ? 'site' : 'footage';
       // e-commerce : tant qu'une photo du produit existe, la scène est faite de photos, jamais de plans de stock
@@ -334,6 +346,8 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
     ctaVoiceover: str(ad.ctaVoiceover, 120) || fb.ads[0].ctaVoiceover,
   })).filter((ad) => ad.scenes.length >= 2).slice(0, 1);
 
+  // toute la galerie : une photo n'est répétée qu'une fois toutes les autres montrées
+  if (type === 'ecom') ads.forEach((ad) => spreadPhotos(ad.scenes, usable.map((p) => p.index)));
   const useFb = !ads.length;
   if (useFb) fb.ads.forEach((ad) => ad.scenes.forEach((s) => { s.photo = type === 'ecom' && s.visual !== 'footage' ? usable[s.photo % usable.length].index : -1; }));
   return {
@@ -378,7 +392,7 @@ module.exports = handler('POST', async (req, res) => {
     product: pr ? { name: str(pr.name, 160), description: str(pr.description, 600), brand: str(pr.brand, 60), price: /^[\d.,\s]{1,12}$/.test(pr.price || '') ? pr.price.trim() : '', currency: /^[A-Z]{3}$/.test(pr.currency || '') ? pr.currency : '' } : null,
   };
   // photos : celles envoyées par le client (import manuel) puis celles de la page, dans le même ordre que côté client
-  const sources = (Array.isArray(photos) ? photos : page.images || []).filter((u) => typeof u === 'string').slice(0, type === 'ecom' ? 5 : 3);
+  const sources = (Array.isArray(photos) ? photos : page.images || []).filter((u) => typeof u === 'string').slice(0, type === 'ecom' ? 6 : 3);
   const images = await loadImages(sources);
   // page non lisible : l'IA lit une capture d'écran de la page (ce n'est pas une photo produit)
   let shotNote = '';

@@ -272,6 +272,8 @@ function extract(html, base) {
     themeColor: /^#[0-9a-f]{3,8}$/i.test(metas['theme-color'] || '') ? metas['theme-color'] : '',
     icon: icon?.href ? abs(icon.href) : abs('/favicon.ico'),
     h1: heads(1).slice(0, 3), h2: heads(2).slice(0, 8),
+    // page de catégorie : plusieurs boutons d'achat sans fiche produit structurée ; les photos viennent alors de produits différents
+    listing: !prod && (html.match(/ajouter au panier|add to cart|in den warenkorb|a[ñn]adir al carrito|aggiungi al carrello/gi) || []).length >= 3,
     images, logos: logos.slice(0, 6), product, prices, text,
     guess: { type: ecom > saas ? 'ecom' : 'saas', ecom, saas, confidence: Math.round((Math.max(ecom, saas) + 1) / (ecom + saas + 2) * 100) },
   };

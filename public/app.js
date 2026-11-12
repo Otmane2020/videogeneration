@@ -105,7 +105,7 @@ function renderSetup() {
   $$('.type .badge').forEach((b) => (b.hidden = b.parentElement.dataset.type !== p.guess.type));
   setType(p.guess.type);
   fail($('#e-type'), '');
-  fail($('#blocked'), p.blocked ? `This site is protected against automated reading (${p.blocked}), so its photos and price could not be imported. Add your product photos below: the ad will be built from them and from the product name.` : '');
+  fail($('#blocked'), p.listing ? 'This looks like a category page with several products: its photos belong to different items. Paste the link of one product page, or keep only the photos of the product you want to promote.' : p.blocked ? `This site is protected against automated reading (${p.blocked}), so its photos and price could not be imported. Add your product photos below: the ad will be built from them and from the product name.` : '');
   show('s-type', 3);
 }
 function setType(t) {
@@ -145,7 +145,7 @@ $('#b-next').addEventListener('click', () => { fail($('#e-opts'), ''); show('s-o
 $('#b-prev').addEventListener('click', () => show('s-type', 3));
 
 /* ----- variantes (couleur, taille…) et choix des photos ----- */
-const MAX_PHOTOS = 5;
+const MAX_PHOTOS = 6;
 const variantOf = () => (state.page.product?.variants || []).find((v) => Object.entries(state.variant).every(([k, val]) => v.options[k] === val)) || null;
 function initVariant() {
   const pr = state.page.product, first = pr?.variants.find((v) => v.available) || pr?.variants[0];

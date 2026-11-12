@@ -136,7 +136,10 @@ $$('.seg[data-for]').forEach((g) => {
   if (!sel) return;
   const paint = () => $$('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
   $$('button', g).forEach((b) => b.addEventListener('click', () => {
-    if (g.dataset.for === 'bgai' && b.dataset.v === '1' && !isPaid()) return openUpgrade('Custom AI scenes are part of the Pro plan.');
+    if (!isPaid()) {
+      if (g.dataset.for === 'bgai' && b.dataset.v === '1') return openUpgrade('AI Scene is part of the Pro plan.');
+      if (g.dataset.for === 'dur' && ['20', '30'].includes(b.dataset.v)) return openUpgrade(`${b.dataset.v}-second videos are part of the Pro plan.`);
+    }
     sel.value = b.dataset.v; paint();
   }));
   paint();

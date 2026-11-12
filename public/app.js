@@ -707,9 +707,12 @@ function makeRenderer(cv, job) {
     ctx.restore();
     // anneaux lumineux derrière le produit
     const ry = hz - Math.min(W, H) * 0.42;
+    // une couleur de marque très sombre (noir, bleu nuit) serait invisible : les anneaux prennent une version éclaircie
+    const lift = (c) => { const v = rgb(c); return (0.299 * v[0] + 0.587 * v[1] + 0.114 * v[2]) < 90 ? '#' + v.map((x) => Math.round(lerp(x, 255, 0.7)).toString(16).padStart(2, '0')).join('') : c; };
+    const ringP = darkSet ? lift(P) : P, ringA = darkSet ? lift(A) : A;
     for (let i = 0; i < 3; i++) {
       const r = Math.min(W, H) * (0.3 + i * 0.1) + Math.sin(t * 0.9 + i * 1.7) * 6;
-      ctx.strokeStyle = (i === 1 ? A : P) + (darkSet ? ['aa', '66', '33'][i] : ['77', '44', '22'][i]); ctx.lineWidth = 3 - i * 0.7;
+      ctx.strokeStyle = (i === 1 ? ringA : ringP) + (darkSet ? ['aa', '66', '33'][i] : ['77', '44', '22'][i]); ctx.lineWidth = 3 - i * 0.7;
       ctx.beginPath(); ctx.arc(cx, ry, r, Math.PI * (0.92 + 0.1 * i) + t * 0.12 * (i % 2 ? -1 : 1), Math.PI * (2.08 - 0.1 * i) + t * 0.12 * (i % 2 ? -1 : 1)); ctx.stroke();
     }
     // sol : reflet et lignes de fuite
@@ -735,7 +738,7 @@ function makeRenderer(cv, job) {
   }
   function background(sc, k) {
     const ph = sc.ph;
-    if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.75 + 0.3 * k, lerp(0.3, 0.7, easeInOut(k)), lerp(0.38, 0.62, easeInOut(k)));
+    if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.22 + 0.16 * k, lerp(0.4, 0.6, easeInOut(k)), lerp(0.44, 0.56, easeInOut(k)));
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
     footage(sc, k);

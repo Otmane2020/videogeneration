@@ -128,11 +128,11 @@ $$('[data-fmt]').forEach((b) => b.addEventListener('click', () => {
 }));
 // Seuls les réglages créatifs demandés à l'utilisateur restent visibles.
 // Template, style des sous-titres et qualité d'export sont choisis automatiquement.
-$('.seg[data-for]').forEach((g) => {
+$$('.seg[data-for]').forEach((g) => {
   const sel = $('#' + g.dataset.for);
   if (!sel) return;
-  const paint = () => $('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
-  $('button', g).forEach((b) => b.addEventListener('click', () => {
+  const paint = () => $$('button', g).forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === sel.value)));
+  $$('button', g).forEach((b) => b.addEventListener('click', () => {
     if (g.dataset.for === 'bgai' && b.dataset.v === '1' && !isPaid()) return openUpgrade('Custom AI scenes are part of the Pro plan.');
     sel.value = b.dataset.v; paint();
   }));

@@ -336,7 +336,7 @@ function buildEditor(used) {
     const t = Object.assign(document.createElement('button'), { type: 'button', className: 'thumb', disabled: !swap });
     const src = s.generatedThumb || s.pick?.thumb || (s.photo >= 0 && s.visual !== 'footage' ? state.photoUrls[s.photo] : used[i]?.thumb);
     if (src) t.append(Object.assign(new Image(), { src, alt: '' }));
-    t.append(Object.assign(document.createElement('em'), { textContent: swap ? 'Change' : VISUAL[s.visual] }));
+    t.append(Object.assign(document.createElement('em'), { textContent: swap ? 'Change' : s.generatedImage ? 'Muse image' : VISUAL[s.visual] }));
     if (swap) { t.setAttribute('aria-label', `Scene ${i + 1}: change visual`); t.addEventListener('click', () => openPicker(i)); }
     const col = document.createElement('div');
     field(col, `Scene ${i + 1} · on-screen text`, s.headline, false, (v) => { s.headline = v || s.headline; });

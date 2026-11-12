@@ -438,12 +438,13 @@ function greenScreen(clip) {
 // Deux plans d'un même auteur se ressemblent souvent : on en change quand cela ne coûte rien en pertinence.
 async function pickClips(lists, portrait) {
   const used = new Set(), authors = new Set(), picks = [];
-  const sorted = lists.map((list) => [...list].sort((a, b) => (b.rel || 0) - (a.rel || 0) || (portrait ? (b.h > b.w) - (a.h > a.w) : 0)));
+  const sorted = lists.map((list) => [...list].sort((a, b) => (b.rel || 0) - (a.rel || 0))); // l'ordre du serveur (qualité, requête) est conservé à pertinence égale
   sorted.forEach((list) => list.slice(0, 3).forEach(greenScreen)); // les vignettes des favoris se chargent ensemble
   for (const list of sorted) {
     const free = list.filter((x) => !used.has(x.id)), floor = Math.min(free[0]?.rel || 0, 2);
     let c = null;
-    for (const x of [...free.filter((x) => !authors.has(x.g) && (x.rel || 0) >= floor), ...free, ...list]) if (!(await greenScreen(x))) { c = x; break; }
+    const lead = free.filter((x) => x.rel === free[0]?.rel).slice(0, 4).filter((x) => !portrait || x.h > x.w); // format vertical : un plan vertical parmi les meilleurs
+    for (const x of [...lead.filter((x) => !authors.has(x.g)), ...free.filter((x) => !authors.has(x.g) && (x.rel || 0) >= floor), ...free, ...list]) if (!(await greenScreen(x))) { c = x; break; }
     if (c) { used.add(c.id); authors.add(c.g); }
     picks.push(c);
   }

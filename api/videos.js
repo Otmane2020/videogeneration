@@ -136,6 +136,20 @@ const SAFE = {
   lifestyle: ['online shopping', 'woman shopping', 'gift box', 'happy friends', 'delivery package', 'home family'],
 };
 
+/* ---------- bibliothèque choisie ---------- */
+// data/footage.json (scripts/build-footage.js) : plans HD choisis à la main par secteur et par mot-clé. Elle passe avant la recherche en direct.
+let LIB = null;
+function library() {
+  if (LIB) return LIB;
+  let raw = [];
+  try { raw = require('../data/footage.json'); } catch { /* pas encore construite */ }
+  LIB = raw.map((e) => {
+    const tags = `${e.t}, ${e.k.join(', ')}`;
+    return { id: e.id, g: e.g, kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
+  });
+  return LIB;
+}
+
 /* ---------- une scène ---------- */
 // `list` : requêtes de la plus précise à la plus générale. Renvoie jusqu'à 12 plans, les plus pertinents d'abord.
 // `loose` (recherche libre de l'utilisateur) : les résultats non confirmés par leurs tags complètent la liste.
@@ -162,10 +176,22 @@ async function findScene(list, { kind = 'video', safe = [], loose = false, until
       const rel = Math.min(max, fit);
       // à pertinence égale : le plan qui montre le sujet (premier mot de la requête), puis celui qui recoupe les autres requêtes de la scène
       const also = [...vocab].filter((w) => !qw.includes(w) && x.t.has(w)).length;
-      add(x, rel, rel * 100 - order * 3 + qw.filter((w) => x.t.has(w)).length * 4 + (x.t.has(qw[0]) ? 6 : 0) + also * 2 - pos * 0.2 + (x.full ? 1 : 0), q);
+      add(x, rel, rel * 100 - order * 10 + qw.filter((w) => x.t.has(w)).length * 4 + (x.t.has(qw[0]) ? 6 : 0) + also * 2 - pos * 0.2 + (x.full ? 1 : 0), q);
     });
     return hits;
   };
+  // bibliothèque choisie : mêmes critères que la recherche en direct, avec un bonus de qualité
+  if (kind === 'video') {
+    queries.forEach((q, i) => {
+      const qw = words(q);
+      library().forEach((x) => {
+        if (banned(x) || unasked(x)) return;
+        const fit = judge(qw, x.t);
+        if (!fit) return;
+        add(x, fit, fit * 100 - i * 10 + qw.filter((w) => x.t.has(w)).length * 4 + (x.t.has(qw[0]) ? 6 : 0) + 40, q);
+      });
+    });
+  }
   // `until` : passé ce délai (banque lente ou en panne), on n'interroge plus et on rend ce qu'on a
   const open = () => Date.now() < until;
   let first = null;
@@ -197,3 +223,4 @@ module.exports = handler('POST', async (req, res) => {
   send(res, 200, { results });
 });
 module.exports.findScene = findScene;
+module.exports.internals = { pixabay, judge, words, fold, banned: (x) => NEVER.test(x.raw) };

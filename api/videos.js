@@ -147,18 +147,21 @@ const shape = (e) => {
 function library() {
   if (LIB && Date.now() - LIB.at < 6e5) return LIB.p;
   const p = (async () => {
+    let file = [];
+    try { file = require('../data/footage.json'); } catch { /* pas encore construite */ }
     try {
       const { sql } = require('../lib/db');
       const rows = await sql('SELECT data, sectors, keywords FROM footage');
-      if (rows.length) { source = 'db'; return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords })); }
-      // table vide : premier chargement depuis le fichier livré avec le code
-      const file = require('../data/footage.json');
-      await require('../lib/footage').seed(file);
-      source = 'db (just seeded)';
-      return file.map(shape);
+      // table complète : elle fait foi. Vide ou partielle (remplissage interrompu) : on la complète depuis le fichier livré avec le code.
+      if (rows.length && rows.length >= file.length) { source = 'db'; return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords })); }
+      if (file.length) {
+        await require('../lib/footage').seed(file);
+        source = 'db (completed)';
+        return file.map(shape);
+      }
     } catch (e) { console.error('footage db', e.message); }
     source = 'file';
-    try { return require('../data/footage.json').map(shape); } catch { return []; }
+    return file.map(shape);
   })();
   LIB = { at: Date.now(), p };
   return p;

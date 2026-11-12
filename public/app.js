@@ -3,7 +3,8 @@ const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
 const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: '', templateStyle: '', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], icons: {}, visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
-const media = (u) => '/api/media?u=' + encodeURIComponent(u);
+// adresses du site (médias de la bibliothèque) : directes ; les autres passent par le proxy (CORS pour le canvas)
+const media = (u) => (String(u).startsWith('/') ? u : '/api/media?u=' + encodeURIComponent(u));
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
 const vidIdb = (() => {
@@ -238,10 +239,10 @@ $('#files').addEventListener('change', async (e) => {
 });
 
 /* ---------- logos de marques (Iconify) ---------- */
-async function loadIcons(names) {
-  if (!names.length) return {};
+async function loadIcons(brands) {
+  if (!brands.length) return {};
   try {
-    const { icons } = await (await api('/api/icons', { names })).json();
+    const { icons } = await (await api('/api/icons', { brands })).json();
     const out = {};
     await Promise.all(Object.entries(icons || {}).map(([name, { svg }]) => new Promise((ok) => {
       const im = new Image();
@@ -283,7 +284,7 @@ $('#b-gen').addEventListener('click', async () => {
     $('#res').value = String(autoResolution());
     setMusic(ecom ? 'm6' : 'm1');
     // vrais logos des marques citées dans la pub (Iconify), pour les animations « logo → flèche → logo »
-    state.icons = ecom ? {} : await loadIcons([...new Set(state.ad.scenes.flatMap((s) => [...(s.logos || []), ...(s.glyphs || []).map((g) => g.icon)]))].slice(0, 14));
+    state.icons = ecom ? {} : await loadIcons([...new Map(state.ad.scenes.flatMap((s) => s.logos || []).map((l) => [l.name.toLowerCase(), l])).values()].slice(0, 8));
     status('Finding the right visuals…', 10);
     // Plans d'illustration : sans eux, la pub se monte quand même. Chaque scène SaaS reçoit les siens, quel que soit
     // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
@@ -917,10 +918,8 @@ function makeRenderer(cv, job) {
   }
 
   // Scène de logos : de vraies marques en grand, au centre, reliées par des flèches qui se dessinent, avec leur nom dessous.
-  const BRAND_NAMES = { chatgpt: 'ChatGPT', openai: 'OpenAI', github: 'GitHub', gitlab: 'GitLab', hubspot: 'HubSpot', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok', whatsapp: 'WhatsApp', paypal: 'PayPal', mailchimp: 'Mailchimp', wordpress: 'WordPress', woocommerce: 'WooCommerce', bigcommerce: 'BigCommerce', zendesk: 'Zendesk', quickbooks: 'QuickBooks', openrouter: 'OpenRouter', mongodb: 'MongoDB', postgres: 'PostgreSQL', nodejs: 'Node.js', javascript: 'JavaScript', typescript: 'TypeScript', claude: 'Claude', gemini: 'Gemini', aws: 'AWS', ibm: 'IBM', copilot: 'Copilot', 'gpt-4': 'GPT-4', 'microsoft-teams': 'Teams' };
-  const niceName = (n) => BRAND_NAMES[n] || String(n).replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
   function iconStage(sc, local, box) {
-    const items = sc.icons.slice(0, 3).map((i) => ({ img: i.img, label: niceName(i.name) }));
+    const items = sc.icons.slice(0, 3).map((i) => ({ img: i.img, label: i.name }));
     if (items.length === 1 && logo) items.push({ img: logo, label: plan.brand, dark: job.logoLight });
     // instant d'apparition de chaque tuile : au mot prononcé, sans jamais coller aux autres
     sc.icons.slice(0, 3).forEach((ic, i) => { items[i].at = Math.max(0.2 + i * 0.3, (ic.t0 || 0) - 0.3); if (i) items[i].at = Math.max(items[i].at, items[i - 1].at + 0.3); });
@@ -983,35 +982,6 @@ function makeRenderer(cv, job) {
     });
   }
 
-  // Pictogrammes flottants : une pastille translucide qui surgit quand le mot est dit, flotte, puis s'efface.
-  function stickers(sc, local, box, stage) {
-    if (sc.kind === 'cta') return;
-    (sc.glyphs || []).forEach((g, i) => {
-      const life = 1.9, e = clamp((local - g.t0) / 0.45), out = clamp((local - g.t0 - life) / 0.4);
-      if (e <= 0 || out >= 1) return;
-      const sz = Math.min(W, H) * (wide ? 0.13 : 0.16), side = i % 2 ? 1 : -1;
-      const cx = (wide ? box.x + box.w / 2 : W / 2) + side * box.w * (stage ? 0.38 : 0.3);
-      const cy = stage ? box.y + box.h * 0.1 : box.y + box.h * (0.18 + 0.3 * (i % 2));
-      const t = local - g.t0, k2 = backOut(e) * (1 - easeOut(out) * 0.7);
-      const x = cx + Math.sin(t * 1.6 + i) * sz * 0.1, y = cy - t * sz * 0.1 + Math.sin(t * 2 + i * 2) * sz * 0.07;
-      ctx.save();
-      ctx.globalAlpha = clamp(e * 2) * (1 - out);
-      // onde qui part de la pastille à son arrivée
-      ctx.strokeStyle = A; ctx.lineWidth = 3; ctx.globalAlpha *= (1 - e) * 0.7 + 0.001;
-      ctx.beginPath(); ctx.arc(x, y, sz * (0.5 + 0.7 * e), 0, 7); ctx.stroke();
-      ctx.globalAlpha = clamp(e * 2) * (1 - out);
-      ctx.translate(x, y); ctx.scale(k2, k2);
-      ctx.shadowColor = A + 'aa'; ctx.shadowBlur = sz * 0.5;
-      const fill = ctx.createRadialGradient(-sz * 0.15, -sz * 0.2, 0, 0, 0, sz * 0.6);
-      fill.addColorStop(0, A + 'ee'); fill.addColorStop(1, mix(A, '#000000', 0.45));
-      ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, 7); ctx.fill();
-      ctx.shadowColor = 'transparent'; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = Math.max(2, sz * 0.03); ctx.stroke();
-      ctx.imageSmoothingQuality = 'high';
-      ctx.drawImage(g.img, -sz * 0.27, -sz * 0.27, sz * 0.54, sz * 0.54);
-      ctx.restore();
-    });
-  }
-
   /* ----- scènes ----- */
   function scene(sc, local) {
     const k = clamp(local / sc.dur), ph = sc.ph;
@@ -1029,7 +999,6 @@ function makeRenderer(cv, job) {
     const box = heroBox(top);
     if (sc.visual === 'site' && shot && !stage) phone(box, local, sc.dur, sc.variant);
     if (stage) iconStage(sc, local, box);
-    stickers(sc, local, box, stage);
     if (onDecor) { const r = product(ph, box, local, k); pill(sc.badge, r.x + r.w * 0.82, Math.max(box.y + 30, r.y + r.h * 0.12), local); }
     else if (sc.badge) pill(sc.badge, W / 2, wide ? H * 0.3 : H * 0.36, local, 30);
 
@@ -1397,7 +1366,7 @@ async function produce(actx) {
 
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
-  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s, icons: (s.logos || []).map((n) => (state.icons?.[n] ? { img: state.icons[n], name: n } : null)).filter(Boolean), glyphs: (s.glyphs || []).map((g) => (state.icons?.[g.icon] ? { img: state.icons[g.icon], word: g.word } : null)).filter(Boolean) })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
+  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s, icons: (s.logos || []).map((l) => (state.icons?.[l.name.toLowerCase()] ? { img: state.icons[l.name.toLowerCase()], name: l.name } : null)).filter(Boolean) })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
@@ -1550,12 +1519,11 @@ async function produce(actx) {
     const tl = timeline(scenes, target);
     job.total = tl.total; job.rate = tl.rate;
     scenes.forEach((s) => { s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, s.speech / tl.rate, 0.3) : []; });
-    // icônes : chacune apparaît quand son mot est dit (à défaut, à intervalles réguliers)
+    // logos : chacun apparaît quand son nom est dit (à défaut, à intervalles réguliers)
     scenes.forEach((s) => {
       const flat = (s.words || []).flat(), norm = (w) => String(w).toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
       const find = (token) => { const t = norm(token); if (t.length < 3) return null; const x = flat.find((f) => { const n = norm(f.w); return n.length >= 3 && (n.startsWith(t.slice(0, 5)) || t.startsWith(n.slice(0, 5))); }); return x ? x.t0 : null; };
-      (s.glyphs || []).forEach((g, i) => { g.t0 = find(g.word) ?? 0.6 + i * 0.9; });
-      (s.icons || []).forEach((ic, i) => { ic.t0 = find(ic.name.split('-')[0]) ?? 0.25 + i * 0.3; });
+      (s.icons || []).forEach((ic, i) => { ic.t0 = find(ic.name.split(/\s+/)[0]) ?? 0.25 + i * 0.3; });
     });
     const track = Music.byId(state.music);
     job.musicBuf = track ? await Music.render(track, job.total).catch(() => null) : null;

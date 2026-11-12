@@ -144,7 +144,7 @@ const SAFE = {
 let LIB = null, source = 'none';
 const shape = (e) => {
   const tags = `${e.t}, ${[].concat(e.k).join(', ')}`;
-  return { id: e.id, g: e.g, p: e.p, s: e.s, k: [].concat(e.k), kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
+  return { id: e.id, g: e.g, p: e.p, s: e.s, k: [].concat(e.k), kind: e.kind === 'image' ? 'photo' : 'video', lic: e.lic, au: e.au, cr: e.cr, emo: e.emo, role: e.role, top: !!e.top, std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
 };
 // table `footage` (Neon) d'abord, relue toutes les 10 minutes ; à défaut le fichier livré avec le code
 function library() {
@@ -202,15 +202,15 @@ async function findScene(list, { kind = 'video', safe = [], loose = false, until
     return hits;
   };
   // bibliothèque choisie : mêmes critères que la recherche en direct, avec un bonus de qualité
-  if (kind === 'video') {
-    const lib = await library();
+  {
+    const lib = (await library()).filter((x) => x.kind === kind);
     queries.forEach((q, i) => {
       const qw = words(q);
       lib.forEach((x) => {
         if (banned(x) || unasked(x)) return;
         const fit = judge(qw, x.t);
         if (!fit) return;
-        add(x, fit, fit * 100 - i * 10 + qw.filter((w) => x.t.has(w)).length * 4 + (x.t.has(qw[0]) ? 6 : 0) + 40, q);
+        add(x, fit, fit * 100 - i * 10 + qw.filter((w) => x.t.has(w)).length * 4 + (x.t.has(qw[0]) ? 6 : 0) + 40 + (x.top ? 15 : 0), q);
       });
     });
   }

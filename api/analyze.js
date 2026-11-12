@@ -39,6 +39,7 @@ ${SHAPE_HEAD}
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "english_queries": [string, string, string],  // stock-footage searches, English words only
+      "logos": [{"name": string, "domain": string}],  // real outside brands shown as logos joined by arrows, in the order of the sentence; [] when none
       "visual": "footage"|"site"}     // stock footage, or a phone showing the real website
    ],
    "cta": string,                     // button label, max 4 words
@@ -48,6 +49,7 @@ ${SHAPE_HEAD}
 Choose ONE videoTemplate that fits the product and audience: "product-demo", "problem-solution", "feature-showcase", "startup-launch", "customer-story", or "corporate". Do not use the same generic story for every SaaS.
 Choose ONE captionStyle for this audience: "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Prefer readable, restrained captions; avoid neon unless the brand genuinely calls for it.
 Make captionStyle format-aware: vertical 9:16 needs large, short, safe-area captions; square 1:1 needs compact balanced captions; horizontal 16:9 should prefer clean lower-third or editorial treatments that do not obstruct the footage.
+Logos: when a scene explains an integration, a tool the customer already uses, a platform or a well-known product (an AI assistant, a payment provider, a chat tool, a marketplace…), list up to 3 REAL products or companies in "logos", as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content or in your own voice-over: never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
 Narrative and footage rules:
 - Exactly four scenes, each with a different purpose and a distinct real-world shot. The first scene must be an immediate human/customer hook, not a generic computer close-up.
 - Use "site" for exactly two scenes, preferably scenes 2 and 3, to show the real captured website inside the phone. Do not invent a dashboard or fabricate UI.
@@ -144,47 +146,17 @@ const GOALS = {
   problem: 'Problem → solution: open on the customer\'s pain, then show how the product solves it.',
   offer: 'Conversion: push the viewer to act now. Mention a price or an offer ONLY if it appears in the page content.',
 };
-// Marques reconnues dans les textes : leurs vrais logos sont ensuite cherchés sur Iconify (lib/ops/icons.js).
-// `safe` : sans ambiguïté, repérées quelle que soit la casse. `capitalised` : mots courants, repérés seulement avec une majuscule.
-const BRANDS_SAFE = 'chatgpt openai gpt-4 claude anthropic gemini copilot slack github gitlab notion stripe shopify zapier hubspot salesforce figma jira trello asana discord whatsapp instagram tiktok youtube facebook linkedin twitter paypal mailchimp wordpress woocommerce bigcommerce aws microsoft dropbox airtable canva intercom zendesk twilio supabase vercel openrouter telegram spotify netflix airbnb android sentry datadog postgres mongodb docker kubernetes react python javascript typescript nodejs gmail outlook snowflake tableau mixpanel amplitude webflow wix squarespace klaviyo calendly miro freshdesk quickbooks xero oracle ibm cloudflare firebase paddle pinterest reddit twitch snapchat telegram signal messenger'.split(' ');
-const BRANDS_CAP = 'Google Meta Loom Looker'.split(' ');
-const BRAND_RE = new RegExp(`\\b(${BRANDS_SAFE.map((b) => b.replace(/[-]/g, '[- ]?')).join('|')})\\b`, 'gi');
-const BRAND_CAP_RE = new RegExp(`\\b(${BRANDS_CAP.join('|')})\\b`, 'g');
-function brandsIn(text) {
+// Logos choisis par l'IA : nom et domaine officiel, sans doublon ni la marque annoncée elle-même.
+function cleanLogos(list, own) {
+  const mine = own.map((n) => String(n || '').toLowerCase().replace(/[^a-z0-9]/g, '')).filter(Boolean);
   const out = [];
-  const add = (m) => { const n = m.toLowerCase().replace(/[- ]+/g, '-'); if (!out.includes(n)) out.push(n); };
-  String(text || '').replace(BRAND_RE, add).replace(BRAND_CAP_RE, add).replace(/\bZoom (?=meeting|call|webinar)/gi, () => { add('zoom'); return ''; });
-  return out;
-}
-
-// Pictogrammes (jeu lucide d'Iconify) déclenchés par des mots du script, en anglais et en français ; le navigateur les fait apparaître au moment où le mot est dit.
-const GLYPHS = [
-  ['timer', /^(hours?|minutes?|seconds?|instant\w*|fast|quick\w*|speed|rapide\w*|vite|heures?|secondes?|immediat\w*)$/],
-  ['trending-up', /^(growth|grow\w*|revenue|sales?|boost\w*|increase\w*|profit\w*|scale|croissance|ventes?|augment\w*|chiffre|results?|r.sultats?)$/],
-  ['dollar-sign', /^(money|price\w*|cost\w*|sav(e|ing|ings)|pay\w*|cash|argent|prix|co[uû]ts?|co[uû]t.\w*|[eé]conomis\w*|paiements?|factur\w*|invoice\w*|billing)$/],
-  ['mail', /^(e-?mails?|newsletters?|inbox|mails?|courriels?)$/],
-  ['message-circle', /^(chat\w*|support|customers?|clients?|conversations?|repl(y|ies)|r.pon\w*|messages?)$/],
-  ['bar-chart-3', /^(analytics|data|dashboards?|reports?|insights?|metrics|statistiques?|donn.es|tableaux?|kpis?)$/],
-  ['shield-check', /^(secur\w*|safe\w*|privacy|protect\w*|s.curit.\w*|prot.g\w*|confidential\w*)$/],
-  ['users', /^(teams?|.quipes?|collabor\w*|together|ensemble)$/],
-  ['sparkles', /^(automat\w*|ai|smart|magic\w*|intelligen\w*|ia|intelligent\w*)$/],
-  ['calendar-check', /^(schedul\w*|booking|bookings|appointments?|rendez-?vous|r.serv\w*|calendar|calendrier|planning)$/],
-  ['rocket', /^(launch\w*|start(up)?s?|ship\w*|lance\w*|d.marr\w*)$/],
-  ['circle-check', /^(done|ready|simple|easy|free|trial|gratuit\w*|essai|facile\w*|termin.\w*)$/],
-  ['smartphone', /^(mobile|phone|smartphone|app|apps|t.l.phone)$/],
-  ['search', /^(find|search\w*|discover\w*|trouv\w*|recherch\w*|seo)$/],
-  ['triangle-alert', /^(problems?|chaos|stress\w*|lost|mess\w*|probl.mes?|perdu\w*|galere|erreurs?|errors?|bugs?)$/],
-  ['heart', /^(love\w*|happy|satisf\w*|aim\w*|heureux|loved)$/],
-  ['globe', /^(worldwide|global\w*|international|monde|mondial\w*)$/],
-];
-function glyphsIn(text, max = 2) {
-  const out = [];
-  for (const w of String(text || '').toLowerCase().normalize('NFC').split(/[^\p{L}\p{N}-]+/u).filter(Boolean)) {
-    const hit = GLYPHS.find(([, re]) => re.test(w));
-    if (hit && !out.some((g) => g.icon === 'lucide:' + hit[0])) out.push({ icon: 'lucide:' + hit[0], word: w });
-    if (out.length >= max) break;
+  for (const l of Array.isArray(list) ? list : []) {
+    const name = str(typeof l === 'string' ? l : l?.name, 40), key = name.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const domain = typeof l?.domain === 'string' && /^[a-z0-9][a-z0-9.-]{2,60}\.[a-z]{2,}$/i.test(l.domain.trim()) ? l.domain.trim().toLowerCase() : '';
+    if (!key || mine.includes(key) || out.some((o) => o.key === key)) continue;
+    out.push({ key, name, domain });
   }
-  return out;
+  return out.slice(0, 3).map(({ name, domain }) => ({ name, domain }));
 }
 
 // requêtes de banque d'images : lettres simples uniquement (les accents sont repliés, pas supprimés)
@@ -258,7 +230,6 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
   const brands = [d.brand, page.siteName, String(page.url).replace(/^https?:\/\//, '').split(/[/:?#]/)[0].split('.').slice(-2)[0]].map((n) => cleanQ(n)).filter((n) => n.length > 2)
     .map((n) => new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s*') + '\\b', 'gi'));
   let adsSceneIndex = 0;
-  const pageBrands = type === 'saas' ? brandsIn([page.title, page.description, ...page.h1, ...page.h2, page.text].join(' ')).filter((n) => !brandsIn(page.siteName).includes(n)).slice(0, 4) : [];
   const ads = (Array.isArray(d.ads) ? d.ads : []).map((ad, a) => ({
     angle: str(ad.angle, 40) || fb.ads[a % 3].angle,
     scenes: (Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s, si) => {
@@ -273,8 +244,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
       return {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
-        glyphs: type === 'saas' ? glyphsIn([s.headline, s.voiceover].join(' ')) : [],
-        logos: type !== 'saas' ? [] : (() => { const own = brandsIn([s.headline, s.voiceover].join(' ')).slice(0, 3); return own.length ? own : (s.role === 'demo' || (!s.role && visual === 'site')) && si === (ad.scenes || []).findIndex((x) => x.role === 'demo' || x.visual === 'site') ? pageBrands.slice(0, 2) : []; })(),
+        logos: type !== 'saas' ? [] : cleanLogos(s.logos, [d.brand, page.siteName]),
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries,
       };

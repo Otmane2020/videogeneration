@@ -101,7 +101,8 @@ async function loadSource(src) {
     if (buf.length > 8e6) throw httpError(413, 'Image too large');
     return { buf, type: m[1] };
   }
-  const r = await safeFetch(src, {}, 15000);
+  // les CDN « format=auto » renverraient de l'AVIF, que les services de détourage refusent : on demande JPEG/PNG/WebP
+  const r = await safeFetch(src, { headers: { accept: 'image/jpeg,image/png,image/webp;q=0.9,*/*;q=0.5' } }, 15000);
   const type = (r.headers.get('content-type') || '').split(';')[0];
   if (!r.ok || !/^image\/(jpeg|png|webp)$/.test(type)) { r.body?.cancel().catch(() => {}); throw httpError(502, 'Cannot use this image'); }
   const { buf, truncated } = await readCapped(r, 8e6);

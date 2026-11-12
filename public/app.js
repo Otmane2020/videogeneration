@@ -624,67 +624,6 @@ async function loadVoice(text, lang, voice) {
   return new Promise((ok, ko) => new OfflineAudioContext(1, 1, 48000).decodeAudioData(buf, ok, ko));
 }
 
-// Détourage fidèle : on retire uniquement le fond uni (blanc, gris…) relié aux bords de la photo.
-// Le produit lui-même n'est jamais modifié ni régénéré. Renvoie null si le fond n'est pas uni.
-function cutout(img) {
-  // on travaille à la résolution d'origine (2000 px au plus) : aucun rééchantillonnage, donc aucune perte de netteté
-  const k = Math.min(1, 2000 / Math.max(img.naturalWidth, img.naturalHeight));
-  const w = Math.round(img.naturalWidth * k), h = Math.round(img.naturalHeight * k);
-  const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
-  const g = c.getContext('2d', { willReadFrequently: true });
-  g.imageSmoothingQuality = 'high';
-  g.drawImage(img, 0, 0, w, h);
-  let px;
-  try { px = g.getImageData(0, 0, w, h); } catch { return null; }
-  const d = px.data, border = [];
-  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
-  for (let y = 0; y < h; y++) border.push(y * w, y * w + w - 1);
-  let r = 0, gr = 0, b = 0, clear = 0;
-  for (const i of border) { r += d[i * 4]; gr += d[i * 4 + 1]; b += d[i * 4 + 2]; if (d[i * 4 + 3] < 40) clear++; }
-  if (clear > border.length * 0.6) return trim(c, d, w, h); // PNG déjà détouré
-  r /= border.length; gr /= border.length; b /= border.length;
-  const far = (i, t) => Math.abs(d[i * 4] - r) + Math.abs(d[i * 4 + 1] - gr) + Math.abs(d[i * 4 + 2] - b) > t;
-  if (border.filter((i) => far(i, 60)).length > border.length * 0.12) return null; // fond non uni : photo d'ambiance
-  const bg = new Uint8Array(w * h), stack = [];
-  for (const i of border) if (!far(i, 54) && !bg[i]) { bg[i] = 1; stack.push(i); }
-  while (stack.length) {
-    const i = stack.pop(), x = i % w;
-    for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) {
-      if (j >= 0 && j < w * h && !bg[j] && !far(j, 54)) { bg[j] = 1; stack.push(j); }
-    }
-  }
-  let kept = 0;
-  for (let i = 0; i < w * h; i++) {
-    if (bg[i]) d[i * 4 + 3] = 0;
-    else kept++;
-  }
-  // bord : transparence proportionnelle à l'écart avec le fond, et couleur débarrassée du liseré du fond
-  const bgc = [r, gr, b];
-  for (let i = 0; i < w * h; i++) {
-    if (bg[i]) continue;
-    const x = i % w;
-    if (!(bg[i - w] || bg[i + w] || (x > 0 && bg[i - 1]) || (x < w - 1 && bg[i + 1]))) continue;
-    const dist = Math.abs(d[i * 4] - r) + Math.abs(d[i * 4 + 1] - gr) + Math.abs(d[i * 4 + 2] - b);
-    const a = Math.max(0.35, Math.min(1, (dist - 40) / 140));
-    for (let ch = 0; ch < 3; ch++) d[i * 4 + ch] = Math.max(0, Math.min(255, (d[i * 4 + ch] - (1 - a) * bgc[ch]) / a));
-    d[i * 4 + 3] = Math.round(a * 255);
-  }
-  if (kept < w * h * 0.04 || kept > w * h * 0.93) return null;
-  g.putImageData(px, 0, 0);
-  return trim(c, d, w, h);
-}
-function trim(c, d, w, h) {
-  let x0 = w, y0 = h, x1 = 0, y1 = 0;
-  for (let y = 0; y < h; y += 2) for (let x = 0; x < w; x += 2) {
-    if (d[(y * w + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-  }
-  if (x1 - x0 < 20 || y1 - y0 < 20) return null;
-  const out = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 4, height: y1 - y0 + 4 });
-  out.getContext('2d').drawImage(c, x0 - 2, y0 - 2, out.width, out.height, 0, 0, out.width, out.height);
-  out.box = [(x0 - 2) / w, (y0 - 2) / h, (x1 + 2) / w, (y1 + 2) / h]; // emplacement dans la photo, pour vérifier le détourage
-  return out;
-}
-
 // Lecture d'une photo produit à petite échelle : couleur et uniformité du fond, emprise du produit,
 // bords de l'image qu'il touche, et zones riches en détails (cadran, logo, couture…) pour viser les gros plans.
 function photoInfo(img) {
@@ -760,48 +699,6 @@ function photoInfo(img) {
   }
   if (!focus.length) focus.push({ x: (x0 + x1 + 1) / 2 / w, y: (y0 + y1 + 1) / 2 / h });
   return { w, h, bg, plain, clear, back, d, touch, sides, focus, box: [x0 / w, y0 / h, (x1 + 1) / w, (y1 + 1) / h] };
-}
-
-// Un détourage n'est gardé que s'il ne retire rien du produit. Sur fond uni, chaque pixel nettement différent
-// du fond (cadran, maillons, gravure…) doit rester opaque ; sinon la photo d'origine est utilisée, intacte.
-function cutKeepsProduct(cut, info) {
-  if (!cut) return false;
-  if (!info || info.clear) return true;
-  const { w, h, back, d, bg } = info;
-  const m = Object.assign(document.createElement('canvas'), { width: w, height: h });
-  const g = m.getContext('2d', { willReadFrequently: true });
-  const [bx0, by0, bx1, by1] = cut.box || info.box;
-  g.drawImage(cut, bx0 * w, by0 * h, (bx1 - bx0) * w, (by1 - by0) * h);
-  const a = g.getImageData(0, 0, w, h).data;
-  let core = 0, kept = 0, opaque = 0, onBack = 0;
-  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
-    const i = y * w + x, on = a[i * 4 + 3] > 110;
-    if (on) { opaque++; if (back[i]) onBack++; }
-    if (!info.plain || back[i] || back[i - 1] || back[i + 1] || back[i - w] || back[i + w]) continue;
-    if (Math.abs(d[i * 4] - bg[0]) + Math.abs(d[i * 4 + 1] - bg[1]) + Math.abs(d[i * 4 + 2] - bg[2]) < 60) continue;
-    core++; if (on) kept++;
-  }
-  if (!opaque) return false;
-  if (info.plain) return (core < 40 || kept / core > 0.95) && onBack / opaque < 0.2;
-  // photo d'ambiance : pas de référence, on refuse au moins un détourage en miettes
-  return pieces(a, w, h) <= 3;
-}
-// nombre de morceaux opaques notables (plus de 4 % de la surface opaque)
-function pieces(a, w, h) {
-  const lab = new Int32Array(w * h), sizes = [];
-  let total = 0;
-  for (let s = 0; s < w * h; s++) {
-    if (lab[s] || a[s * 4 + 3] <= 110) continue;
-    const id = sizes.length + 1, st = [s];
-    let k = 0;
-    lab[s] = id;
-    while (st.length) {
-      const i = st.pop(), x = i % w; k++;
-      for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) if (j >= 0 && j < w * h && !lab[j] && a[j * 4 + 3] > 110) { lab[j] = id; st.push(j); }
-    }
-    sizes.push(k); total += k;
-  }
-  return sizes.filter((k) => k > total * 0.04).length;
 }
 
 /* ---------- dessin ---------- */
@@ -2062,46 +1959,41 @@ async function produce(actx) {
       if (!cache[key] && info && !info.plain) cache[key] = { img, cut: null, info };
       if (!cache[key]) {
         status('Cutting out your product…');
-        // 1. Essai côté serveur (ClearBackdrop / Clipdrop / remove.bg), sinon modèle du navigateur
-        const srcUrl = state.photoSources?.[id];
-        let cut = srcUrl
+        // Détourage par API uniquement (ClearBackdrop → Clipdrop → remove.bg côté serveur). Pas de repli dans le navigateur :
+        // sans résultat de l'API, la photo reste entière et cadrée proprement.
+        let srcUrl = state.photoSources?.[id];
+        if (!/^https?:/i.test(srcUrl || '')) {
+          // photo importée par l'utilisateur : envoyée à l'API en JPEG (1600 px au plus)
+          try {
+            const k2 = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c3 = Object.assign(document.createElement('canvas'), { width: Math.round(img.naturalWidth * k2), height: Math.round(img.naturalHeight * k2) });
+            const g3 = c3.getContext('2d'); g3.fillStyle = '#fff'; g3.fillRect(0, 0, c3.width, c3.height); g3.drawImage(img, 0, 0, c3.width, c3.height);
+            srcUrl = c3.toDataURL('image/jpeg', 0.86);
+          } catch { srcUrl = ''; }
+        }
+        const cut = srcUrl
           ? await api('/api/backdrop?a=removebg', { url: srcUrl })
               .then(async (r) => {
                 if (!r.ok) throw new Error(r.status);
-                const blob = await r.blob();
-                // Convertit le PNG transparent en canvas rogné (même format que Cutout.run)
-                const bUrl = URL.createObjectURL(blob);
+                const bUrl = URL.createObjectURL(await r.blob());
                 const bImg = await loadImage(bUrl).finally(() => URL.revokeObjectURL(bUrl));
                 const cv2 = Object.assign(document.createElement('canvas'), { width: bImg.naturalWidth, height: bImg.naturalHeight });
-                cv2.getContext('2d').drawImage(bImg, 0, 0);
-                const px2 = cv2.getContext('2d', { willReadFrequently: true }).getImageData(0, 0, cv2.width, cv2.height);
-                // Rogner aux contours opaques (même logique que Cutout.trim)
-                const d2 = px2.data, w2 = cv2.width, h2 = cv2.height;
-                let x0 = w2, y0 = h2, x1 = 0, y1 = 0;
+                const g2 = cv2.getContext('2d', { willReadFrequently: true });
+                g2.drawImage(bImg, 0, 0);
+                const d2 = g2.getImageData(0, 0, cv2.width, cv2.height).data, w2 = cv2.width, h2 = cv2.height;
+                // rogné aux contours opaques ; un résultat presque vide est ignoré
+                let x0 = w2, y0 = h2, x1 = 0, y1 = 0, on = 0, seen = 0;
                 for (let y = 0; y < h2; y += 2) for (let x = 0; x < w2; x += 2) {
-                  if (d2[(y * w2 + x) * 4 + 3] > 40) { if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+                  seen++;
+                  if (d2[(y * w2 + x) * 4 + 3] > 40) { on++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
                 }
-                if (x1 - x0 < 20 || y1 - y0 < 20) return null;
+                if (x1 - x0 < 20 || y1 - y0 < 20 || on < seen * 0.01) return null;
                 const out2 = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 1, height: y1 - y0 + 1 });
                 out2.getContext('2d').drawImage(cv2, x0, y0, out2.width, out2.height, 0, 0, out2.width, out2.height);
                 out2.box = [x0 / w2, y0 / h2, (x1 + 1) / w2, (y1 + 1) / h2];
                 return out2;
               })
-              .catch(() => null) // 503 (pas de clé) ou erreur → on passe au ONNX local
+              .catch((e) => { console.warn('background removal API unavailable', e); return null; })
           : null;
-        // chaque détourage est contrôlé : s'il retire une partie du produit (cadran blanc, maillons argentés…), on passe au suivant
-        if (cut && !cutKeepsProduct(cut, info)) { console.warn('server cutout removed part of the product; trying the next method'); cut = null; }
-        // 2. Modèle ONNX local (ormbg) : on le force pour chaque photo réellement utilisée comme produit vedette.
-        // Le classement « packshot » de l'analyse ne doit pas empêcher le détourage d'une photo produit classique.
-        if (!cut) {
-          const localCut = window.Cutout?.run
-            ? await window.Cutout.run(img, { force: true, onProgress: (f) => status(`Removing background… ${Math.round(f * 100)}%`) })
-                .catch((e) => { console.warn('ONNX background removal failed', e); return null; })
-            : null;
-          cut = cutKeepsProduct(localCut, info) ? localCut : null;
-          if (!cut) { const flat = cutout(img); cut = cutKeepsProduct(flat, info) ? flat : null; }
-          if (!cut) status('This photo is kept intact (the cut-out would have damaged the product).');
-        }
         if (job.cancelled) return;
         cache[key] = { img, cut, info };
       }

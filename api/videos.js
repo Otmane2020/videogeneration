@@ -141,7 +141,7 @@ const SAFE = {
 let LIB = null, source = 'none';
 const shape = (e) => {
   const tags = `${e.t}, ${[].concat(e.k).join(', ')}`;
-  return { id: e.id, g: e.g, kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
+  return { id: e.id, g: e.g, s: e.s, k: [].concat(e.k), kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
 };
 // table `footage` (Neon) d'abord, relue toutes les 10 minutes ; à défaut le fichier livré avec le code
 function library() {
@@ -238,4 +238,4 @@ module.exports = handler('POST', async (req, res) => {
   send(res, 200, { results, library: source });
 });
 module.exports.findScene = findScene;
-module.exports.internals = { pixabay, judge, words, fold, banned: (x) => NEVER.test(x.raw) };
+module.exports.internals = { library, source: () => source, pixabay, judge, words, fold, banned: (x) => NEVER.test(x.raw) };

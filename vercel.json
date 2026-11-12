@@ -5,7 +5,8 @@
     { "source": "/api/track", "destination": "/api/ops?a=track" },
     { "source": "/api/admin", "destination": "/api/ops?a=admin" },
     { "source": "/api/inbound", "destination": "/api/ops?a=inbound" },
-    { "source": "/api/push", "destination": "/api/ops?a=push" }
+    { "source": "/api/push", "destination": "/api/ops?a=push" },
+    { "source": "/api/footage", "destination": "/api/ops?a=footage" }
   ],
   "crons": [{ "path": "/api/ops?a=report", "schedule": "0 7 * * *" }]
 }

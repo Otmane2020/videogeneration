@@ -138,7 +138,7 @@ const SAFE = {
 
 /* ---------- bibliothèque choisie ---------- */
 // data/footage.json (scripts/build-footage.js) : plans HD choisis à la main par secteur et par mot-clé. Elle passe avant la recherche en direct.
-let LIB = null;
+let LIB = null, source = 'none';
 const shape = (e) => {
   const tags = `${e.t}, ${[].concat(e.k).join(', ')}`;
   return { id: e.id, g: e.g, kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
@@ -150,12 +150,14 @@ function library() {
     try {
       const { sql } = require('../lib/db');
       const rows = await sql('SELECT data, sectors, keywords FROM footage');
-      if (rows.length) return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords }));
+      if (rows.length) { source = 'db'; return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords })); }
       // table vide : premier chargement depuis le fichier livré avec le code
       const file = require('../data/footage.json');
-      require('../lib/footage').seed(file).catch((e) => console.error('footage seed', e.message));
+      await require('../lib/footage').seed(file);
+      source = 'db (just seeded)';
       return file.map(shape);
     } catch (e) { console.error('footage db', e.message); }
+    source = 'file';
     try { return require('../data/footage.json').map(shape); } catch { return []; }
   })();
   LIB = { at: Date.now(), p };
@@ -233,7 +235,7 @@ module.exports = handler('POST', async (req, res) => {
     // `null` : la scène n'a pas besoin de plan (elle montre une photo produit)
     return list === null ? [] : (await findScene(list, { kind: kind === 'photo' ? 'photo' : 'video', safe: mine, loose: !!loose, until })).map((x) => out(x, !!hd));
   }));
-  send(res, 200, { results });
+  send(res, 200, { results, library: source });
 });
 module.exports.findScene = findScene;
 module.exports.internals = { pixabay, judge, words, fold, banned: (x) => NEVER.test(x.raw) };

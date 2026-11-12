@@ -139,6 +139,7 @@ $$('.seg[data-for]').forEach((g) => {
     if (!isPaid()) {
       if (g.dataset.for === 'bgai' && b.dataset.v === '1') return openUpgrade('AI Scene is part of the Pro plan.');
       if (g.dataset.for === 'dur' && ['20', '30'].includes(b.dataset.v)) return openUpgrade(`${b.dataset.v}-second videos are part of the Pro plan.`);
+      if (g.dataset.for === 'res' && b.dataset.v === '1080') return openUpgrade('1080p HD export is part of the Pro plan.');
     }
     sel.value = b.dataset.v; paint();
   }));
@@ -1649,9 +1650,12 @@ async function produce(actx) {
   const plan = state.plan, page = state.page, ad = state.ad, cache = state.cache;
   stopPreview();
   const [W, H] = FORMATS[state.fmt], target = +$('#dur').value;
-  // Qualité automatique selon l'offre et les capacités réelles de l'appareil.
-  const paid = unlocked(), resolution = autoResolution();
-  $('#res').value = String(resolution);
+  // The resolution is selected in the wizard; Free users are gated before 1080p can be selected.
+  const paid = unlocked(), resolution = Number($('#res').value) === 1080 ? 1080 : 720;
+  if (resolution === 1080 && !isPaid()) {
+    openUpgrade('1080p HD export is part of the Pro plan.');
+    return;
+  }
   // Le brief IA choisit le template narratif, les sous-titres et leur traitement selon le contenu.
   const templateStyle = plan.templateStyle || 'cinematic';
   const captionStyle = plan.captionStyle || (plan.type === 'saas' ? 'karaoke' : 'boxed');

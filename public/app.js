@@ -1470,10 +1470,10 @@ async function produce(actx) {
     };
     const voiceLang = String(plan.language || '').toLowerCase().split(/[-_]/)[0];
     const voicePool = VOICE_POOL[voiceLang] || [];
-    if (!voicePool.length) throw new Error(`Deepgram Aura-2 does not support voice-over in “${plan.language || 'unknown'}”.`);
+    // If Aura-2 has no voice for this language, keep the video generation working without narration.
     // One random voice per finished video: consistent voice across all scenes.
-    const voiceModel = voicePool[Math.floor(Math.random() * voicePool.length)];
-    const voice = (text) => (text ? cached(cache.voice, voiceModel + '|' + text, () => loadVoice(text, plan.language, voiceModel)) : Promise.resolve(null));
+    const voiceModel = voicePool.length ? voicePool[Math.floor(Math.random() * voicePool.length)] : null;
+    const voice = (text) => (text && voiceModel ? cached(cache.voice, voiceModel + '|' + text, () => loadVoice(text, plan.language, voiceModel)) : Promise.resolve(null));
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([
       Promise.all(scenes.map((s, i) => tick(used[i]?.kind === 'video' && needClip(s) ? cached(cache.blob, used[i].url, () => fetchBlob(media(lite ? used[i].lite : used[i].url))) : Promise.resolve(null)))),
       Promise.all(scenes.map((s, i) => (used[i]?.kind === 'photo' && needClip(s) ? loadImage(media(used[i].url)) : null))),

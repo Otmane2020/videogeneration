@@ -50,7 +50,7 @@ ${SHAPE_HEAD}
 Choose ONE videoTemplate that fits the product and audience: "product-demo", "problem-solution", "feature-showcase", "startup-launch", "customer-story", or "corporate". Do not use the same generic story for every SaaS.
 Choose ONE captionStyle for this audience: "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Prefer readable, restrained captions; avoid neon unless the brand genuinely calls for it.
 Make captionStyle format-aware: vertical 9:16 needs large, short, safe-area captions; square 1:1 needs compact balanced captions; horizontal 16:9 should prefer clean lower-third or editorial treatments that do not obstruct the footage.
-Logos: when a scene explains an integration, a tool the customer already uses, a platform or a well-known product (an AI assistant, a payment provider, a chat tool, a marketplace…), list up to 3 REAL products or companies in "logos", as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content AND mentioned by the scene's own headline or voice-over (write them in the sentence so viewers hear what they see): never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
+Logos are RARE and OPTIONAL: leave "logos" as [] for almost every scene and every video. Only when a scene's own sentence is explicitly about connecting, integrating or appearing on specific named tools or platforms (e.g. "connects Slack and GitHub"), list up to 3 REAL products or companies in "logos", as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content AND mentioned by the scene's own headline or voice-over (write them in the sentence so viewers hear what they see): never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
 Narrative and footage rules:
 - Exactly four scenes, each with a different purpose and a distinct real-world shot. The first scene must be an immediate human/customer hook, not a generic computer close-up.
 - Use "site" for exactly two scenes, preferably scenes 2 and 3, to show the real captured website inside the phone. Do not invent a dashboard or fabricate UI.
@@ -168,7 +168,8 @@ function limitLogos(scenes, pageText) {
   const first = (n) => hay(n).split(/[^a-z0-9]+/).filter((w) => w.length >= 3)[0] || '';
   scenes.forEach((sc) => {
     const text = hay(`${sc.headline} ${sc.voiceover}`);
-    sc.logos = (sc.logos || []).filter((l) => { const w = first(l.name); return w && (text.includes(w) || (sc.role === 'demo' && page.includes(w))); });
+    const cue = /\b(connect\w*|integrat\w*|sync\w*|works? with|plugs? (in|into)|import\w*|export\w*|link\w*|compatible|available on|appear\w* (in|on)|visib\w* on|found on|int.gr\w*|synchronis\w*|relie\w*)\b/i.test(text);
+    sc.logos = cue ? (sc.logos || []).filter((l) => { const w = first(l.name); return w && text.includes(w); }) : [];
   });
   const best = scenes.reduce((b, sc, i) => (sc.logos.length > (scenes[b]?.logos.length || 0) ? i : b), -1);
   scenes.forEach((sc, i) => { if (i !== best) sc.logos = []; });

@@ -289,10 +289,21 @@ async function shopify(page, html) {
     const { buf } = await readCapped(r, 1.5e6);
     const p = JSON.parse(buf.toString('utf8'));
     if (!p || !Array.isArray(p.variants)) return;
-    const money = (c) => (typeof c === 'number' ? (c / 100).toFixed(2) : '');
+    const money = (c) => {
+      if (typeof c !== 'number') return '';
+      let v = c / 100 / (typeof back === 'number' ? back : 1);
+      if (Math.abs(v - Math.round(v)) < 0.03) v = Math.round(v); // 298.98 → 299 après reconversion
+      return v.toFixed(2);
+    };
     const full = (u) => { try { return new URL(String(u).replace(/^\/\//, 'https://'), page.url).href; } catch { return ''; } };
     const names = (p.options || []).map((o) => (typeof o === 'string' ? o : o.name)).filter(Boolean);
-    const currency = (html.match(/Shopify\.currency\s*=\s*\{[^}]*"active"\s*:\s*"([A-Z]{3})"/) || [])[1] || page.product?.currency || '';
+    let currency = (html.match(/Shopify\.currency\s*=\s*\{[^}]*"active"\s*:\s*"([A-Z]{3})"/) || [])[1] || page.product?.currency || '';
+    // Shopify Markets convertit les prix selon le pays du visiteur (nos serveurs sont aux États-Unis) : taux ≠ 1.
+    // On revient alors à la devise de la boutique, celle de son pays (nom de domaine), au prix d'origine.
+    const rate = parseFloat((html.match(/Shopify\.currency\s*=\s*\{[^}]*"rate"\s*:\s*"?([\d.]+)/) || [])[1] || '1');
+    const home = { fr: 'EUR', be: 'EUR', de: 'EUR', es: 'EUR', it: 'EUR', nl: 'EUR', pt: 'EUR', at: 'EUR', ie: 'EUR', ma: 'MAD', uk: 'GBP', ch: 'CHF', ca: 'CAD', au: 'AUD' }[new URL(page.url).hostname.split('.').pop()];
+    const back = rate > 0 && Math.abs(rate - 1) > 0.002 && home && home !== currency ? rate : 1;
+    if (back !== 1) currency = home;
     const variants = p.variants.slice(0, 80).map((v) => ({
       options: Object.fromEntries(names.map((n, i) => [n, String((v.options || [])[i] ?? v['option' + (i + 1)] ?? '')]).filter(([, val]) => val && val !== 'Default Title')),
       price: money(v.price), image: v.featured_image?.src ? full(v.featured_image.src) : '', available: v.available !== false,

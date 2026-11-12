@@ -1142,13 +1142,36 @@ function makeRenderer(cv, job) {
     }
     ctx.restore();
   }
+  // Image Muse : une photo fixe filmée comme un plan de pub — mouvement de caméra marqué (recul pour l'accroche,
+  // travelling avant sinon), balayage de lumière, poussières lumineuses qui flottent et léger halo anamorphique.
+  const dust = Array.from({ length: 22 }, (_, i) => ({ x: (i * 0.618 + 0.11) % 1, y: (i * 0.377 + 0.3) % 1, r: 1.5 + (i % 5) * 1.6, s: 0.25 + (i % 7) * 0.08, p: i * 1.7 }));
+  function museShot(sc, ph, k) {
+    const img = ph.img, e = easeInOut(k), t = k * sc.dur, hook = sc.museRole === 'hook';
+    const z = hook ? 1.2 - 0.16 * e : 1.03 + 0.14 * e;
+    coverDraw(img, img.naturalWidth, img.naturalHeight, z, hook ? 0.5 : lerp(0.44, 0.56, e), lerp(0.45, 0.55, e));
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    const sx = lerp(-0.5, 1.5, clamp((t - 0.25) / 1.8)) * W, g = ctx.createLinearGradient(sx - W * 0.3, 0, sx + W * 0.3, H * 0.4);
+    g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,244,228,.26)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (const d of dust) {
+      const x = ((d.x + Math.sin(t * 0.5 + d.p) * 0.02) % 1) * W, y = (((d.y - t * 0.02 * d.s) % 1 + 1) % 1) * H, a = 0.25 + 0.35 * Math.sin(t * 1.3 + d.p) ** 2;
+      const rg = ctx.createRadialGradient(x, y, 0, x, y, d.r * 4);
+      rg.addColorStop(0, `rgba(255,236,200,${a})`); rg.addColorStop(1, 'rgba(255,236,200,0)');
+      ctx.fillStyle = rg; ctx.fillRect(x - d.r * 4, y - d.r * 4, d.r * 8, d.r * 8);
+    }
+    // halo anamorphique horizontal au passage du balayage
+    const fy = H * 0.38, fa = 0.18 * Math.sin(Math.PI * clamp((t - 0.25) / 1.8));
+    if (fa > 0) { const fl = ctx.createLinearGradient(0, fy, W, fy); fl.addColorStop(0, 'rgba(120,170,255,0)'); fl.addColorStop(clamp(sx / W), `rgba(170,200,255,${fa})`); fl.addColorStop(1, 'rgba(120,170,255,0)'); ctx.fillStyle = fl; ctx.fillRect(0, fy - 3, W, 6); }
+    ctx.restore();
+  }
   function background(sc, k) {
     const ph = sc.ph;
     if (sc.colors) return colorsBg(sc, k);
     // Pour une scène de démonstration SaaS, le vrai screenshot du site doit rester lisible.
     // On utilise un décor de marque derrière le téléphone, pas un second footage concurrent.
     if (plan.type === 'saas' && ((sc.visual === 'site' && shot) || sc.kind === 'cta')) return aurora(sc, k, k * sc.dur);
-    if (sc.generatedImage && ph?.img) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.015 + 0.035 * k, 0.5, 0.5);
+    if (sc.generatedImage && ph?.img) return museShot(sc, ph, k);
     if (sc.visual === 'detail' && ph) return framed(sc, ph, k, true);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : framed(sc, ph, k, false);
@@ -1966,55 +1989,45 @@ async function produce(actx) {
       byId.set(id, cache[key]);
     }
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
-    // Muse generates exactly ONE complete lifestyle/product-placement image per ad.
-    // Every other e-commerce scene remains a real image selected from the product page gallery.
+    // Meta Muse (option Pro) : deux images « produit en situation » générées en parallèle, l'accroche (plan héros)
+    // et un moment de vie (résultat). Les autres scènes restent les vraies photos de la fiche.
+    job.muse = {};
     if (best?.img && $('#bgai').value === '1') {
-      status('Generating one product-in-use image with Meta Muse…');
+      status('Creating 2 product-in-use shots with Meta Muse…');
+      const refPh = byId.get(scenes.find((x) => !x.kind)?.photo) || best;
       let referenceImage = null;
       try {
-        const maxSide = 768, scale = Math.min(1, maxSide / Math.max(best.img.naturalWidth, best.img.naturalHeight));
-        const rw = Math.max(1, Math.round(best.img.naturalWidth * scale));
-        const rh = Math.max(1, Math.round(best.img.naturalHeight * scale));
+        const maxSide = 768, scale = Math.min(1, maxSide / Math.max(refPh.img.naturalWidth, refPh.img.naturalHeight));
+        const rw = Math.max(1, Math.round(refPh.img.naturalWidth * scale)), rh = Math.max(1, Math.round(refPh.img.naturalHeight * scale));
         const refCanvas = Object.assign(document.createElement('canvas'), { width: rw, height: rh });
         const refCtx = refCanvas.getContext('2d');
-        refCtx.fillStyle = '#11121e'; refCtx.fillRect(0, 0, rw, rh);
-        refCtx.drawImage(best.img, 0, 0, rw, rh);
-        referenceImage = refCanvas.toDataURL('image/jpeg', 0.82);
+        refCtx.fillStyle = '#ffffff'; refCtx.fillRect(0, 0, rw, rh);
+        refCtx.drawImage(refPh.img, 0, 0, rw, rh);
+        referenceImage = refCanvas.toDataURL('image/jpeg', 0.84);
       } catch (error) { console.warn('Could not prepare Muse reference image', error); }
-      try {
-        const product = page.product || {}, hook = scenes.find((s) => !s.kind);
+      const product = page.product || {}, story = scenes.filter((x) => !x.kind);
+      const shot = async (role, sc) => {
         const response = await api('/api/backdrop?a=muse-scene', {
-          type: 'ecom',
-          format: state.fmt,
-          role: 'hook',
-          sceneBrief: plan.backdrop,
-          headline: hook?.headline || '',
-          voiceover: hook?.voiceover || '',
-          category: plan.category,
+          type: 'ecom', format: state.fmt, role, sceneBrief: role === 'hook' ? plan.backdrop : '',
+          headline: sc?.headline || '', voiceover: sc?.voiceover || '', category: plan.category,
           productName: product.name || page.title || plan.tagline,
           productDescription: product.description || plan.summary || page.description,
           variant: Object.entries(state.variant || {}).map(([key, value]) => `${key}: ${value}`).join(', '),
           brandPalette: [plan.palette?.primary, plan.palette?.accent].filter(Boolean).join(', '),
           referenceImage,
         });
-        const imageBlob = await response.blob();
-        const objectUrl = URL.createObjectURL(imageBlob);
-        try { job.museImage = await loadImage(objectUrl); }
-        finally { URL.revokeObjectURL(objectUrl); }
-        if (job.museImage) {
-          const tw = 360, th = Math.round(tw * job.museImage.naturalHeight / job.museImage.naturalWidth);
-          const thumb = Object.assign(document.createElement('canvas'), { width: tw, height: th });
-          thumb.getContext('2d').drawImage(job.museImage, 0, 0, tw, th);
-          job.museThumb = thumb.toDataURL('image/jpeg', 0.76);
-          job.backdropModel = response.headers.get('x-image-model') || 'meta/muse-image';
-        } else throw new Error('Muse returned an unreadable image');
-      } catch (error) {
-        job.museImage = null;
-        job.museThumb = null;
-        job.backdropModel = null;
-        console.warn('Meta Muse product image unavailable; using the product gallery only', error);
-        status('Muse image unavailable. Continuing with the original product gallery.');
-      }
+        const url = URL.createObjectURL(await response.blob());
+        try { return await loadImage(url); } finally { URL.revokeObjectURL(url); }
+      };
+      // le moment de vie remplace la dernière scène « produit » (pas un gros plan : son texte parle d'un détail précis)
+      const outcome = [...story].reverse().find((x) => x !== story[0] && x.visual === 'product' && !x.colors) || null;
+      const [hookImg, outImg] = await Promise.all([shot('hook', story[0]).catch(() => null), outcome ? shot('outcome', outcome).catch(() => null) : null]);
+      const thumb = (im) => { const tw = 360, c = Object.assign(document.createElement('canvas'), { width: tw, height: Math.round(tw * im.naturalHeight / im.naturalWidth) }); c.getContext('2d').drawImage(im, 0, 0, c.width, c.height); return c.toDataURL('image/jpeg', 0.76); };
+      if (hookImg) job.muse.hook = { img: hookImg, thumb: thumb(hookImg) };
+      if (outImg) job.muse.outcome = { img: outImg, thumb: thumb(outImg), scene: outcome };
+      job.museImage = hookImg || outImg || null; // compatibilité (vignettes, décor)
+      job.backdropModel = job.museImage ? 'meta/muse-image' : null;
+      if (!job.museImage) status('Muse images unavailable. Continuing with the original product gallery.');
     }
     // l'écran final montre le produit de l'accroche : détouré s'il l'est ; sinon, quand sa photo est cadrée trop serré pour être
     // détourée (bracelet coupé par les bords), la photo elle-même plutôt qu'un autre détourage (boîte, emballage…)
@@ -2035,15 +2048,10 @@ async function produce(actx) {
     if (plan.type === 'ecom' && best) scenes.forEach((s, i) => {
       if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; }
     });
-    if (plan.type === 'ecom' && job.museImage) {
-      const hook = scenes.find((s) => !s.kind);
-      if (hook) {
-        hook.visual = 'detail';
-        hook.photo = -1;
-        hook.ph = { img: job.museImage, cut: null };
-        hook.generatedImage = true;
-        hook.generatedThumb = job.museThumb;
-      }
+    if (plan.type === 'ecom') {
+      const put = (sc, m, role) => { if (!sc || !m) return; Object.assign(sc, { visual: 'detail', photo: -1, ph: { img: m.img, cut: null }, generatedImage: true, generatedThumb: m.thumb, museRole: role, colors: null }); };
+      put(scenes.find((s) => !s.kind), job.muse?.hook, 'hook');
+      put(job.muse?.outcome && scenes.find((s) => s.voiceover === job.muse.outcome.scene.voiceover && !s.kind && !s.generatedImage), job.muse?.outcome, 'outcome');
     }
     // A missing gallery photo is never replaced by unrelated stock footage.
     scenes.forEach((s) => { if (!s.ph && (s.visual === 'product' || s.visual === 'detail')) s.visual = 'footage'; });

@@ -157,6 +157,36 @@ function brandsIn(text) {
   return out;
 }
 
+// Pictogrammes (jeu lucide d'Iconify) déclenchés par des mots du script, en anglais et en français ; le navigateur les fait apparaître au moment où le mot est dit.
+const GLYPHS = [
+  ['timer', /^(hours?|minutes?|seconds?|instant\w*|fast|quick\w*|speed|rapide\w*|vite|heures?|secondes?|immediat\w*)$/],
+  ['trending-up', /^(growth|grow\w*|revenue|sales?|boost\w*|increase\w*|profit\w*|scale|croissance|ventes?|augment\w*|chiffre|results?|r.sultats?)$/],
+  ['dollar-sign', /^(money|price\w*|cost\w*|sav(e|ing|ings)|pay\w*|cash|argent|prix|co[uû]ts?|co[uû]t.\w*|[eé]conomis\w*|paiements?|factur\w*|invoice\w*|billing)$/],
+  ['mail', /^(e-?mails?|newsletters?|inbox|mails?|courriels?)$/],
+  ['message-circle', /^(chat\w*|support|customers?|clients?|conversations?|repl(y|ies)|r.pon\w*|messages?)$/],
+  ['bar-chart-3', /^(analytics|data|dashboards?|reports?|insights?|metrics|statistiques?|donn.es|tableaux?|kpis?)$/],
+  ['shield-check', /^(secur\w*|safe\w*|privacy|protect\w*|s.curit.\w*|prot.g\w*|confidential\w*)$/],
+  ['users', /^(teams?|.quipes?|collabor\w*|together|ensemble)$/],
+  ['sparkles', /^(automat\w*|ai|smart|magic\w*|intelligen\w*|ia|intelligent\w*)$/],
+  ['calendar-check', /^(schedul\w*|booking|bookings|appointments?|rendez-?vous|r.serv\w*|calendar|calendrier|planning)$/],
+  ['rocket', /^(launch\w*|start(up)?s?|ship\w*|lance\w*|d.marr\w*)$/],
+  ['circle-check', /^(done|ready|simple|easy|free|trial|gratuit\w*|essai|facile\w*|termin.\w*)$/],
+  ['smartphone', /^(mobile|phone|smartphone|app|apps|t.l.phone)$/],
+  ['search', /^(find|search\w*|discover\w*|trouv\w*|recherch\w*|seo)$/],
+  ['triangle-alert', /^(problems?|chaos|stress\w*|lost|mess\w*|probl.mes?|perdu\w*|galere|erreurs?|errors?|bugs?)$/],
+  ['heart', /^(love\w*|happy|satisf\w*|aim\w*|heureux|loved)$/],
+  ['globe', /^(worldwide|global\w*|international|monde|mondial\w*)$/],
+];
+function glyphsIn(text, max = 2) {
+  const out = [];
+  for (const w of String(text || '').toLowerCase().normalize('NFC').split(/[^\p{L}\p{N}-]+/u).filter(Boolean)) {
+    const hit = GLYPHS.find(([, re]) => re.test(w));
+    if (hit && !out.some((g) => g.icon === 'lucide:' + hit[0])) out.push({ icon: 'lucide:' + hit[0], word: w });
+    if (out.length >= max) break;
+  }
+  return out;
+}
+
 // requêtes de banque d'images : lettres simples uniquement (les accents sont repliés, pas supprimés)
 const cleanQ = (v) => str(v, 50).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim();
 // Mots qu'aucune caméra ne filme (interface, notions abstraites) : dans une banque d'images ils ramènent des nuages, des insectes ou des tableaux de bord de voiture.
@@ -243,6 +273,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
       return {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
+        glyphs: type === 'saas' ? glyphsIn([s.headline, s.voiceover].join(' ')) : [],
         logos: type !== 'saas' ? [] : (() => { const own = brandsIn([s.headline, s.voiceover].join(' ')).slice(0, 3); return own.length ? own : (s.role === 'demo' || (!s.role && visual === 'site')) && si === (ad.scenes || []).findIndex((x) => x.role === 'demo' || x.visual === 'site') ? pageBrands.slice(0, 2) : []; })(),
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries,

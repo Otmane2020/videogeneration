@@ -283,7 +283,7 @@ $('#b-gen').addEventListener('click', async () => {
     $('#res').value = String(autoResolution());
     setMusic(ecom ? 'm6' : 'm1');
     // vrais logos des marques citées dans la pub (Iconify), pour les animations « logo → flèche → logo »
-    state.icons = ecom ? {} : await loadIcons([...new Set(state.ad.scenes.flatMap((s) => s.logos || []))].slice(0, 8));
+    state.icons = ecom ? {} : await loadIcons([...new Set(state.ad.scenes.flatMap((s) => [...(s.logos || []), ...(s.glyphs || []).map((g) => g.icon)]))].slice(0, 14));
     status('Finding the right visuals…', 10);
     // Plans d'illustration : sans eux, la pub se monte quand même. Chaque scène SaaS reçoit les siens, quel que soit
     // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
@@ -916,58 +916,108 @@ function makeRenderer(cv, job) {
     return w;
   }
 
-  // Logos de marques reliés par des flèches qui se dessinent : « ChatGPT → Slack → votre produit ».
-  function iconFlow(sc, local, box, hero) {
-    const imgs = sc.icons || [];
-    if (!imgs.length || sc.kind === 'cta') return;
-    const items = [];
-    imgs.slice(0, 3).forEach((im, i) => { if (i) items.push({ arrow: true }); items.push({ img: im }); });
-    if (imgs.length === 1 && logo) items.push({ arrow: true }, { brand: true });
-    const size = Math.min(W, H) * (wide ? 0.15 : 0.17), slot = size * 0.72, bw = size * (logoWide ? Math.min(logoRatio, 2.8) : 1);
-    const widthOf = (it) => (it.arrow ? slot : it.brand ? bw : size);
-    const total = items.reduce((a, it) => a + widthOf(it), 0);
-    const cx = wide ? (hero ? box.x + box.w / 2 : pad + textW / 2) : W / 2;
-    const y = hero ? box.y + 6 : wide ? H * 0.3 : H * 0.34;
-    let x = cx - total / 2, n = 0;
-    for (const it of items) {
-      const t0 = 0.3 + n * 0.2, e = clamp((local - t0) / 0.45);
-      if (it.arrow) {
-        const p = easeOut(clamp((local - t0) / 0.4)), x0 = x + slot * 0.14, x1 = x + slot * 0.86, mid = y + size / 2, xe = lerp(x0, x1, p);
-        if (p > 0) {
-          ctx.save();
-          ctx.strokeStyle = A; ctx.fillStyle = A; ctx.lineWidth = size * 0.075; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
-          ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = size * 0.2;
-          ctx.beginPath(); ctx.moveTo(x0, mid); ctx.lineTo(xe, mid); ctx.stroke();
-          if (p > 0.85) { const h = size * 0.17; ctx.beginPath(); ctx.moveTo(x1 - h, mid - h); ctx.lineTo(x1, mid); ctx.lineTo(x1 - h, mid + h); ctx.stroke(); }
-          ctx.restore();
-        }
-        x += slot;
-      } else if (e > 0) {
-        const sc2 = backOut(e);
-        ctx.save();
-        ctx.globalAlpha = clamp(e * 2.2);
-        ctx.translate(x + size / 2, y + size / 2); ctx.scale(sc2, sc2); ctx.translate(-(x + size / 2), -(y + size / 2));
-        if (it.brand) logoTile(x, y, size);
-        else {
-          ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = size * 0.3; ctx.shadowOffsetY = size * 0.08;
-          ctx.fillStyle = '#fff'; rr(x, y, size, size, size * 0.24); ctx.fill();
-          ctx.shadowColor = 'transparent';
-          const iw = it.img.naturalWidth || size, ih = it.img.naturalHeight || size, f = Math.min(size * 0.64 / iw, size * 0.64 / ih);
-          ctx.imageSmoothingQuality = 'high';
-          ctx.drawImage(it.img, x + (size - iw * f) / 2, y + (size - ih * f) / 2, iw * f, ih * f);
-        }
-        ctx.restore();
-        x += widthOf(it);
-      } else x += widthOf(it);
-      n++;
+  // Scène de logos : de vraies marques en grand, au centre, reliées par des flèches qui se dessinent, avec leur nom dessous.
+  const BRAND_NAMES = { chatgpt: 'ChatGPT', openai: 'OpenAI', github: 'GitHub', gitlab: 'GitLab', hubspot: 'HubSpot', linkedin: 'LinkedIn', youtube: 'YouTube', tiktok: 'TikTok', whatsapp: 'WhatsApp', paypal: 'PayPal', mailchimp: 'Mailchimp', wordpress: 'WordPress', woocommerce: 'WooCommerce', bigcommerce: 'BigCommerce', zendesk: 'Zendesk', quickbooks: 'QuickBooks', openrouter: 'OpenRouter', mongodb: 'MongoDB', postgres: 'PostgreSQL', nodejs: 'Node.js', javascript: 'JavaScript', typescript: 'TypeScript', claude: 'Claude', gemini: 'Gemini', aws: 'AWS', ibm: 'IBM', copilot: 'Copilot', 'gpt-4': 'GPT-4', 'microsoft-teams': 'Teams' };
+  const niceName = (n) => BRAND_NAMES[n] || String(n).replace(/-/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  function iconStage(sc, local, box) {
+    const items = sc.icons.slice(0, 3).map((i) => ({ img: i.img, label: niceName(i.name) }));
+    if (items.length === 1 && logo) items.push({ img: logo, label: plan.brand, dark: job.logoLight });
+    // instant d'apparition de chaque tuile : au mot prononcé, sans jamais coller aux autres
+    sc.icons.slice(0, 3).forEach((ic, i) => { items[i].at = Math.max(0.2 + i * 0.3, (ic.t0 || 0) - 0.3); if (i) items[i].at = Math.max(items[i].at, items[i - 1].at + 0.3); });
+    if (items.length > sc.icons.slice(0, 3).length) items[items.length - 1].at = items[items.length - 2].at + 0.45;
+    const n = items.length, gk = 0.5, span = wide ? box.w : W - 56;
+    const s = Math.min(span / (n + (n - 1) * gk), (wide ? H : W) * 0.33), gap = s * gk;
+    const cx = wide ? box.x + box.w / 2 : W / 2, cy = box.y + box.h * 0.54;
+    const x0 = cx - (n * s + (n - 1) * gap) / 2, y0 = cy - s / 2;
+    // halo derrière le groupe : isole les logos d'un plan de stock chargé
+    const halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(box.w * 0.62, s * 2));
+    halo.addColorStop(0, 'rgba(8,8,18,.62)'); halo.addColorStop(0.6, 'rgba(8,8,18,.34)'); halo.addColorStop(1, 'rgba(8,8,18,0)');
+    ctx.save(); ctx.globalAlpha = clamp(local / 0.35); ctx.fillStyle = halo; ctx.fillRect(box.x - W, box.y - H * 0.2, W * 3, box.h + H * 0.4); ctx.restore();
+    const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, s * 1.9);
+    glow.addColorStop(0, A + '55'); glow.addColorStop(1, A + '00');
+    ctx.save(); ctx.globalAlpha = clamp(local / 0.5); ctx.fillStyle = glow; ctx.fillRect(cx - s * 2.2, cy - s * 2.2, s * 4.4, s * 4.4); ctx.restore();
+
+    // flèches : un trait qui se dessine, une pointe, puis des points qui circulent dans le sens du flux
+    for (let i = 0; i < n - 1; i++) {
+      const t0 = items[i].at + 0.3, p = easeOut(clamp((local - t0) / 0.5));
+      if (p <= 0) continue;
+      const xa = x0 + (i + 1) * s + i * gap + s * 0.1, xb = x0 + (i + 1) * (s + gap) - s * 0.1, xe = lerp(xa, xb, p), lw = s * 0.07;
+      ctx.save();
+      const g = ctx.createLinearGradient(xa, 0, xb, 0); g.addColorStop(0, '#ffffff'); g.addColorStop(1, A);
+      ctx.strokeStyle = g; ctx.lineWidth = lw; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.shadowColor = A + 'cc'; ctx.shadowBlur = s * 0.22;
+      ctx.beginPath(); ctx.moveTo(xa, cy); ctx.lineTo(xe, cy); ctx.stroke();
+      if (p > 0.92) { const h = s * 0.15; ctx.beginPath(); ctx.moveTo(xb - h, cy - h); ctx.lineTo(xb, cy); ctx.lineTo(xb - h, cy + h); ctx.stroke(); }
+      if (p >= 1) {
+        ctx.shadowBlur = 0; ctx.fillStyle = '#fff';
+        for (let d = 0; d < 3; d++) { const q = ((local - t0) * 0.7 + d / 3) % 1; ctx.globalAlpha = Math.sin(Math.PI * q) * 0.95; ctx.beginPath(); ctx.arc(lerp(xa, xb - s * 0.12, q), cy, lw * 0.75, 0, 7); ctx.fill(); }
+      }
+      ctx.restore();
     }
+
+    // tuiles : ressort à l'arrivée, léger flottement ensuite
+    items.forEach((it, i) => {
+      const t0 = it.at, e = clamp((local - t0) / 0.5);
+      if (e <= 0) return;
+      const k2 = backOut(e), x = x0 + i * (s + gap), bob = Math.sin(local * 2.1 + i * 1.4) * s * 0.025, y = y0 + bob + (1 - easeOut(e)) * s * 0.35;
+      ctx.save();
+      ctx.globalAlpha = clamp(e * 2.4);
+      ctx.translate(x + s / 2, y + s / 2); ctx.rotate((1 - easeOut(e)) * -0.14); ctx.scale(k2, k2); ctx.translate(-(x + s / 2), -(y + s / 2));
+      ctx.shadowColor = 'rgba(0,0,0,.5)'; ctx.shadowBlur = s * 0.34; ctx.shadowOffsetY = s * 0.1;
+      const fill = ctx.createLinearGradient(x, y, x, y + s);
+      if (it.dark) { fill.addColorStop(0, '#26243a'); fill.addColorStop(1, '#14121f'); } else { fill.addColorStop(0, '#ffffff'); fill.addColorStop(1, '#eceef7'); }
+      ctx.fillStyle = fill; rr(x, y, s, s, s * 0.26); ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.strokeStyle = A + '99'; ctx.lineWidth = Math.max(2, s * 0.018); rr(x, y, s, s, s * 0.26); ctx.stroke();
+      const iw = it.img.naturalWidth || it.img.width || s, ih = it.img.naturalHeight || it.img.height || s, f = Math.min(s * 0.58 / iw, s * 0.58 / ih);
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(it.img, x + (s - iw * f) / 2, y + (s - ih * f) / 2, iw * f, ih * f);
+      ctx.restore();
+      // nom de la marque sous la tuile
+      ctx.save();
+      ctx.globalAlpha = clamp((e - 0.4) / 0.5);
+      ctx.font = `700 ${Math.round(s * 0.15)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+      ctx.shadowColor = 'rgba(0,0,0,.8)'; ctx.shadowBlur = s * 0.12; ctx.fillStyle = '#fff';
+      ctx.fillText(it.label, x + s / 2, y + s + s * 0.16 + bob);
+      ctx.restore();
+    });
+  }
+
+  // Pictogrammes flottants : une pastille translucide qui surgit quand le mot est dit, flotte, puis s'efface.
+  function stickers(sc, local, box, stage) {
+    if (sc.kind === 'cta') return;
+    (sc.glyphs || []).forEach((g, i) => {
+      const life = 1.9, e = clamp((local - g.t0) / 0.45), out = clamp((local - g.t0 - life) / 0.4);
+      if (e <= 0 || out >= 1) return;
+      const sz = Math.min(W, H) * (wide ? 0.13 : 0.16), side = i % 2 ? 1 : -1;
+      const cx = (wide ? box.x + box.w / 2 : W / 2) + side * box.w * (stage ? 0.38 : 0.3);
+      const cy = stage ? box.y + box.h * 0.1 : box.y + box.h * (0.18 + 0.3 * (i % 2));
+      const t = local - g.t0, k2 = backOut(e) * (1 - easeOut(out) * 0.7);
+      const x = cx + Math.sin(t * 1.6 + i) * sz * 0.1, y = cy - t * sz * 0.1 + Math.sin(t * 2 + i * 2) * sz * 0.07;
+      ctx.save();
+      ctx.globalAlpha = clamp(e * 2) * (1 - out);
+      // onde qui part de la pastille à son arrivée
+      ctx.strokeStyle = A; ctx.lineWidth = 3; ctx.globalAlpha *= (1 - e) * 0.7 + 0.001;
+      ctx.beginPath(); ctx.arc(x, y, sz * (0.5 + 0.7 * e), 0, 7); ctx.stroke();
+      ctx.globalAlpha = clamp(e * 2) * (1 - out);
+      ctx.translate(x, y); ctx.scale(k2, k2);
+      ctx.shadowColor = A + 'aa'; ctx.shadowBlur = sz * 0.5;
+      const fill = ctx.createRadialGradient(-sz * 0.15, -sz * 0.2, 0, 0, 0, sz * 0.6);
+      fill.addColorStop(0, A + 'ee'); fill.addColorStop(1, mix(A, '#000000', 0.45));
+      ctx.fillStyle = fill; ctx.beginPath(); ctx.arc(0, 0, sz / 2, 0, 7); ctx.fill();
+      ctx.shadowColor = 'transparent'; ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = Math.max(2, sz * 0.03); ctx.stroke();
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(g.img, -sz * 0.27, -sz * 0.27, sz * 0.54, sz * 0.54);
+      ctx.restore();
+    });
   }
 
   /* ----- scènes ----- */
   function scene(sc, local) {
     const k = clamp(local / sc.dur), ph = sc.ph;
     const onDecor = sc.visual === 'product' && ph && ph.cut;
-    const hero = (sc.visual === 'site' && shot) || onDecor;
+    const stage = !!sc.icons?.length && sc.kind !== 'cta'; // scène de logos : elle remplace le téléphone
+    const hero = (sc.visual === 'site' && shot && !stage) || onDecor || stage;
     let g = ctx.createLinearGradient(0, 0, 0, H);
     if (onDecor) { g.addColorStop(0, 'rgba(0,0,0,.32)'); g.addColorStop(0.2, 'rgba(0,0,0,0)'); g.addColorStop(0.62, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.72)'); }
     else { g.addColorStop(0, 'rgba(0,0,0,.55)'); g.addColorStop(0.3, `rgba(0,0,0,${hero ? 0.45 : 0.05})`); g.addColorStop(0.55, `rgba(0,0,0,${hero ? 0.5 : 0.25})`); g.addColorStop(1, 'rgba(0,0,0,.9)'); }
@@ -977,8 +1027,9 @@ function makeRenderer(cv, job) {
     const lines = wrap(ctx, sc.headline, textW - 36, 3);
     const top = bottom - 78 - lines.length * lh;
     const box = heroBox(top);
-    if (sc.visual === 'site' && shot) phone(box, local, sc.dur, sc.variant);
-    iconFlow(sc, local, box, sc.visual === 'site' && shot);
+    if (sc.visual === 'site' && shot && !stage) phone(box, local, sc.dur, sc.variant);
+    if (stage) iconStage(sc, local, box);
+    stickers(sc, local, box, stage);
     if (onDecor) { const r = product(ph, box, local, k); pill(sc.badge, r.x + r.w * 0.82, Math.max(box.y + 30, r.y + r.h * 0.12), local); }
     else if (sc.badge) pill(sc.badge, W / 2, wide ? H * 0.3 : H * 0.36, local, 30);
 
@@ -1346,7 +1397,7 @@ async function produce(actx) {
 
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
-  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s, icons: (s.logos || []).map((n) => state.icons?.[n]).filter(Boolean) })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
+  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s, icons: (s.logos || []).map((n) => (state.icons?.[n] ? { img: state.icons[n], name: n } : null)).filter(Boolean), glyphs: (s.glyphs || []).map((g) => (state.icons?.[g.icon] ? { img: state.icons[g.icon], word: g.word } : null)).filter(Boolean) })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
@@ -1499,6 +1550,13 @@ async function produce(actx) {
     const tl = timeline(scenes, target);
     job.total = tl.total; job.rate = tl.rate;
     scenes.forEach((s) => { s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, s.speech / tl.rate, 0.3) : []; });
+    // icônes : chacune apparaît quand son mot est dit (à défaut, à intervalles réguliers)
+    scenes.forEach((s) => {
+      const flat = (s.words || []).flat(), norm = (w) => String(w).toLowerCase().normalize('NFD').replace(/[^a-z0-9]/g, '');
+      const find = (token) => { const t = norm(token); if (t.length < 3) return null; const x = flat.find((f) => { const n = norm(f.w); return n.length >= 3 && (n.startsWith(t.slice(0, 5)) || t.startsWith(n.slice(0, 5))); }); return x ? x.t0 : null; };
+      (s.glyphs || []).forEach((g, i) => { g.t0 = find(g.word) ?? 0.6 + i * 0.9; });
+      (s.icons || []).forEach((ic, i) => { ic.t0 = find(ic.name.split('-')[0]) ?? 0.25 + i * 0.3; });
+    });
     const track = Music.byId(state.music);
     job.musicBuf = track ? await Music.render(track, job.total).catch(() => null) : null;
     job.rendering = true;

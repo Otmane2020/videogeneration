@@ -87,7 +87,7 @@ function extract(html, base) {
         for (const [k, val] of Object.entries(v.attributes || {})) if (val) opts[k.replace(/^attribute_(pa_)?/, '').replace(/[-_]/g, ' ').replace(/^./, (c) => c.toUpperCase())] = String(val).replace(/-/g, ' ').slice(0, 40);
         const img = v.image && (v.image.full_src || v.image.url || v.image.src);
         if (img) ldImages.push(img);
-        if (Object.keys(opts).length) product.variants.push({ options: opts, price: num(v.display_price), image: img ? abs(img) : '', available: v.is_in_stock !== false });
+        if (Object.keys(opts).length) product.variants.push({ options: opts, price: num(v.display_price), compareAt: +v.display_regular_price > +v.display_price ? num(v.display_regular_price) : '', image: img ? abs(img) : '', available: v.is_in_stock !== false });
       }
     } catch { /* variations illisibles */ }
   }
@@ -257,6 +257,16 @@ function extract(html, base) {
     product.options = Object.entries(src).slice(0, 4).map(([name, values]) => ({ name, values: values.slice(0, 30) }));
     product.variants = product.variants.slice(0, 80);
     if (!product.price) product.price = product.variants.find((v) => v.price)?.price || '';
+    // prix barré (ancien prix) : variante, sinon premier montant barré de la page plus cher que le prix (et plausible)
+    const amount = (t) => { const m = String(t).replace(/<[^>]+>/g, ' ').replace(/&nbsp;|\u00a0|\u202f/g, ' ').match(/\d{1,3}(?:[ .,']\d{3})*(?:[.,]\d{1,2})?|\d+(?:[.,]\d{1,2})?/); if (!m) return 0; const r = m[0].replace(/\s/g, '').match(/^(\d[\d.,']*?)(?:[.,](\d{1,2}))?$/); return r ? Number(r[1].replace(/[.,']/g, '') + (r[2] ? '.' + r[2] : '')) : 0; };
+    const now = amount(product.price);
+    product.compareAt = product.variants.find((v) => v.compareAt)?.compareAt || product.compareAt || '';
+    if (!product.compareAt && now) {
+      for (const m of html.matchAll(/<(del|s|strike)\b[^>]*>([\s\S]{0,240}?)<\/\1>|class\s*=\s*["'][^"']*(?:compare-at|price--compare|old-price|was-price|regular-price|price-old|line-through|price__strike|strike-through)[^"']*["'][^>]*>([\s\S]{0,200}?)</gi)) {
+        const v = amount(m[2] || m[3] || '');
+        if (v > now * 1.02 && v < now * 10) { product.compareAt = String(v); break; }
+      }
+    }
     if (!product.currency) product.currency = /^[A-Z]{3}$/.test(metas['product:price:currency'] || metas['og:price:currency'] || '') ? metas['product:price:currency'] || metas['og:price:currency'] : (ld.match(/"priceCurrency"\s*:\s*"([A-Z]{3})"/) || [])[1] || '';
   } else if (Object.keys(domOptions).length) {
     product = { name: '', description: '', brand: '', price: '', currency: '', variants: [], options: Object.entries(domOptions).slice(0, 4).map(([name, values]) => ({ name, values })) };
@@ -306,7 +316,7 @@ async function shopify(page, html) {
     if (back !== 1) currency = home;
     const variants = p.variants.slice(0, 80).map((v) => ({
       options: Object.fromEntries(names.map((n, i) => [n, String((v.options || [])[i] ?? v['option' + (i + 1)] ?? '')]).filter(([, val]) => val && val !== 'Default Title')),
-      price: money(v.price), image: v.featured_image?.src ? full(v.featured_image.src) : '', available: v.available !== false,
+      price: money(v.price), compareAt: v.compare_at_price > v.price ? money(v.compare_at_price) : '', image: v.featured_image?.src ? full(v.featured_image.src) : '', available: v.available !== false,
     })).filter((v) => Object.keys(v.options).length);
     const opts = {};
     for (const v of variants) for (const [k, val] of Object.entries(v.options)) { const l = (opts[k] ||= []); if (!l.includes(val)) l.push(val); }
@@ -314,7 +324,7 @@ async function shopify(page, html) {
       name: String(p.title || page.product?.name || '').slice(0, 160),
       description: String(p.description || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 600) || page.product?.description || '',
       brand: String(p.vendor || page.product?.brand || '').slice(0, 60),
-      price: money(p.price) || page.product?.price || '', currency,
+      price: money(p.price) || page.product?.price || '', compareAt: p.compare_at_price > p.price ? money(p.compare_at_price) : variants.find((v) => v.compareAt)?.compareAt || '', currency,
       options: Object.entries(opts).slice(0, 4).map(([name, values]) => ({ name, values: values.slice(0, 30) })), variants,
     };
     // les photos de la fiche passent devant, sans doublon
@@ -328,6 +338,7 @@ async function shopify(page, html) {
 
 // Salesforce Commerce Cloud (Demandware : Histoire d'Or…) : les attributs de variation sont dans le JSON de la page,
 // et chaque valeur a un point d'accès JSON (Product-Variation) qui donne la galerie et le prix de cette variation.
+function demandwareList(html) { const m = html.match(/"list"\s*:\s*\{[^}]{0,80}?"value"\s*:\s*([\d.]+)/); return m ? m[1] : ''; }
 const VISUAL_ATTR = /colou?r|couleur|coloris|farbe|finition|finish|teinte|mati[eè]re|material|m[ée]tal|bracelet|cadran|motif|pattern/i;
 function jsonArrayAt(html, start) {
   let depth = 0, inStr = false;
@@ -342,6 +353,8 @@ function jsonArrayAt(html, start) {
 }
 async function demandware(page, html) {
   if (!/demandware\.(static|store)|\/Sites-[\w-]+-Site\//i.test(html)) return;
+  const list = demandwareList(html);
+  if (list && page.product && +list > +page.product.price) page.product.compareAt = list;
   let attrs = [];
   for (const m of html.matchAll(/"variationAttributes"\s*:\s*\[/g)) {
     const arr = jsonArrayAt(html, m.index + m[0].length - 1);

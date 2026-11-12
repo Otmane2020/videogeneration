@@ -117,7 +117,8 @@ function setType(t) {
   $('#card-brand').hidden = t === 'ecom';
   $('#opt-bg').hidden = t !== 'ecom';
   syncVariationsOption();
-  setIntent(t === 'ecom' ? 'launch' : 'problem');
+  setIntent(t === 'ecom' ? 'offer' : 'problem');
+  $('#opt-offer').hidden = t !== 'ecom';
   renderPhotos();
 }
 function setIntent(i) {
@@ -340,7 +341,7 @@ $('#b-gen').addEventListener('click', async () => {
     // la variante choisie fixe le prix affiché et le texte de la pub
     const v = ecom ? variantOf() : null;
     const page = v?.price ? { ...state.page, product: { ...state.page.product, price: v.price } } : state.page;
-    const plan = (state.plan = await (await api('/api/analyze', { page, type: state.type, intent: state.intent, format: state.fmt, photos: ecom ? list.map((p) => p.send) : undefined, variant: ecom && Object.keys(state.variant).length ? state.variant : undefined })).json());
+    const plan = (state.plan = await (await api('/api/analyze', { page, type: state.type, intent: state.intent, offer: ecom ? $('#offer').value.trim().slice(0, 90) : undefined, format: state.fmt, photos: ecom ? list.map((p) => p.send) : undefined, variant: ecom && Object.keys(state.variant).length ? state.variant : undefined })).json());
     const brand = await state.logo;
     if (brand?.colors) Object.assign(plan.palette, brand.colors);
     plan.palette = safePalette(plan.palette);
@@ -843,7 +844,7 @@ function onColor(hex) {
 function wrap(ctx, text, maxW, maxLines) {
   const lines = [];
   let line = '';
-  for (const w of text.split(/\s+/)) {
+  for (const w of text.split(/[ \t\n\r]+/)) {
     const t = line ? line + ' ' + w : w;
     if (line && ctx.measureText(t).width > maxW) { lines.push(line); line = w; } else line = t;
   }
@@ -1468,8 +1469,8 @@ function makeRenderer(cv, job) {
     if (row) iconStage(sc, local, { ...box, h: rowH }, true);
     if (sc.iconImg) proIcon(sc, local, top);
     if (sc.colors) colorsRow(sc, local, top);
-    if (onDecor) { const r = product(ph, box, local, k); pill(sc.badge, r.x + r.w * 0.82, Math.max(box.y + 30, r.y + r.h * 0.12), local); }
-    else if (sc.badge) pill(sc.badge, W / 2, wide ? H * 0.3 : H * 0.36, local, 30);
+    if (onDecor) product(ph, box, local, k);
+    if (plan.type === 'ecom' && plan.offer) saleSticker(sc, local);
 
     ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'center';
     const tx = wide ? pad + textW / 2 : W / 2;
@@ -1511,10 +1512,8 @@ function makeRenderer(cv, job) {
         ctx.textAlign = 'center'; ctx.fillStyle = '#101018';
         rr(-w / 2, -(lh - 4) / 2, w, lh - 4, 12); ctx.fill();
         ctx.fillStyle = '#fff'; ctx.fillText(l, 0, headSize * 0.34, textW - 24);
-      } else if (templateStyle === 'product') {
-        ctx.textAlign = 'center'; ctx.fillStyle = 'rgba(8,7,18,.78)';
-        rr(-w / 2 - 12, -(lh - 4) / 2, w + 24, lh - 4, 18); ctx.fill();
-        ctx.fillStyle = last ? A : '#fff'; ctx.fillText(l, 0, headSize * 0.34, textW - 24);
+      } else if (templateStyle === 'product' || plan.type === 'ecom') {
+        kinetic(l, i, e, last, local, lines);
       } else if (templateStyle === 'bold') {
         ctx.textAlign = 'center'; ctx.fillStyle = last ? A : P;
         rr(-w / 2, -(lh - 4) / 2, w, lh - 4, 7); ctx.fill();
@@ -1531,6 +1530,126 @@ function makeRenderer(cv, job) {
     });
   }
 
+  // Titre « wow » : chaque ligne frappe l'écran (zoom qui retombe), le mot-clé (prix, chiffre, sinon le dernier mot)
+  // est surligné par un marqueur couleur qui se déploie, puis un éclat de lumière traverse la ligne.
+  const KEY = /\d|%|€|\$|£/;
+  function kinetic(l, i, e, last, local, lines) {
+    const t0 = 0.1 + i * 0.12, land = clamp((local - t0) / 0.32);
+    const slam = 1 + 0.35 * (1 - easeOut(land));
+    ctx.scale(slam, slam);
+    ctx.globalAlpha = clamp(land * 2.2);
+    const words = l.split(' '), space = ctx.measureText(' ').width, full = ctx.measureText(l).width;
+    const squeeze = Math.min(1, (textW - 64) / full), wBox = full * squeeze + 44, hBox = lh - 6;
+    ctx.fillStyle = 'rgba(8,7,18,.82)'; rr(-wBox / 2, -hBox / 2, wBox, hBox, 16); ctx.fill();
+    // mots-clés : chiffres et prix ; s'il n'y en a pas, le dernier mot du titre
+    const hasKey = lines.some((x) => KEY.test(x));
+    ctx.save(); ctx.scale(squeeze, 1);
+    // position de chaque mot, puis un seul marqueur par suite de mots-clés (« 299 € -20 % » forme un bloc)
+    let x = -full / 2;
+    const pos = words.map((wd, j) => { const ww = ctx.measureText(wd).width, o = { wd, x, ww, key: hasKey ? KEY.test(wd) || /^%$/.test(wd) : last && j === words.length - 1 }; x += ww + space; return o; });
+    const p2 = easeOut((local - t0 - 0.3) / 0.3);
+    for (let j = 0; j < pos.length; j++) {
+      if (!pos[j].key) continue;
+      let k = j; while (k + 1 < pos.length && pos[k + 1].key) k++;
+      const x0 = pos[j].x - 10, x1 = pos[k].x + pos[k].ww + 10;
+      if (p2 > 0) { ctx.fillStyle = A; ctx.save(); ctx.rotate(-0.02); rr(x0, -hBox / 2 + 7, (x1 - x0) * p2, hBox - 14, 10); ctx.fill(); ctx.restore(); }
+      j = k;
+    }
+    ctx.textAlign = 'left';
+    pos.forEach((o) => { ctx.fillStyle = o.key && p2 > 0.55 ? onColor(A) : '#fff'; ctx.fillText(o.wd, o.x, headSize * 0.35); });
+    ctx.restore();
+    // éclat qui balaie la ligne une fois posée
+    const sw = clamp((local - t0 - 0.45) / 0.5);
+    if (sw > 0 && sw < 1) {
+      ctx.save(); rr(-wBox / 2, -hBox / 2, wBox, hBox, 16); ctx.clip();
+      const gx = -wBox / 2 + sw * wBox * 1.4 - wBox * 0.2, g = ctx.createLinearGradient(gx - 40, 0, gx + 40, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.35)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.globalCompositeOperation = 'lighter'; ctx.fillStyle = g; ctx.fillRect(-wBox / 2, -hBox / 2, wBox, hBox); ctx.restore();
+    }
+  }
+
+  /* ----- autocollants de vente : uniquement des faits réels (ancien prix, mentions de la page, offre du marchand) ----- */
+  const SALE_TXT = {
+    fr: { flash: 'VENTE FLASH', promo: 'PROMO', ship: 'Livraison offerte', split: 'Paiement en 3x', returns: 'Retours gratuits', stock: 'Stock limité' },
+    en: { flash: 'FLASH SALE', promo: 'SALE', ship: 'Free shipping', split: 'Pay in 3', returns: 'Free returns', stock: 'Limited stock' },
+    es: { flash: 'VENTA FLASH', promo: 'OFERTA', ship: 'Envío gratis', split: 'Paga en 3 plazos', returns: 'Devolución gratis', stock: 'Stock limitado' },
+    de: { flash: 'FLASH SALE', promo: 'SALE', ship: 'Gratis Versand', split: 'In 3 Raten', returns: 'Gratis Rückversand', stock: 'Begrenzter Vorrat' },
+    it: { flash: 'FLASH SALE', promo: 'PROMO', ship: 'Spedizione gratuita', split: 'Paga in 3 rate', returns: 'Reso gratuito', stock: 'Scorte limitate' },
+    nl: { flash: 'FLASH SALE', promo: 'SALE', ship: 'Gratis verzending', split: 'Betaal in 3 delen', returns: 'Gratis retour', stock: 'Beperkte voorraad' },
+    pt: { flash: 'PROMOÇÃO RELÂMPAGO', promo: 'PROMO', ship: 'Frete grátis', split: 'Pague em 3x', returns: 'Devolução grátis', stock: 'Estoque limitado' },
+  };
+  const saleTxt = SALE_TXT[plan.language] || SALE_TXT.en, offer = plan.offer || {}, SALE_RED = '#ff2d55';
+  // étoile « -30 % » qui tourne doucement
+  function starburst(x, y, r, text, local, delay = 0) {
+    const e = backOut((local - delay) / 0.45);
+    if (e <= 0) return;
+    ctx.save(); ctx.translate(x, y); ctx.rotate(-0.18 + Math.sin(local * 1.6) * 0.06); ctx.scale(e, e);
+    ctx.shadowColor = 'rgba(255,45,85,.55)'; ctx.shadowBlur = 26;
+    ctx.beginPath();
+    for (let i = 0; i < 28; i++) { const a = (i / 28) * Math.PI * 2, rr2 = i % 2 ? r * 0.84 : r; ctx.lineTo(Math.cos(a) * rr2, Math.sin(a) * rr2); }
+    ctx.closePath(); ctx.fillStyle = SALE_RED; ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.lineWidth = 3; ctx.strokeStyle = 'rgba(255,255,255,.85)'; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.font = `900 ${Math.round(r * 0.62)}px ${FONT}`; ctx.fillText(text, 0, 2, r * 1.6);
+    ctx.restore();
+  }
+  // ruban incliné (VENTE FLASH, offre du marchand) ou étiquette discrète (livraison offerte…)
+  function tag(x, y, text, local, strong, delay = 0) {
+    const e = backOut((local - delay) / 0.4);
+    if (e <= 0 || !text) return;
+    ctx.save();
+    ctx.font = `${strong ? 900 : 700} ${strong ? 36 : 26}px ${FONT}`;
+    const w = Math.min(W - pad * 2 - 140, ctx.measureText(text).width + (strong ? 48 : 36)), h = strong ? 62 : 48;
+    ctx.translate(x + w / 2, y); ctx.rotate(strong ? -0.06 : -0.03); ctx.scale(e, e);
+    ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = 16; ctx.shadowOffsetY = 6;
+    ctx.fillStyle = strong ? SALE_RED : 'rgba(255,255,255,.95)'; rr(-w / 2, -h / 2, w, h, strong ? 10 : h / 2); ctx.fill();
+    ctx.shadowColor = 'transparent';
+    if (strong) { // éclat qui balaie le ruban
+      ctx.save(); rr(-w / 2, -h / 2, w, h, 10); ctx.clip();
+      const sx = -w / 2 + ((local * 0.9) % 1.6) * w * 1.3 - w * 0.4, g = ctx.createLinearGradient(sx, 0, sx + 60, 0);
+      g.addColorStop(0, 'rgba(255,255,255,0)'); g.addColorStop(0.5, 'rgba(255,255,255,.5)'); g.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = g; ctx.fillRect(-w / 2, -h / 2, w, h); ctx.restore();
+    } else { ctx.fillStyle = SALE_RED; ctx.beginPath(); ctx.arc(-w / 2 + 17, 0, 5, 0, 7); ctx.fill(); }
+    ctx.fillStyle = strong ? '#fff' : '#111'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(text, strong ? 0 : 7, 1, w - (strong ? 24 : 40));
+    ctx.restore();
+  }
+  function saleSticker(sc, local) {
+    const story = scenes.filter((x) => !x.kind), i = story.indexOf(sc);
+    if (i < 0) return;
+    const ribbon = offer.custom && offer.custom.length <= 26 ? offer.custom.toUpperCase() : offer.flash ? saleTxt.flash : offer.discount || offer.custom ? saleTxt.promo : '';
+    const y = wide ? 120 : 132;
+    if (i === 0) {
+      if (ribbon) tag(pad, y, ribbon, local, true, 0.25);
+      if (offer.discount >= 5) starburst(W - pad - 62, y + 26, 62, `-${offer.discount}%`, local, 0.45);
+      return;
+    }
+    const facts = [...(offer.custom && offer.custom.length > 26 ? [offer.custom] : []), ...offer.facts.map((f) => saleTxt[f])];
+    if (facts.length) tag(pad, y, facts[(i - 1) % facts.length], local, false, 0.3);
+    if (offer.discount >= 5 && i === story.length - 1) starburst(W - pad - 52, y + 22, 52, `-${offer.discount}%`, local, 0.4);
+  }
+  // écran final : ancien prix barré (le trait se tire), nouveau prix en grand, étoile de remise
+  function priceBlock(cx, cy, local) {
+    const e = backOut((local - 0.3) / 0.45);
+    if (e <= 0 || !plan.price) return;
+    ctx.save(); ctx.translate(cx, cy); ctx.scale(e, e); ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    let y = 0;
+    if (offer.oldPrice) {
+      ctx.font = `700 34px ${FONT}`; ctx.fillStyle = 'rgba(255,255,255,.75)'; ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 10;
+      const ow = ctx.measureText(offer.oldPrice).width; ctx.fillText(offer.oldPrice, 0, -34);
+      ctx.shadowColor = 'transparent'; ctx.strokeStyle = SALE_RED; ctx.lineWidth = 5; ctx.lineCap = 'round';
+      const k = clamp((local - 0.7) / 0.35); ctx.beginPath(); ctx.moveTo(-ow / 2 - 6, -30); ctx.lineTo(-ow / 2 - 6 + (ow + 12) * k, -38); ctx.stroke();
+      y = 22;
+    }
+    ctx.font = `900 ${offer.oldPrice ? 66 : 58}px ${FONT}`;
+    const pw = ctx.measureText(plan.price).width + 44;
+    ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = 24; ctx.shadowOffsetY = 8;
+    ctx.fillStyle = offer.oldPrice ? SALE_RED : A; rr(-pw / 2, y - 44, pw, 88, 22); ctx.fill();
+    ctx.shadowColor = 'transparent'; ctx.fillStyle = offer.oldPrice ? '#fff' : onColor(A); ctx.fillText(plan.price, 0, y + 2, pw - 20);
+    ctx.restore();
+    if (offer.discount >= 5) starburst(Math.min(cx + 150, W - 58), cy - 82, 50, `-${offer.discount}%`, local, 0.9);
+  }
+
   function cta(sc, local) {
     const ph = sc.ph, ecom = plan.type === 'ecom' && ph;
     const cx = ecom && wide ? W * 0.7 : W / 2, maxW = ecom && wide ? W * 0.5 : W - pad * 2;
@@ -1541,14 +1660,14 @@ function makeRenderer(cv, job) {
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       const box = wide ? { x: pad, y: 90, w: W * 0.42, h: H - 190 } : { x: pad, y: 110, w: W - pad * 2, h: H * 0.5 - 130 };
       const r = product(ph, box, local, clamp(local / sc.dur), true);
-      if (plan.price) pill(plan.price, Math.min(W - pad - 70, r.x + r.w * 0.85), Math.max(box.y + 20, r.y + r.h * 0.1), local - 0.3, 34);
+      if (plan.price) priceBlock(wide ? box.x + box.w / 2 : W - pad - 130, wide ? box.y + box.h - 70 : box.y + box.h - 40, local);
     } else {
       // SaaS : l'aurore de marque reste visible (voile léger) ; e-commerce sans détourage : voile plus dense sur la photo
       ctx.fillStyle = plan.type === 'saas' ? 'rgba(8,6,18,.18)' : 'rgba(8,6,18,.66)'; ctx.fillRect(0, 0, W, H);
       g = ctx.createLinearGradient(0, H * 0.35, 0, H);
       g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, plan.type === 'saas' ? 'rgba(0,0,0,.55)' : P + 'cc');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-      if (plan.price) pill(plan.price, W / 2, H * 0.2, local - 0.3, 34);
+      if (plan.price) priceBlock(W / 2, H * 0.22, local);
     }
     ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
     let y = H * (ecom && ph.cut && !wide ? 0.63 : 0.46);
@@ -1993,7 +2112,6 @@ async function produce(actx) {
     // et un moment de vie (résultat). Les autres scènes restent les vraies photos de la fiche.
     job.muse = {};
     if (best?.img && $('#bgai').value === '1') {
-      status('Creating 2 product-in-use shots with Meta Muse…');
       const refPh = byId.get(scenes.find((x) => !x.kind)?.photo) || best;
       let referenceImage = null;
       try {
@@ -2027,7 +2145,6 @@ async function produce(actx) {
       if (outImg) job.muse.outcome = { img: outImg, thumb: thumb(outImg), scene: outcome };
       job.museImage = hookImg || outImg || null; // compatibilité (vignettes, décor)
       job.backdropModel = job.museImage ? 'meta/muse-image' : null;
-      if (!job.museImage) status('Muse images unavailable. Continuing with the original product gallery.');
     }
     // l'écran final montre le produit de l'accroche : détouré s'il l'est ; sinon, quand sa photo est cadrée trop serré pour être
     // détourée (bracelet coupé par les bords), la photo elle-même plutôt qu'un autre détourage (boîte, emballage…)

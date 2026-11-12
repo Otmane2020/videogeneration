@@ -272,6 +272,8 @@ $('#b-gen').addEventListener('click', async () => {
   status(ecom ? 'Reviewing your product photos and writing the script…' : 'Studying your brand and writing the script…', 4);
   try {
     const list = ecom ? photoList() : [];
+    // e-commerce sans aucune photo : on ne monte pas une vidéo de stock (ce serait le produit d'une autre marque)
+    if (ecom && !list.length) { cancelJob(); fail($('#e-type'), 'Add at least one photo of your product: the ad is built from your real photos, never from stock footage.'); show('s-type', 3); return; }
     state.photoUrls = list.map((p) => p.show);
     state.photoSources = list.map((p) => p.source);
     // la variante choisie fixe le prix affiché et le texte de la pub

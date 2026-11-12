@@ -14,7 +14,8 @@ Queries are ALWAYS IN ENGLISH, whatever the language of the ad: never a French, 
  2. two common words for a different shot that also fits the scene;
  3. one single concrete noun: a person, a place or an object of this trade (for example "restaurant", "developer", "doctor", "warehouse", "laptop").
 Film the world of the CUSTOMERS of this business: their job, their workplace, their tools, the people they serve. Never try to film the software itself. Each scene gets its own shots: do not repeat a query in another scene.
-Examples. Restaurant booking software: ["waiter serving table", "chef kitchen", "restaurant"]. Invoicing tool for freelancers: ["freelancer laptop coffee", "accountant calculator", "invoice"]. Error monitoring for developers: ["developer coding night", "programmer keyboard", "developer"]. Appointment booking for doctors: ["doctor patient", "woman phone", "doctor"]. Running shoe: ["runner tying shoes", "jogging city", "runner"].
+Examples. Restaurant booking software: ["waiter serving table", "chef kitchen", "restaurant"]. Invoicing tool for freelancers: ["freelancer laptop coffee", "accountant calculator", "invoice"]. Error monitoring for developers: ["developer coding night", "programmer keyboard", "developer"]. Appointment booking for doctors: ["doctor patient", "woman phone", "doctor"]. Running shoe: ["jogging city morning", "friends park run", "sunrise road"].
+For a PHYSICAL PRODUCT (e-commerce), stock footage may only show people, places and atmosphere around the product: never the product itself or its category (no shoes, sofa, watch, bag, bottle...), because stock would show another brand's version.
 Use only words a camera can film and a librarian would tag: people (woman, team, chef, developer), objects (laptop, phone, calculator, camera), places (office, kitchen, shop, street), actions (typing, meeting, shopping, cooking).
 Never use: brand or product names; words about software and interfaces (app, software, platform, dashboard, website, page, screen, interface, button, click, link, feature, integration, automation, workflow, AI, data, cloud, export, signup); abstract words (success, growth, innovation, solution, chaos, fast); words that describe graphics (icon, animation, logo, infographic). In the library those words bring back clouds in the sky, insects or car dashboards.`;
 
@@ -272,6 +273,18 @@ const NUMW = '(?:zéro|zero|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|o
 const SPELLED_PRICE = new RegExp(`\\b${NUMW}(?:[-\\s]+(?:(?:et|and)[-\\s]+)?${NUMW})*\\s*(?:euros?|dollars?|livres?|pounds?|€|\\$|£)(?:\\s+${NUMW}(?:[-\\s]+(?:(?:et|and)[-\\s]+)?${NUMW})*)?`, 'gi');
 const digitHeadline = (h, price) => (price ? h.replace(SPELLED_PRICE, price) : h);
 
+// Pastille « fait vérifié » : gardée seulement si ses mots figurent dans la page (texte, titre, description, fiche produit).
+const fold = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ');
+function verified(badge, page) {
+  const b = str(badge, 34);
+  if (!b) return '';
+  const hay = ` ${fold([page.text, page.title, page.description, ...(page.h1 || []), ...(page.h2 || []), page.product?.name, page.product?.description, page.product?.brand].join(' '))} `;
+  const words = fold(b).split(' ').filter((w) => w.length > 2);
+  if (!words.length) return '';
+  const hit = words.filter((w) => hay.includes(' ' + w) ).length; // préfixe : « garantie » valide « garanties »
+  return hit / words.length >= 0.6 ? b : '';
+}
+
 function normalize(d, page, type, seen, intent, total = seen.length) {
   // prix : uniquement s'il figure dans les données structurées de la fiche, écrit comme sur une étiquette
   const pr = page.product;
@@ -313,7 +326,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
         // flèches seulement si le modèle annonce un flux ET que la phrase décrit un transfert (une simple liste de plateformes reste un groupe)
         icon: 'zap clock timer trending-up chart-column chart-line shield-check lock users user-check message-circle mail bell calendar-check credit-card wallet shopping-cart rocket sparkles bot brain search globe link workflow layers settings target award star heart circle-check file-text folder database cloud smartphone monitor code gauge megaphone handshake headphones video image wand-sparkles mouse-pointer-click'.split(' ').includes(s.icon) ? s.icon : '',
         logosLayout: s.logos_layout === 'flow' && /\b(to|into|from|sync\w*|connect\w*|send\w*|push\w*|between|pipe\w*|vers|depuis|entre|synchronis\w*|envo\w*|relie\w*)\b/i.test(`${s.headline} ${s.voiceover}`) ? 'flow' : 'group',
-        badge: type === 'ecom' ? str(s.badge, 34) : '',
+        badge: type === 'ecom' ? verified(s.badge, page) : '',
         queries,
       };
     }).filter((s) => s.headline), [page.title, page.description, ...page.h1, ...page.h2, page.text].join(' '), [d.brand, page.siteName]),

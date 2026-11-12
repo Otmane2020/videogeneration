@@ -148,14 +148,15 @@ function library() {
   if (LIB && Date.now() - LIB.at < 6e5) return LIB.p;
   const p = (async () => {
     let file = [];
-    try { file = require('../data/footage.json'); } catch { /* pas encore construite */ }
+    // seuls les plans jugés beaux et pertinents par scripts/curate-footage.js (notes ≥ 7) sont servis
+    try { file = require('../data/footage.json').filter((e) => e.rl >= 7 && e.rb >= 7); } catch { /* pas encore construite */ }
     try {
       const { sql } = require('../lib/db');
       const rows = await sql('SELECT data, sectors, keywords FROM footage');
       // table complète : elle fait foi. Vide ou partielle (remplissage interrompu) : on la complète depuis le fichier livré avec le code.
-      if (rows.length && rows.length >= file.length) { source = 'db'; return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords })); }
+      if (rows.length && rows.length === file.length) { source = 'db'; return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords })); }
       if (file.length) {
-        await require('../lib/footage').seed(file);
+        await require('../lib/footage').sync(file);
         source = 'db (completed)';
         return file.map(shape);
       }

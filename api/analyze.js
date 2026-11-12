@@ -35,7 +35,7 @@ ${SHAPE_HEAD}
   {"angle": string,                   // e.g. "Problem → solution", "Social proof", "Offer"
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook
      {"role": "hook"|"context"|"demo"|"outcome",
-      "headline": string,             // on-screen text, max 6 words, punchy
+      "headline": string,             // on-screen text, max 6 words, punchy; numbers and prices in digits ("24/7", "-30 %"), never in words
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "english_queries": [string, string, string],  // stock-footage searches, English words only
@@ -80,11 +80,12 @@ ${SHAPE_HEAD}
  "ads": [                             // exactly 1 ad, built for the goal given below
   {"angle": string,
    "scenes": [                        // exactly 4 scenes; the first one is a scroll-stopping hook that already shows the product
-     {"headline": string,             // on-screen text, max 6 words
+     {"headline": string,             // on-screen text, max 6 words; numbers, prices and years in DIGITS with their symbol ("28 900 €", "2021", "-30 %"), never in words
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "visual": "product"|"detail"|"footage",  // product = the product presented on the backdrop; detail = slow close-up travelling over a photo; footage = stock video
       "photo": number,                // index of the usable photo to show (ignored for footage)
+      "focus": [number, number],      // for "detail": the point of that photo the close-up looks at, as fractions of its width and height (0-1), aimed at the part the sentence names (dial, clasp, stitching, label...); null if the sentence names no precise part
       "badge": string,                // optional: one verified fact from the page, max 4 words (material, size, warranty...), else ""
       "english_queries": [string, string, string]}  // stock-footage searches, English words only
    ],
@@ -253,7 +254,29 @@ function fallback(page, type, nPhotos) {
   };
 }
 
+// Prix lisible dans la langue de la page : « 28900.00 » + EUR → « 28 900 € », « 79,9 » → « 79,90 € ».
+function money(raw, currency, lang) {
+  const m = String(raw || '').replace(/[\s\u00a0\u202f'’]/g, '').match(/^(\d[\d.,]*?)(?:[.,](\d{1,2}))?$/);
+  if (!m) return '';
+  const n = Number(m[1].replace(/[.,]/g, '') + (m[2] ? '.' + m[2] : ''));
+  if (!(n > 0)) return '';
+  const dec = Math.round(n * 100) % 100 ? 2 : 0;
+  try {
+    return new Intl.NumberFormat(lang || 'en', { ...(currency ? { style: 'currency', currency } : {}), minimumFractionDigits: dec, maximumFractionDigits: dec })
+      .format(n).replace(/[\u202f\u00a0]/g, '\u00a0');
+  } catch { return String(n); }
+}
+// Le titre à l'écran garde les chiffres : un prix écrit en toutes lettres (« vingt-huit mille neuf cents euros »)
+// est remplacé par le prix de la fiche. La voix, elle, lit le champ « spoken » en toutes lettres.
+const NUMW = '(?:zéro|zero|une?|deux|trois|quatre|cinq|six|sept|huit|neuf|dix|onze|douze|treize|quatorze|quinze|seize|vingts?|trente|quarante|cinquante|soixante|cents?|mille|millions?|one|two|three|four|five|seven|eight|nine|ten|eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety|hundred|thousand)';
+const SPELLED_PRICE = new RegExp(`\\b${NUMW}(?:[-\\s]+(?:(?:et|and)[-\\s]+)?${NUMW})*\\s*(?:euros?|dollars?|livres?|pounds?|€|\\$|£)(?:\\s+${NUMW}(?:[-\\s]+(?:(?:et|and)[-\\s]+)?${NUMW})*)?`, 'gi');
+const digitHeadline = (h, price) => (price ? h.replace(SPELLED_PRICE, price) : h);
+
 function normalize(d, page, type, seen, intent, total = seen.length) {
+  // prix : uniquement s'il figure dans les données structurées de la fiche, écrit comme sur une étiquette
+  const pr = page.product;
+  const currency = pr?.currency || ({ '€': 'EUR', $: 'USD', '£': 'GBP' }[(String((page.prices || []).join(' ')).match(/[€$£]/) || [])[0]] || '');
+  const price = type === 'ecom' && pr?.price ? money(pr.price, currency, page.lang) || `${pr.price}${currency ? ' ' + currency : ''}` : '';
   // indices « vus par l'IA » -> indices de la liste de photos du client
   const judged = new Map((Array.isArray(d.photos) ? d.photos : []).map((p) => [Number(p.index), p]));
   const photos = seen.map((img, i) => ({ index: img.index, kind: ['packshot', 'lifestyle'].includes(judged.get(i)?.kind) ? judged.get(i).kind : 'other', usable: judged.has(i) ? judged.get(i).usable !== false : true }));
@@ -282,7 +305,9 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
       const safeSaas = type === 'saas' ? saasFallbackQueries(source, adsSceneIndex++) : [];
       const queries = type === 'saas' ? [...searched.slice(0, 2), ...safeSaas].filter((q, i, a) => a.indexOf(q) === i).slice(0, 3) : searched;
       return {
-        headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
+        headline: digitHeadline(str(s.headline, 60), price), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
+        // gros plan : point visé sur la photo (le cadran, le fermoir…), affiné ensuite par le navigateur
+        focus: visual === 'detail' && Array.isArray(s.focus) && s.focus.length === 2 && s.focus.every((v) => +v > 0 && +v <= 1) && !(+s.focus[0] === 0.5 && +s.focus[1] === 0.5) ? s.focus.map((v) => Math.round(+v * 1000) / 1000) : null,
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
         logos: type !== 'saas' ? [] : cleanLogos(s.logos, [d.brand, page.siteName]),
         // flèches seulement si le modèle annonce un flux ET que la phrase décrit un transfert (une simple liste de plateformes reste un groupe)
@@ -298,9 +323,6 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
 
   const useFb = !ads.length;
   if (useFb) fb.ads.forEach((ad) => ad.scenes.forEach((s) => { s.photo = type === 'ecom' && s.visual !== 'footage' ? usable[s.photo % usable.length].index : -1; }));
-  // prix : uniquement s'il figure dans les données structurées de la fiche
-  const pr = page.product;
-  const price = type === 'ecom' && pr?.price ? `${pr.price}${pr.currency ? ' ' + ({ EUR: '€', USD: '$', GBP: '£' }[pr.currency] || pr.currency) : ''}` : '';
   return {
     type,
     brand: str(d.brand, 40) || fb.brand,

@@ -129,6 +129,7 @@
     if (x1 - x0 < 20 || y1 - y0 < 20) return null;
     const out = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 4, height: y1 - y0 + 4 });
     out.getContext('2d').drawImage(c, x0 - 2, y0 - 2, out.width, out.height, 0, 0, out.width, out.height);
+    out.box = [(x0 - 2) / w, (y0 - 2) / h, (x1 + 2) / w, (y1 + 2) / h]; // emplacement dans la photo
     return out;
   }
 

@@ -615,7 +615,127 @@ function trim(c, d, w, h) {
   if (x1 - x0 < 20 || y1 - y0 < 20) return null;
   const out = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 4, height: y1 - y0 + 4 });
   out.getContext('2d').drawImage(c, x0 - 2, y0 - 2, out.width, out.height, 0, 0, out.width, out.height);
+  out.box = [(x0 - 2) / w, (y0 - 2) / h, (x1 + 2) / w, (y1 + 2) / h]; // emplacement dans la photo, pour vérifier le détourage
   return out;
+}
+
+// Lecture d'une photo produit à petite échelle : couleur et uniformité du fond, emprise du produit,
+// bords de l'image qu'il touche, et zones riches en détails (cadran, logo, couture…) pour viser les gros plans.
+function photoInfo(img) {
+  const s = Math.min(1, 256 / Math.max(img.naturalWidth, img.naturalHeight));
+  const w = Math.max(16, Math.round(img.naturalWidth * s)), h = Math.max(16, Math.round(img.naturalHeight * s));
+  const c = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(img, 0, 0, w, h);
+  let d;
+  try { d = g.getImageData(0, 0, w, h).data; } catch { return null; }
+  const n = w * h, border = [];
+  for (let x = 0; x < w; x++) border.push(x, (h - 1) * w + x);
+  for (let y = 1; y < h - 1; y++) border.push(y * w, y * w + w - 1);
+  const clear = border.filter((i) => d[i * 4 + 3] < 40).length > border.length * 0.6;
+  const med = (ch) => { const v = border.map((i) => d[i * 4 + ch]).sort((a, b) => a - b); return v[v.length >> 1]; };
+  const bg = [med(0), med(1), med(2)];
+  const dist = (i) => Math.abs(d[i * 4] - bg[0]) + Math.abs(d[i * 4 + 1] - bg[1]) + Math.abs(d[i * 4 + 2] - bg[2]);
+  const step = (i, j) => Math.abs(d[i * 4] - d[j * 4]) + Math.abs(d[i * 4 + 1] - d[j * 4 + 1]) + Math.abs(d[i * 4 + 2] - d[j * 4 + 2]);
+  const plain = clear || border.filter((i) => dist(i) < 36).length > border.length * 0.72;
+  // fond : rempli depuis les bords, de proche en proche (suit aussi un fond en léger dégradé)
+  const back = new Uint8Array(n);
+  if (clear) for (let i = 0; i < n; i++) back[i] = d[i * 4 + 3] < 60 ? 1 : 0;
+  else if (plain) {
+    const stack = [];
+    for (const i of border) if (dist(i) < 40) { back[i] = 1; stack.push(i); }
+    while (stack.length) {
+      const i = stack.pop(), x = i % w;
+      for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) {
+        if (j >= 0 && j < n && !back[j] && step(i, j) < 14 && dist(j) < 96) { back[j] = 1; stack.push(j); }
+      }
+    }
+  }
+  // emprise du produit (on ignore les 0,5 % de pixels isolés de chaque côté)
+  const cols = new Float64Array(w), rows = new Float64Array(h);
+  let total = 0;
+  for (let i = 0; i < n; i++) if (!back[i]) { cols[i % w]++; rows[(i / w) | 0]++; total++; }
+  const span = (a) => { let lo = 0, hi = a.length - 1, acc = 0; for (; lo < a.length && (acc += a[lo]) < total * 0.005; lo++); acc = 0; for (; hi > 0 && (acc += a[hi]) < total * 0.005; hi--); return [lo, Math.max(lo, hi)]; };
+  const [x0, x1] = total ? span(cols) : [0, w - 1], [y0, y1] = total ? span(rows) : [0, h - 1];
+  // bords coupés par le cadrage de la photo (bracelet de montre, pied de meuble…)
+  let touch = 0;
+  if (plain) {
+    const edge = (list) => list.filter((i) => !back[i]).length > list.length * 0.04;
+    const line = (f, len) => Array.from({ length: len }, (_, k) => f(k));
+    touch = [line((k) => k, w), line((k) => (h - 1) * w + k, w), line((k) => k * w, h), line((k) => k * w + w - 1, h)].filter(edge).length;
+  }
+  // détails : contraste local de luminance sur le produit, sommé par fenêtres de la taille d'un gros plan
+  const L = new Float32Array(n);
+  for (let i = 0; i < n; i++) L[i] = d[i * 4] * 0.3 + d[i * 4 + 1] * 0.59 + d[i * 4 + 2] * 0.11;
+  const sum = new Float64Array((w + 1) * (h + 1));
+  for (let y = 0; y < h; y++) {
+    let row = 0;
+    for (let x = 0; x < w; x++) {
+      const i = y * w + x;
+      const e = !back[i] && x > 0 && y > 0 && x < w - 1 && y < h - 1 ? Math.abs(L[i + 1] - L[i - 1]) + Math.abs(L[i + w] - L[i - w]) : 0;
+      row += e; sum[(y + 1) * (w + 1) + x + 1] = sum[y * (w + 1) + x + 1] + row;
+    }
+  }
+  const win = Math.max(6, Math.round(Math.min(x1 - x0 + 1, y1 - y0 + 1) * 0.42)), hw = win >> 1, cand = [];
+  for (let y = Math.max(y0 + hw, hw); y <= Math.min(y1 - hw, h - 1 - hw); y += Math.max(2, hw >> 1)) {
+    for (let x = Math.max(x0 + hw, hw); x <= Math.min(x1 - hw, w - 1 - hw); x += Math.max(2, hw >> 1)) {
+      const a = (y - hw) * (w + 1) + (x - hw), b = (y - hw) * (w + 1) + (x + hw), c2 = (y + hw) * (w + 1) + (x - hw), d2 = (y + hw) * (w + 1) + (x + hw);
+      cand.push({ x: (x + 0.5) / w, y: (y + 0.5) / h, e: sum[d2] - sum[b] - sum[c2] + sum[a] });
+    }
+  }
+  cand.sort((a, b) => b.e - a.e);
+  const focus = [];
+  for (const p of cand) {
+    if (p.e < (cand[0]?.e || 0) * 0.45) break;
+    if (focus.every((f) => Math.hypot(f.x - p.x, f.y - p.y) > 0.24)) focus.push(p);
+    if (focus.length === 3) break;
+  }
+  if (!focus.length) focus.push({ x: (x0 + x1 + 1) / 2 / w, y: (y0 + y1 + 1) / 2 / h });
+  return { w, h, bg, plain, clear, back, d, touch, focus, box: [x0 / w, y0 / h, (x1 + 1) / w, (y1 + 1) / h] };
+}
+
+// Un détourage n'est gardé que s'il ne retire rien du produit. Sur fond uni, chaque pixel nettement différent
+// du fond (cadran, maillons, gravure…) doit rester opaque ; sinon la photo d'origine est utilisée, intacte.
+function cutKeepsProduct(cut, info) {
+  if (!cut) return false;
+  if (!info || info.clear) return true;
+  const { w, h, back, d, bg } = info;
+  // produit coupé par les bords de la photo : une fois détouré il flotterait, tronqué net
+  if (info.plain && info.touch >= 2) return false;
+  const m = Object.assign(document.createElement('canvas'), { width: w, height: h });
+  const g = m.getContext('2d', { willReadFrequently: true });
+  const [bx0, by0, bx1, by1] = cut.box || info.box;
+  g.drawImage(cut, bx0 * w, by0 * h, (bx1 - bx0) * w, (by1 - by0) * h);
+  const a = g.getImageData(0, 0, w, h).data;
+  let core = 0, kept = 0, opaque = 0, onBack = 0;
+  for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+    const i = y * w + x, on = a[i * 4 + 3] > 110;
+    if (on) { opaque++; if (back[i]) onBack++; }
+    if (!info.plain || back[i] || back[i - 1] || back[i + 1] || back[i - w] || back[i + w]) continue;
+    if (Math.abs(d[i * 4] - bg[0]) + Math.abs(d[i * 4 + 1] - bg[1]) + Math.abs(d[i * 4 + 2] - bg[2]) < 60) continue;
+    core++; if (on) kept++;
+  }
+  if (!opaque) return false;
+  if (info.plain) return (core < 40 || kept / core > 0.95) && onBack / opaque < 0.2;
+  // photo d'ambiance : pas de référence, on refuse au moins un détourage en miettes
+  return pieces(a, w, h) <= 3;
+}
+// nombre de morceaux opaques notables (plus de 4 % de la surface opaque)
+function pieces(a, w, h) {
+  const lab = new Int32Array(w * h), sizes = [];
+  let total = 0;
+  for (let s = 0; s < w * h; s++) {
+    if (lab[s] || a[s * 4 + 3] <= 110) continue;
+    const id = sizes.length + 1, st = [s];
+    let k = 0;
+    lab[s] = id;
+    while (st.length) {
+      const i = st.pop(), x = i % w; k++;
+      for (const j of [i - w, i + w, x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1]) if (j >= 0 && j < w * h && !lab[j] && a[j * 4 + 3] > 110) { lab[j] = id; st.push(j); }
+    }
+    sizes.push(k); total += k;
+  }
+  return sizes.filter((k) => k > total * 0.04).length;
 }
 
 /* ---------- dessin ---------- */
@@ -626,6 +746,18 @@ const easeInOut = (x) => { x = clamp(x); return x < 0.5 ? 2 * x * x : 1 - Math.p
 const backOut = (x) => { x = clamp(x); return 1 + 2.7 * Math.pow(x - 1, 3) + 1.7 * Math.pow(x - 1, 2); };
 const FONT = 'Poppins, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const rgb = (hex) => { const n = parseInt(hex.slice(1), 16); return [n >> 16, (n >> 8) & 255, n & 255]; };
+// couleurs : teinte décalée (aurores harmonisées avec la marque), mélange en hexadécimal, transparence
+const hueOf = (hex, deg) => {
+  let [r, g, b] = rgb(hex).map((v) => v / 255); const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, sat = 0;
+  if (d) { sat = d / (1 - Math.abs(2 * l - 1)); h = mx === r ? ((g - b) / d) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4; h *= 60; }
+  h = (h + deg + 360) % 360; sat = Math.max(sat, 0.55);
+  const c = (1 - Math.abs(2 * l - 1)) * sat, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  const [r1, g1, b1] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  return '#' + [r1, g1, b1].map((v) => Math.round((v + m) * 255).toString(16).padStart(2, '0')).join('');
+};
+const mixHex = (hex, to, k) => '#' + rgb(hex).map((v, i) => Math.round(lerp(v, rgb(to)[i], k)).toString(16).padStart(2, '0')).join('');
+const rgbaOf = (hex, a) => `rgba(${rgb(hex).join(',')},${a})`;
 const mix = (hex, to, k) => { const a = rgb(hex), b = rgb(to); return `rgb(${a.map((v, i) => Math.round(lerp(v, b[i], k))).join(',')})`; };
 // Couleurs de la vidéo : l'accent sert à surligner des mots sur fond sombre, il doit rester clair et vif.
 function safePalette(p) {
@@ -705,6 +837,57 @@ function makeRenderer(cv, job) {
     ctx.drawImage(src, clamp(fx) * (W - sw * s), clamp(fy) * (H - sh * s), sw * s, sh * s);
   };
 
+  // Photo produit sans détourage : le cadrage garde le produit entier (jamais de gros plan sur du vide).
+  // Si le produit est plus large que l'écran, la photo entière est posée sur un fond de sa propre couleur.
+  function framed(sc, ph, k, detail) {
+    const img = ph.img, iw = img.naturalWidth, ih = img.naturalHeight, inf = ph.info, e = easeInOut(k);
+    if (!inf) return coverDraw(img, iw, ih, detail ? 1.3 + 0.12 * k : 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
+    const [bx0, by0, bx1, by1] = inf.box;
+    let cw = iw, ch = ih;
+    if (iw / ih > W / H) cw = (ih * W) / H; else ch = (iw * H) / W;
+    const pcx = ((bx0 + bx1) / 2) * iw, pcy = ((by0 + by1) / 2) * ih;
+    const crop = (cx, cy, z) => {
+      const sw = cw / z, sh = ch / z;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(img, Math.max(0, Math.min(iw - sw, cx - sw / 2)), Math.max(0, Math.min(ih - sh, cy - sh / 2)), sw, sh, 0, 0, W, H);
+    };
+    if (detail) {
+      // gros plan sur la zone visée (cadran, fermoir…), sans agrandir au point de rendre l'image floue
+      const f = sc.focusPt || inf.focus[0];
+      const zMax = Math.max(1.15, Math.min(2, cw / (W * S * 0.45)));
+      const dir = sc.variant % 2 ? -1 : 1;
+      return crop(f.x * iw + dir * (1 - e) * cw * 0.06, f.y * ih + (1 - e) * ch * 0.04, zMax * (0.88 + 0.12 * e));
+    }
+    const fits = (bx1 - bx0) * iw <= cw * 0.95 && (by1 - by0) * ih <= ch * 0.95;
+    if (fits || !inf.plain) {
+      // plan d'ensemble : centré sur le produit, lent travelling vers sa zone la plus détaillée (zoom avant ou arrière selon la scène)
+      const f = inf.focus[0], z = sc.variant % 2 ? 1.08 - 0.06 * e : 1 + 0.06 * e;
+      return crop(lerp(pcx, f.x * iw, 0.3 * e), lerp(pcy, f.y * ih, 0.3 * e), fits ? Math.min(z, Math.min(cw / ((bx1 - bx0) * iw), ch / ((by1 - by0) * ih))) : z);
+    }
+    plate(ph, k);
+  }
+  function plate(ph, k) {
+    const img = ph.img, iw = img.naturalWidth, ih = img.naturalHeight, [r, g, b] = ph.info.bg;
+    ctx.fillStyle = `rgb(${r},${g},${b})`; ctx.fillRect(0, 0, W, H);
+    if (!ph.soft) {
+      // bords de la photo fondus dans la couleur du fond : aucune arête visible
+      const s2 = Math.min(1, 1600 / Math.max(iw, ih)), c = Object.assign(document.createElement('canvas'), { width: Math.round(iw * s2), height: Math.round(ih * s2) });
+      const t = c.getContext('2d'), f = Math.round(Math.min(c.width, c.height) * 0.07);
+      t.drawImage(img, 0, 0, c.width, c.height);
+      t.globalCompositeOperation = 'destination-out';
+      for (const [x0, y0, x1, y1, rx, ry, rw, rh] of [[0, 0, f, 0, 0, 0, f, c.height], [c.width, 0, c.width - f, 0, c.width - f, 0, f, c.height], [0, 0, 0, f, 0, 0, c.width, f], [0, c.height, 0, c.height - f, 0, c.height - f, c.width, f]]) {
+        const gr = t.createLinearGradient(x0, y0, x1, y1);
+        gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        t.fillStyle = gr; t.fillRect(rx, ry, rw, rh);
+      }
+      ph.soft = c;
+    }
+    const z = 1 + 0.05 * easeInOut(k), sc2 = Math.min(W / iw, (H * (wide ? 0.9 : 0.66)) / ih) * z;
+    const dw = iw * sc2, dh = ih * sc2;
+    ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(ph.soft, wide ? W * 0.72 - dw / 2 : (W - dw) / 2, wide ? (H - dh) / 2 : Math.max(0, H * 0.4 - dh / 2), dw, dh);
+  }
+
   /* ----- fonds ----- */
   function footage(sc, k) {
     // coup de zoom à l'entrée de la scène, puis lent travelling avant
@@ -774,19 +957,60 @@ function makeRenderer(cv, job) {
     }
     ctx.restore();
   }
+  // Fond des démos : aurores aux couleurs de la marque qui dérivent, halo derrière le téléphone, rayons qui tournent,
+  // scintillements à quatre branches. Tout est dessiné par le code, net à toutes les résolutions.
+  const stars = Array.from({ length: 34 }, (_, i) => ({ x: (i * 0.618 + 0.13) % 1, y: (i * 0.377 + 0.07) % 1, r: 1.2 + (i % 5) * 0.9, ph: i * 1.7, sp: 0.8 + (i % 4) * 0.35 }));
+  function aurora(sc, k, t) {
+    const v = sc.variant || 0, cx = wide ? W * 0.72 : W / 2, cy = wide ? H * 0.5 : H * 0.42;
+    // une marque noire ou très sombre donnerait un fond éteint : on prend alors des teintes vives par défaut
+    const vivid = (c, d) => (rgb(c).reduce((a2, v, i) => a2 + v * [0.299, 0.587, 0.114][i], 0) < 70 ? d : c);
+    const c1 = vivid(P, '#6a5cff'), c2 = vivid(A, '#c44dff'), c3 = hueOf(c1, 48), c4 = hueOf(c2, -36);
+    // fond profond
+    let g = ctx.createLinearGradient(0, 0, W * 0.3, H);
+    g.addColorStop(0, rgbaOf(mixHex(c1, '#050410', 0.78), 1)); g.addColorStop(1, '#030209');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    // aurores : quatre nappes de couleur qui dérivent lentement
+    const R = Math.max(W, H);
+    [[c1, 0.18, 0.18, 0.5, 0.0], [c2, 0.85, 0.3, 0.45, 1.3], [c3, 0.25, 0.8, 0.5, 2.4], [c4, 0.8, 0.85, 0.42, 3.6]].forEach(([c, bx, by, rr0, ph]) => {
+      const x = W * (bx + 0.08 * Math.sin(t * 0.45 + ph + v)), y = H * (by + 0.06 * Math.cos(t * 0.38 + ph)), q = ctx.createRadialGradient(x, y, 0, x, y, R * rr0);
+      q.addColorStop(0, rgbaOf(c, 0.42)); q.addColorStop(1, rgbaOf(c, 0));
+      ctx.fillStyle = q; ctx.fillRect(0, 0, W, H);
+    });
+    // rayons de lumière qui tournent derrière le téléphone
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(t * 0.16 + v * 0.7);
+    for (let i = 0; i < 12; i++) {
+      ctx.rotate(Math.PI / 6);
+      const ray = ctx.createLinearGradient(0, 0, R * 0.75, 0); ray.addColorStop(0, 'rgba(255,255,255,.10)'); ray.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = ray; ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(R * 0.75, -R * 0.045); ctx.lineTo(R * 0.75, R * 0.045); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+    // halo qui respire derrière le téléphone
+    const pulse = 0.85 + 0.15 * Math.sin(t * 2.2), halo = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.min(W, H) * 0.62 * pulse);
+    halo.addColorStop(0, rgbaOf(c2, 0.55)); halo.addColorStop(0.45, rgbaOf(c1, 0.22)); halo.addColorStop(1, rgbaOf(c1, 0));
+    ctx.fillStyle = halo; ctx.fillRect(0, 0, W, H);
+    // scintillements à quatre branches
+    for (const st of stars) {
+      const tw = 0.5 + 0.5 * Math.sin(t * 2.6 * st.sp + st.ph), x = st.x * W, y = ((st.y - t * 0.012 * st.sp) % 1 + 1) % 1 * H, r = st.r * (0.6 + tw);
+      ctx.fillStyle = `rgba(255,255,255,${0.25 + 0.6 * tw})`;
+      ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill();
+      if (st.r > 3) { ctx.fillRect(x - r * 5, y - 0.6, r * 10, 1.2); ctx.fillRect(x - 0.6, y - r * 5, 1.2, r * 10); }
+    }
+    ctx.restore();
+    // reflet du halo au sol, comme un studio brillant
+    const floor = ctx.createLinearGradient(0, H * 0.72, 0, H);
+    floor.addColorStop(0, 'rgba(0,0,0,0)'); floor.addColorStop(1, rgbaOf(mixHex(c1, '#000000', 0.6), 0.65));
+    ctx.fillStyle = floor; ctx.fillRect(0, H * 0.72, W, H * 0.28);
+  }
   function background(sc, k) {
     const ph = sc.ph;
     // Pour une scène de démonstration SaaS, le vrai screenshot du site doit rester lisible.
     // On utilise un décor de marque derrière le téléphone, pas un second footage concurrent.
-    if (plan.type === 'saas' && sc.visual === 'site' && shot) {
-      if (!(sc.clip || sc.video || sc.still || sc.frame)) return studio(k, k * sc.dur);
-      ctx.save(); ctx.filter = `blur(${Math.round(14 * S)}px) saturate(1.15)`; footage(sc, k); ctx.restore();
-      ctx.fillStyle = 'rgba(6,6,14,.42)'; ctx.fillRect(0, 0, W, H); // le téléphone reste le sujet
-      return;
-    }
-    if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.22 + 0.16 * k, lerp(0.4, 0.6, easeInOut(k)), lerp(0.44, 0.56, easeInOut(k)));
+    if (plan.type === 'saas' && sc.visual === 'site' && shot) return aurora(sc, k, k * sc.dur);
+    if (sc.visual === 'detail' && ph) return framed(sc, ph, k, true);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
-    if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
+    if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : framed(sc, ph, k, false);
     footage(sc, k);
   }
 
@@ -862,21 +1086,11 @@ function makeRenderer(cv, job) {
     if (h < 150) return;
     const p = clamp(local / dur), enter = easeOut((local - 0.05) / 0.6);
     let rot = 0, shx = 0, shy = 0, sc = 1, dy = 0;
-    if (job.videoTemplate === 'corporate') {
-      // Démo sobre : écran stable et lisible, sans effet 3D excessif.
-      sc = variant === 0 ? 0.94 + 0.035 * easeInOut(p) : 0.9 + 0.04 * easeInOut(p);
-    } else if (job.videoTemplate === 'customer-story') {
-      // Angle éditorial plus humain, léger mouvement latéral.
-      const a = easeInOut(p);
-      shx = variant === 0 ? lerp(0.18, 0.24, a) : lerp(-0.24, -0.16, a);
-      shy = variant === 0 ? lerp(-0.08, -0.12, a) : lerp(0.1, 0.06, a);
-      rot = variant === 0 ? lerp(-0.025, 0.02, a) : lerp(0.035, -0.015, a);
-      sc = variant === 0 ? lerp(0.9, 0.96, a) : lerp(0.84, 0.9, a);
-    } else if (variant === 0) {
-      // Première démo : téléphone droit, la page défile.
-      sc = 1 + 0.07 * easeInOut(p);
+    if (variant === 0) {
+      // premier plan : téléphone bien droit, léger zoom avant pendant que la page défile
+      sc = (job.videoTemplate === 'corporate' ? 0.95 : 1) + 0.06 * easeInOut(p);
     } else {
-      // Deuxième démo : angle et relief, avec un travelling différent.
+      // second plan : téléphone incliné en relief, avec un travelling
       const a = easeInOut(p);
       shx = lerp(0.46, 0.3, a); shy = lerp(-0.27, -0.17, a); rot = lerp(-0.1, -0.04, a);
       sc = lerp(0.8, 0.9, a);
@@ -893,6 +1107,10 @@ function makeRenderer(cv, job) {
     for (let i = depth; i > 0; i--) { ctx.fillStyle = '#2a2b30'; rr(x - i * 0.9, y + i * 0.55, w, h, r); ctx.fill(); }
     ctx.shadowColor = 'rgba(0,0,0,.55)'; ctx.shadowBlur = 50; ctx.shadowOffsetY = 22;
     ctx.fillStyle = '#0b0b0d'; rr(x, y, w, h, r); ctx.fill();
+    // liseré lumineux aux couleurs de la marque (effet néon des modèles TikTok/CapCut)
+    const rim = ctx.createLinearGradient(x, y, x + w, y + h); rim.addColorStop(0, rgbaOf(P, 1)); rim.addColorStop(0.5, rgbaOf(hueOf(P, 40), 1)); rim.addColorStop(1, rgbaOf(A, 1));
+    ctx.shadowColor = rgbaOf(A, 0.9); ctx.shadowBlur = 26 + 10 * Math.sin(local * 3); ctx.shadowOffsetY = 0;
+    ctx.strokeStyle = rim; ctx.lineWidth = Math.max(2.5, w * 0.012); rr(x, y, w, h, r); ctx.stroke();
     ctx.shadowColor = 'transparent';
     ctx.save();
     rr(x + b, y + b, w - b * 2, h - b * 2, r - b); ctx.clip();
@@ -913,6 +1131,13 @@ function makeRenderer(cv, job) {
         ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 4; ctx.fillStyle = '#111'; ctx.fill(); ctx.shadowColor = 'transparent'; ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.stroke();
         ctx.restore();
       }
+    }
+    // éclat qui traverse la vitre une fois, à l'arrivée du téléphone
+    const sweep = clamp((local - (variant === 0 ? 0.35 : 0.25)) / 0.9);
+    if (sweep > 0 && sweep < 1) {
+      const sx = lerp(x - w, x + w * 1.6, easeInOut(sweep)), shine = ctx.createLinearGradient(sx, y, sx + w * 0.55, y + h * 0.3);
+      shine.addColorStop(0, 'rgba(255,255,255,0)'); shine.addColorStop(0.5, 'rgba(255,255,255,.38)'); shine.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = shine; ctx.fillRect(x, y, w, h);
     }
     // reflet de l'écran
     const gl = ctx.createLinearGradient(x, y, x + w, y + h * 0.6);
@@ -1482,7 +1707,10 @@ async function produce(actx) {
     for (let n = 0; n < photos.length; n++) {
       const img = photos[n], id = photoIds[n], key = 'cut' + state.photoUrls[id];
       if (!img) continue;
-      if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null }); continue; }
+      const info = (cache['info' + state.photoUrls[id]] ||= photoInfo(img));
+      if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null, info }); continue; }
+      // produit coupé par les bords de la photo (bracelet, pieds de meuble…) : pas de détourage, la photo est cadrée telle quelle
+      if (!cache[key] && info?.plain && info.touch >= 2) cache[key] = { img, cut: null, info };
       if (!cache[key]) {
         status('Cutting out your product…');
         // 1. Essai côté serveur (ClearBackdrop / Clipdrop / remove.bg), sinon modèle du navigateur
@@ -1507,10 +1735,13 @@ async function produce(actx) {
                 if (x1 - x0 < 20 || y1 - y0 < 20) return null;
                 const out2 = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 1, height: y1 - y0 + 1 });
                 out2.getContext('2d').drawImage(cv2, x0, y0, out2.width, out2.height, 0, 0, out2.width, out2.height);
+                out2.box = [x0 / w2, y0 / h2, (x1 + 1) / w2, (y1 + 1) / h2];
                 return out2;
               })
               .catch(() => null) // 503 (pas de clé) ou erreur → on passe au ONNX local
           : null;
+        // chaque détourage est contrôlé : s'il retire une partie du produit (cadran blanc, maillons argentés…), on passe au suivant
+        if (cut && !cutKeepsProduct(cut, info)) { console.warn('server cutout removed part of the product; trying the next method'); cut = null; }
         // 2. Modèle ONNX local (ormbg) : on le force pour chaque photo réellement utilisée comme produit vedette.
         // Le classement « packshot » de l'analyse ne doit pas empêcher le détourage d'une photo produit classique.
         if (!cut) {
@@ -1518,11 +1749,12 @@ async function produce(actx) {
             ? await window.Cutout.run(img, { force: true, onProgress: (f) => status(`Removing background… ${Math.round(f * 100)}%`) })
                 .catch((e) => { console.warn('ONNX background removal failed', e); return null; })
             : null;
-          cut = localCut || cutout(img);
-          if (!cut) status('Background could not be removed from this photo; using the original image.');
+          cut = cutKeepsProduct(localCut, info) ? localCut : null;
+          if (!cut) { const flat = cutout(img); cut = cutKeepsProduct(flat, info) ? flat : null; }
+          if (!cut) status('This photo is kept intact (the cut-out would have damaged the product).');
         }
         if (job.cancelled) return;
-        cache[key] = { img, cut };
+        cache[key] = { img, cut, info };
       }
       byId.set(id, cache[key]);
     }
@@ -1577,6 +1809,23 @@ async function produce(actx) {
     if (plan.type === 'ecom' && best) scenes.forEach((s, i) => { if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; } });
     // sans photo, la scène retombe sur la vidéo ou le dégradé
     scenes.forEach((s) => { if (!s.ph && (s.visual === 'product' || s.visual === 'detail')) s.visual = 'footage'; });
+    // gros plans : chaque scène vise une zone différente du produit. Le point proposé par l'IA (« le cadran »)
+    // est recalé sur la zone détaillée la plus proche ; sans proposition, on prend la suivante non encore montrée.
+    const shown = new Map();
+    scenes.forEach((s, i) => {
+      s.variant ??= i;
+      const inf = s.ph?.info;
+      if (s.visual !== 'detail' || !inf) return;
+      const pts = inf.focus, n = shown.get(s.ph) || 0, [bx0, by0, bx1, by1] = inf.box;
+      shown.set(s.ph, n + 1);
+      let pt = pts[n % pts.length];
+      if (s.focus) {
+        const [fx, fy] = s.focus, near = pts.map((p) => [Math.hypot(p.x - fx, p.y - fy), p]).sort((a, b) => a[0] - b[0])[0];
+        if (near && near[0] < 0.22) pt = near[1];
+        else if (fx > bx0 && fx < bx1 && fy > by0 && fy < by1) pt = { x: fx, y: fy };
+      }
+      s.focusPt = pt;
+    });
 
     const offline = !!job.MB;
     const first = blobs.findIndex(Boolean), firstStill = stills.find(Boolean) || null;

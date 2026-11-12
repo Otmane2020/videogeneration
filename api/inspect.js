@@ -244,7 +244,10 @@ function extract(html, base) {
     2 * count(/\bpricing\b|\btarifs\b|per month|\/mo\b|par mois|\bapi\b|dashboard|integrations?|workflow|\bsaas\b|platform|plateforme|software|logiciel/g) +
     count(/log ?in|sign ?in|se connecter|docs|changelog|automation|analytics/g) +
     (/"@type"\s*:\s*"(SoftwareApplication|WebApplication)"/i.test(ld) ? 8 : 0);
-  const prices = [...new Set((text.match(/(?:[$€£]\s?\d[\d.,]*|\d[\d.,]*\s?(?:€|EUR|USD|\$|£|MAD|DH))/g) || []).slice(0, 6))];
+  // montants avec séparateurs de milliers (« 28 900,00 € », « $1,299 »), sans les paniers vides à 0,00
+  const AMOUNT = '\\d{1,3}(?:[\\s\\u00a0\\u202f.,\'’]\\d{3})+(?:[.,]\\d{1,2})?|\\d+(?:[.,]\\d{1,2})?';
+  const prices = [...new Set((text.match(new RegExp(`[$€£]\\s?(?:${AMOUNT})|(?<![\\d.,])(?:${AMOUNT})\\s?(?:€|EUR|USD|\\$|£|MAD|DH)`, 'g')) || [])
+    .map((p) => p.replace(/[\u00a0\u202f]/g, ' ')).filter((p) => /[1-9]/.test(p)))].slice(0, 6);
 
   if (product) {
     // options : déduites des variantes, sinon des listes et pastilles de la page

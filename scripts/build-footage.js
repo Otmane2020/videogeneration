@@ -53,8 +53,9 @@ async function main() {
         const rel = judge(qw, t);
         if (rel < 3 && !(rel === 2)) return null;
         const hd = f.medium?.url && f.medium.height >= 1080;
+        if (!hd || (h.downloads || 0) < 300) return null; // bibliothèque : HD 1080p minimum et plans éprouvés (très téléchargés)
         const portrait = std.height > std.width;
-        const score = rel * 100 + (hd ? 25 : 0) + Math.log10((h.downloads || 0) + 1) * 12 + Math.log10((h.likes || 0) + 1) * 6 + (portrait ? 3 : 0);
+        const score = rel * 100 + Math.log10((h.downloads || 0) + 1) * 18 + Math.log10((h.likes || 0) + 1) * 6 + (portrait ? 3 : 0);
         return { h, f, std, hd, score };
       }).filter(Boolean).sort((a, b) => b.score - a.score);
       for (const s of scored) {
@@ -62,12 +63,12 @@ async function main() {
         if ((authors.get(g) || 0) >= 2) continue;
         authors.set(g, (authors.get(g) || 0) + 1);
         picked.push(s);
-        if (picked.length >= 6) break;
+        if (picked.length >= 7) break;
       }
       for (const { h, f, std, hd } of picked) {
         const old = lib.get(h.id);
         if (old) { old.s = [...new Set([...old.s, sector])]; old.k = [...new Set([...old.k, q])]; continue; }
-        lib.set(h.id, { id: h.id, g: h.user_id, s: [sector], k: [q], u: std.url, w: std.width, h: std.height, f: hd ? f.medium.url : '', fw: hd ? f.medium.width : 0, fh: hd ? f.medium.height : 0, l: f.tiny?.url || std.url, th: std.thumbnail || f.tiny?.thumbnail || '', d: h.duration, t: h.tags });
+        lib.set(h.id, { id: h.id, g: h.user_id, s: [sector], k: [q], u: std.url, w: std.width, h: std.height, f: f.medium.url, fw: f.medium.width, fh: f.medium.height, l: f.tiny?.url || std.url, th: std.thumbnail || f.tiny?.thumbnail || '', d: h.duration, t: h.tags });
       }
       process.stdout.write(`\r${n} requêtes · ${lib.size} plans   `);
     }

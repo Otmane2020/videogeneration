@@ -139,15 +139,27 @@ const SAFE = {
 /* ---------- bibliothèque choisie ---------- */
 // data/footage.json (scripts/build-footage.js) : plans HD choisis à la main par secteur et par mot-clé. Elle passe avant la recherche en direct.
 let LIB = null;
+const shape = (e) => {
+  const tags = `${e.t}, ${[].concat(e.k).join(', ')}`;
+  return { id: e.id, g: e.g, kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
+};
+// table `footage` (Neon) d'abord, relue toutes les 10 minutes ; à défaut le fichier livré avec le code
 function library() {
-  if (LIB) return LIB;
-  let raw = [];
-  try { raw = require('../data/footage.json'); } catch { /* pas encore construite */ }
-  LIB = raw.map((e) => {
-    const tags = `${e.t}, ${e.k.join(', ')}`;
-    return { id: e.id, g: e.g, kind: 'video', std: { url: e.u, width: e.w, height: e.h }, full: e.f ? { url: e.f, width: e.fw, height: e.fh } : null, lite: e.l, thumb: e.th, duration: e.d, tags, t: new Set(words(tags)), raw: fold(e.t), curated: true };
-  });
-  return LIB;
+  if (LIB && Date.now() - LIB.at < 6e5) return LIB.p;
+  const p = (async () => {
+    try {
+      const { sql } = require('../lib/db');
+      const rows = await sql('SELECT data, sectors, keywords FROM footage');
+      if (rows.length) return rows.map((r) => shape({ ...r.data, s: r.sectors, k: r.keywords }));
+      // table vide : premier chargement depuis le fichier livré avec le code
+      const file = require('../data/footage.json');
+      require('../lib/footage').seed(file).catch((e) => console.error('footage seed', e.message));
+      return file.map(shape);
+    } catch (e) { console.error('footage db', e.message); }
+    try { return require('../data/footage.json').map(shape); } catch { return []; }
+  })();
+  LIB = { at: Date.now(), p };
+  return p;
 }
 
 /* ---------- une scène ---------- */
@@ -182,9 +194,10 @@ async function findScene(list, { kind = 'video', safe = [], loose = false, until
   };
   // bibliothèque choisie : mêmes critères que la recherche en direct, avec un bonus de qualité
   if (kind === 'video') {
+    const lib = await library();
     queries.forEach((q, i) => {
       const qw = words(q);
-      library().forEach((x) => {
+      lib.forEach((x) => {
         if (banned(x) || unasked(x)) return;
         const fit = judge(qw, x.t);
         if (!fit) return;

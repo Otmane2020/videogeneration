@@ -297,8 +297,9 @@ $('#b-gen').addEventListener('click', async () => {
     // besoin que pour ses scènes vidéo. Derrière le téléphone : un fond sobre, pas une scène qui distrait.
     // SaaS : au moins 5 plans (une par scène + l'écran final), choisis automatiquement
     const closing = ['team collaborating office', 'small business owner working', 'professional team celebrating'];
-    const wanted = state.ad.scenes.map((s) => (ecom && s.visual !== 'footage' ? null : s.queries || []));
-    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : closing], fallback: ecom ? 'lifestyle' : 'saas', hd: !ecom || $('#res').value === '1080' })
+    // E-commerce visuals come only from the product page gallery. Never fill gaps with generic stock clips.
+    const wanted = ecom ? state.ad.scenes.map(() => null) : state.ad.scenes.map((s) => s.queries || []);
+    const lists = ecom ? [] : await api('/api/videos', { scenes: [...wanted, closing], fallback: 'saas', hd: $('#res').value === '1080' })
       .then((r) => r.json()).then(({ results }) => results).catch(() => []);
     state.clipLists = wanted.map((_, i) => lists[i] || []);
     state.ctaList = lists[wanted.length] || [];
@@ -334,9 +335,9 @@ function buildEditor(used) {
     const card = Object.assign(document.createElement('div'), { className: 'edscene' });
     const swap = s.visual === 'footage' || s.visual === 'site';
     const t = Object.assign(document.createElement('button'), { type: 'button', className: 'thumb', disabled: !swap });
-    const src = s.pick?.thumb || (s.photo >= 0 && s.visual !== 'footage' ? state.photoUrls[s.photo] : used[i]?.thumb);
+    const src = s.generatedThumb || s.pick?.thumb || (s.photo >= 0 && s.visual !== 'footage' ? state.photoUrls[s.photo] : used[i]?.thumb);
     if (src) t.append(Object.assign(new Image(), { src, alt: '' }));
-    t.append(Object.assign(document.createElement('em'), { textContent: swap ? 'Change' : VISUAL[s.visual] }));
+    t.append(Object.assign(document.createElement('em'), { textContent: swap ? 'Change' : s.generatedImage ? 'Muse image' : VISUAL[s.visual] }));
     if (swap) { t.setAttribute('aria-label', `Scene ${i + 1}: change visual`); t.addEventListener('click', () => openPicker(i)); }
     const col = document.createElement('div');
     field(col, `Scene ${i + 1} · on-screen text`, s.headline, false, (v) => { s.headline = v || s.headline; });
@@ -555,8 +556,8 @@ function loadVideoEl(blob) {
     v.load();
   });
 }
-async function loadVoice(text, lang) {
-  const buf = await (await api('/api/tts', { text, lang })).arrayBuffer();
+async function loadVoice(text, lang, voice) {
+  const buf = await (await api('/api/tts', { text, lang, voice })).arrayBuffer();
   return new Promise((ok, ko) => new OfflineAudioContext(1, 1, 48000).decodeAudioData(buf, ok, ko));
 }
 
@@ -1010,6 +1011,7 @@ function makeRenderer(cv, job) {
     // Pour une scène de démonstration SaaS, le vrai screenshot du site doit rester lisible.
     // On utilise un décor de marque derrière le téléphone, pas un second footage concurrent.
     if (plan.type === 'saas' && sc.visual === 'site' && shot) return aurora(sc, k, k * sc.dur);
+    if (sc.generatedImage && ph?.img) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.015 + 0.035 * k, 0.5, 0.5);
     if (sc.visual === 'detail' && ph) return framed(sc, ph, k, true);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : framed(sc, ph, k, false);
@@ -1667,7 +1669,7 @@ async function produce(actx) {
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
-  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site' || s.kind === 'cta') || (plan.type === 'ecom' && s.visual === 'footage' && !photoIds.length);
+  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site' || s.kind === 'cta');
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
@@ -1686,7 +1688,21 @@ async function produce(actx) {
     const credit = (list) => { job.credits = [...new Set(list.filter((u) => u?.cr).map((u) => `${u.au || 'Unknown author'} (${u.lic})`))]; };
     const used = (state.used = scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? auto[i] || null : null) : s.pick || auto[i] || null)));
     credit(used);
-    const voice = (text) => (text ? cached(cache.voice, plan.language + '|' + text, () => loadVoice(text, plan.language)) : Promise.resolve(null));
+    const VOICE_POOL = {
+      en: ['aura-2-thalia-en', 'aura-2-asteria-en', 'aura-2-atlas-en', 'aura-2-aurora-en', 'aura-2-aries-en', 'aura-2-ophelia-en', 'aura-2-phoebe-en'],
+      es: ['aura-2-celeste-es', 'aura-2-carina-es', 'aura-2-aquila-es', 'aura-2-luciano-es', 'aura-2-antonia-es', 'aura-2-diana-es'],
+      fr: ['aura-2-agathe-fr', 'aura-2-hector-fr'],
+      de: ['aura-2-viktoria-de', 'aura-2-julius-de', 'aura-2-lara-de'],
+      nl: ['aura-2-beatrix-nl', 'aura-2-sander-nl', 'aura-2-leda-nl'],
+      it: ['aura-2-livia-it', 'aura-2-dionisio-it', 'aura-2-maia-it'],
+      ja: ['aura-2-uzume-ja', 'aura-2-ebisu-ja', 'aura-2-izanami-ja'],
+    };
+    const voiceLang = String(plan.language || '').toLowerCase().split(/[-_]/)[0];
+    const voicePool = VOICE_POOL[voiceLang] || [];
+    // If Aura-2 has no voice for this language, keep the video generation working without narration.
+    // One random voice per finished video: consistent voice across all scenes.
+    const voiceModel = voicePool.length ? voicePool[Math.floor(Math.random() * voicePool.length)] : null;
+    const voice = (text) => (text && voiceModel ? cached(cache.voice, voiceModel + '|' + text, () => loadVoice(text, plan.language, voiceModel)) : Promise.resolve(null));
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([
       Promise.all(scenes.map((s, i) => tick(used[i]?.kind === 'video' && needClip(s) ? cached(cache.blob, used[i].url, () => fetchBlob(media(lite ? used[i].lite : used[i].url))) : Promise.resolve(null)))),
       Promise.all(scenes.map((s, i) => (used[i]?.kind === 'photo' && needClip(s) ? loadImage(media(used[i].url)) : null))),
@@ -1761,11 +1777,10 @@ async function produce(actx) {
       byId.set(id, cache[key]);
     }
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
-    // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
-    if (best?.cut && $('#bgai').value === '1') {
-      status('Creating your one-off product backdrop with Meta Muse Image…');
-      // Une référence JPEG légère suffit pour communiquer la catégorie et les couleurs du produit.
-      // L'image produit ne sera jamais remplacée : seul le fond est généré.
+    // Muse generates exactly ONE complete lifestyle/product-placement image per ad.
+    // Every other e-commerce scene remains a real image selected from the product page gallery.
+    if (best?.img && $('#bgai').value === '1') {
+      status('Generating one product-in-use image with Meta Muse…');
       let referenceImage = null;
       try {
         const maxSide = 768, scale = Math.min(1, maxSide / Math.max(best.img.naturalWidth, best.img.naturalHeight));
@@ -1775,14 +1790,17 @@ async function produce(actx) {
         const refCtx = refCanvas.getContext('2d');
         refCtx.fillStyle = '#11121e'; refCtx.fillRect(0, 0, rw, rh);
         refCtx.drawImage(best.img, 0, 0, rw, rh);
-        referenceImage = refCanvas.toDataURL('image/jpeg', 0.78);
+        referenceImage = refCanvas.toDataURL('image/jpeg', 0.82);
       } catch (error) { console.warn('Could not prepare Muse reference image', error); }
       try {
-        const product = page.product || {};
-        const response = await api('/api/backdrop?a=muse', {
+        const product = page.product || {}, hook = scenes.find((s) => !s.kind);
+        const response = await api('/api/backdrop?a=muse-scene', {
           type: 'ecom',
           format: state.fmt,
-          scene: plan.backdrop,
+          role: 'hook',
+          sceneBrief: plan.backdrop,
+          headline: hook?.headline || '',
+          voiceover: hook?.voiceover || '',
           category: plan.category,
           productName: product.name || page.title || plan.tagline,
           productDescription: product.description || plan.summary || page.description,
@@ -1792,14 +1810,21 @@ async function produce(actx) {
         });
         const imageBlob = await response.blob();
         const objectUrl = URL.createObjectURL(imageBlob);
-        job.backdrop = await loadImage(objectUrl);
-        URL.revokeObjectURL(objectUrl);
-        job.backdropModel = job.backdrop ? (response.headers.get('x-image-model') || 'meta/muse-image') : null;
+        try { job.museImage = await loadImage(objectUrl); }
+        finally { URL.revokeObjectURL(objectUrl); }
+        if (job.museImage) {
+          const tw = 360, th = Math.round(tw * job.museImage.naturalHeight / job.museImage.naturalWidth);
+          const thumb = Object.assign(document.createElement('canvas'), { width: tw, height: th });
+          thumb.getContext('2d').drawImage(job.museImage, 0, 0, tw, th);
+          job.museThumb = thumb.toDataURL('image/jpeg', 0.76);
+          job.backdropModel = response.headers.get('x-image-model') || 'meta/muse-image';
+        } else throw new Error('Muse returned an unreadable image');
       } catch (error) {
-        job.backdrop = null;
+        job.museImage = null;
+        job.museThumb = null;
         job.backdropModel = null;
-        console.warn('Meta Muse backdrop unavailable; using the built-in studio background', error);
-        status('Meta Muse is unavailable right now. Using the built-in studio background.');
+        console.warn('Meta Muse product image unavailable; using the product gallery only', error);
+        status('Muse image unavailable. Continuing with the original product gallery.');
       }
     }
     scenes.forEach((s, i) => {
@@ -1807,9 +1832,21 @@ async function produce(actx) {
       else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;
       s.still = stills[i] || null;
     });
-    // e-commerce : une scène prévue en vidéo de stock devient une scène produit dès qu'une photo existe
-    if (plan.type === 'ecom' && best) scenes.forEach((s, i) => { if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; } });
-    // sans photo, la scène retombe sur la vidéo ou le dégradé
+    // Never substitute stock footage into an e-commerce ad. If Muse is enabled, only the opening hook is AI-generated.
+    if (plan.type === 'ecom' && best) scenes.forEach((s, i) => {
+      if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; }
+    });
+    if (plan.type === 'ecom' && job.museImage) {
+      const hook = scenes.find((s) => !s.kind);
+      if (hook) {
+        hook.visual = 'detail';
+        hook.photo = -1;
+        hook.ph = { img: job.museImage, cut: null };
+        hook.generatedImage = true;
+        hook.generatedThumb = job.museThumb;
+      }
+    }
+    // A missing gallery photo is never replaced by unrelated stock footage.
     scenes.forEach((s) => { if (!s.ph && (s.visual === 'product' || s.visual === 'detail')) s.visual = 'footage'; });
     // gros plans : chaque scène vise une zone différente du produit. Le point proposé par l'IA (« le cadran »)
     // est recalé sur la zone détaillée la plus proche ; sans proposition, on prend la suivante non encore montrée.

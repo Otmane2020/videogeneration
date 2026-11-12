@@ -172,7 +172,7 @@ function syncVariationsOption() {
   $('#opt-vars').hidden = !n;
   $('#vars').value = '0';
   $$('.seg[data-for=vars] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '0')));
-  if (n) $('#vars-hint').textContent = `This product comes in ${n} colours (${colorVariants().map((c) => c.name).join(', ')}). Adds a scene that picks each one after the other.`;
+  if (n) $('#vars-hint').textContent = `This product comes in ${n} colours (${colorVariants().map((c) => shortColor(c.name)).join(', ')}). Adds a scene that picks each one after the other.`;
 }
 const variantOf = () => (state.page.product?.variants || []).find((v) => Object.entries(state.variant).every(([k, val]) => v.options[k] === val)) || null;
 function initVariant() {
@@ -182,11 +182,13 @@ function initVariant() {
 }
 // toutes les photos disponibles : importées à la main d'abord, puis celles de la page
 function allPhotos() {
-  return [...state.uploads.map((u) => ({ show: u.url, send: u.data, source: u.url })), ...state.page.images.map((u) => ({ show: media(u), send: u, source: u }))];
+  const v = variantOf(), extra = v?.sibling && v.image && !state.page.images.includes(v.image) ? [v.image] : [];
+  return [...state.uploads.map((u) => ({ show: u.url, send: u.data, source: u.url })), ...[...extra, ...state.page.images].map((u) => ({ show: media(u), send: u, source: u }))];
 }
 // sélection par défaut : la photo de la variante choisie en tête, sans les photos des autres variantes
 function autoPick() {
   const v = variantOf(), others = new Set((state.page.product?.variants || []).map((x) => x.image).filter((u) => u && u !== v?.image));
+  if (v?.sibling && v.image) { state.picked = [v.image]; return; }
   const list = allPhotos().map((p) => p.send);
   state.picked = [...(v?.image && list.includes(v.image) ? [v.image] : []), ...list.filter((u) => u !== v?.image && !others.has(u))].slice(0, MAX_PHOTOS);
 }
@@ -280,8 +282,16 @@ const COLORS_COPY = {
   ar: { head: (n) => `${n} ألوان للاختيار`, say: (l) => `متوفر بعدة ألوان: ${l}.`, and: 'و' , more: 'والمزيد' },
   ja: { head: (n) => `${n}色から選べます`, say: (l) => `複数のカラーをご用意しています：${l}。`, and: 'と' , more: 'など' },
 };
+// nom court d'un coloris pour la voix et l'étiquette : « cadran bleu fond squelette bracelet acier bleu » → « Bleu »
+function shortColor(name) {
+  const words = String(name).split(/\s+/);
+  if (words.length <= 3) return name;
+  const t = (w) => w.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const hit = words.find((w) => COLOR_NAMES.some(([n]) => !n.includes(' ') && t(w) === n));
+  return hit ? hit[0].toUpperCase() + hit.slice(1) : name;
+}
 function addColorsScene(plan, ad) {
-  const colors = colorVariants();
+  const colors = colorVariants().map((c) => ({ ...c, name: shortColor(c.name) }));
   if (colors.length < 2) return;
   const copy = COLORS_COPY[plan.language] || COLORS_COPY.en;
   const names = colors.map((c) => c.name);
@@ -741,6 +751,8 @@ function onColor(hex) {
 function wrap(ctx, text, maxW, maxLines) {
   const lines = [];
   let line = '';
+  // un nombre reste collé à sa devise ou à son unité (« 299 € », « -20 % », « 43 mm »)
+  text = String(text).replace(/(\d)\s+(€|\$|£|%|DH|MAD|CHF|mm|cm|ml|kg|g)(?=\s|$|[.,!?])/g, '$1\u00a0$2');
   for (const w of text.split(/[ \t\n\r]+/)) {
     const t = line ? line + ' ' + w : w;
     if (line && ctx.measureText(t).width > maxW) { lines.push(line); line = w; } else line = t;
@@ -781,8 +793,8 @@ const COLOR_NAMES = [
   ['noir', '#111111'], ['black', '#111111'], ['schwarz', '#111111'], ['negro', '#111111'], ['nero', '#111111'], ['zwart', '#111111'], ['preto', '#111111'],
   ['blanc', '#f4f4f2'], ['white', '#f4f4f2'], ['weiss', '#f4f4f2'], ['blanco', '#f4f4f2'], ['bianco', '#f4f4f2'], ['wit', '#f4f4f2'], ['branco', '#f4f4f2'],
   ['gris', '#8e9196'], ['grey', '#8e9196'], ['gray', '#8e9196'], ['grau', '#8e9196'], ['grigio', '#8e9196'], ['grijs', '#8e9196'], ['cinza', '#8e9196'], ['anthracite', '#3a3d40'],
-  ['argent', '#c4c8cc'], ['silver', '#c4c8cc'], ['silber', '#c4c8cc'], ['plata', '#c4c8cc'], ['argento', '#c4c8cc'], ['acier', '#9aa0a6'], ['steel', '#9aa0a6'],
-  ['dore', '#d4a63a'], ['gold', '#d4a63a'], ['dorado', '#d4a63a'], ['oro', '#d4a63a'], ['or', '#d4a63a'], ['champagne', '#e6d3a8'], ['cuivre', '#b8693d'], ['copper', '#b8693d'], ['bronze', '#9a6a3a'],
+  ['argent', '#c4c8cc'], ['argente', '#c4c8cc'], ['argentee', '#c4c8cc'], ['silver', '#c4c8cc'], ['silber', '#c4c8cc'], ['plata', '#c4c8cc'], ['argento', '#c4c8cc'], ['acier', '#9aa0a6'], ['steel', '#9aa0a6'],
+  ['dore', '#d4a63a'], ['doree', '#d4a63a'], ['gold', '#d4a63a'], ['dorado', '#d4a63a'], ['oro', '#d4a63a'], ['or', '#d4a63a'], ['champagne', '#e6d3a8'], ['cuivre', '#b8693d'], ['copper', '#b8693d'], ['bronze', '#9a6a3a'],
   ['rouge', '#d1342f'], ['red', '#d1342f'], ['rojo', '#d1342f'], ['rot', '#d1342f'], ['rosso', '#d1342f'], ['rood', '#d1342f'], ['vermelho', '#d1342f'], ['bordeaux', '#6d1f2f'], ['burgundy', '#6d1f2f'],
   ['bleu', '#2f5fd0'], ['blue', '#2f5fd0'], ['azul', '#2f5fd0'], ['blau', '#2f5fd0'], ['blu', '#2f5fd0'], ['blauw', '#2f5fd0'], ['marine', '#1d2b53'], ['navy', '#1d2b53'], ['turquoise', '#25b7b0'],
   ['vert', '#2f9a57'], ['green', '#2f9a57'], ['verde', '#2f9a57'], ['gruen', '#2f9a57'], ['groen', '#2f9a57'], ['kaki', '#7a7a3c'], ['khaki', '#7a7a3c'],
@@ -2093,7 +2105,7 @@ async function produce(actx) {
       s.voice = voices[i];
       s.speech = s.voice ? s.voice.duration : s.voiceover ? s.voiceover.split(/\s+/).length * 0.36 : 0;
     });
-    const tl = timeline(scenes, target, !target && plan.type === 'saas');
+    const tl = timeline(scenes, target, !target); // durée « Auto » : coupes serrées, rythme réseaux sociaux
     job.total = tl.total; job.rate = tl.rate;
     scenes.forEach((s) => { s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, s.speech / tl.rate, 0.3) : []; });
     // logos : chacun apparaît quand son nom est dit (à défaut, à intervalles réguliers)

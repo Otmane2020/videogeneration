@@ -361,6 +361,22 @@ async function demandware(page, html) {
     if (Array.isArray(arr) && arr.length) { attrs = arr; break; }
   }
   attrs = attrs.filter((a) => a && Array.isArray(a.values) && a.values.length).slice(0, 4);
+  // Coloris présentés comme des fiches « sœurs » (bloc « Couleurs » : productShowcases), chacune avec sa photo
+  const showAt = html.search(/"productShowcases"\s*:\s*\[/);
+  const shows = showAt >= 0 ? (jsonArrayAt(html, html.indexOf('[', showAt)) || []).filter((x) => x && x.name && x.image?.url) : [];
+  if (shows.length >= 2) {
+    const current = (html.match(/"masterId"\s*:\s*"([^"]+)"/) || [])[1] || '';
+    const big = (u) => { try { const x = new URL(u, page.url); x.searchParams.set('sw', '1200'); x.searchParams.delete('sh'); return x.href; } catch { return ''; } };
+    const list = shows.slice(0, 8).map((x) => ({
+      options: { Couleur: String(x.name).trim().slice(0, 60) }, price: '', image: big(x.image.url), available: true,
+      sibling: !!current && x.defaultMasterId !== current, url: (() => { const id = String(x.defaultMasterId || '').replace(/^M_/, ''); const m = id && html.match(new RegExp(`href="([^"]*${id}\\.html)"`)); return m ? new URL(m[1], page.url).href : ''; })(),
+    }));
+    list.sort((a, b) => Number(a.sibling) - Number(b.sibling)); // la fiche affichée en premier
+    page.product ||= { name: '', description: '', brand: '', price: '', currency: '', options: [], variants: [] };
+    page.product.variants = list.map((v) => (v.sibling ? v : { ...v, price: page.product.price }));
+    page.product.options = [{ name: 'Couleur', values: list.map((v) => v.options.Couleur) }];
+    page.source = page.source || 'demandware';
+  }
   if (!attrs.length) return;
   const host = new URL(page.url).hostname;
   const label = (v) => String(v.displayValue ?? v.value ?? v.id ?? '').trim().slice(0, 40);
@@ -401,8 +417,9 @@ async function demandware(page, html) {
     out.variants = list.map(({ selected, ...x }) => x);
   }
   page.product ||= { name: '', description: '', brand: '', price: '', currency: '', options: [], variants: [] };
-  page.product.options = attrs.map((a) => ({ name: String(a.displayName || a.attributeId || 'Option').slice(0, 30), values: a.values.filter(orderable).map(label).filter(Boolean).slice(0, 30) }));
-  if (out.variants?.length) page.product.variants = out.variants;
+  const attrOpts = attrs.map((a) => ({ name: String(a.displayName || a.attributeId || 'Option').slice(0, 30), values: a.values.filter(orderable).map(label).filter(Boolean).slice(0, 30) }));
+  page.product.options = shows.length >= 2 ? [...page.product.options, ...attrOpts].slice(0, 4) : attrOpts;
+  if (out.variants?.length && shows.length < 2) page.product.variants = out.variants;
   if (!page.product.price) page.product.price = out.variants?.find((v) => v.price)?.price || '';
   page.source = page.source || 'demandware';
 }

@@ -358,10 +358,10 @@ $('#b-gen').addEventListener('click', async () => {
     // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
     // besoin que pour ses scènes vidéo. Derrière le téléphone : un fond sobre, pas une scène qui distrait.
     // SaaS : au moins 5 plans (une par scène + l'écran final), choisis automatiquement
-    const closing = ['team collaborating office', 'small business owner working', 'professional team celebrating'];
+    // L'écran final SaaS est un décor de marque (aurore lumineuse), pas un plan de stock générique hors sujet.
     // E-commerce visuals come only from the product page gallery. Never fill gaps with generic stock clips.
     const wanted = ecom ? state.ad.scenes.map(() => null) : state.ad.scenes.map((s) => s.queries || []);
-    const lists = ecom ? [] : await api('/api/videos', { scenes: [...wanted, closing], fallback: 'saas', hd: $('#res').value === '1080' })
+    const lists = ecom ? [] : await api('/api/videos', { scenes: wanted, moods: state.ad.scenes.map((s, i) => (s.role === 'outcome' || s.role === 'demo' || i === state.ad.scenes.length - 1 ? 'positive' : 'any')), fallback: 'saas', hd: $('#res').value === '1080' })
       .then((r) => r.json()).then(({ results }) => results).catch(() => []);
     state.clipLists = wanted.map((_, i) => lists[i] || []);
     state.ctaList = lists[wanted.length] || [];
@@ -1147,7 +1147,7 @@ function makeRenderer(cv, job) {
     if (sc.colors) return colorsBg(sc, k);
     // Pour une scène de démonstration SaaS, le vrai screenshot du site doit rester lisible.
     // On utilise un décor de marque derrière le téléphone, pas un second footage concurrent.
-    if (plan.type === 'saas' && sc.visual === 'site' && shot) return aurora(sc, k, k * sc.dur);
+    if (plan.type === 'saas' && ((sc.visual === 'site' && shot) || sc.kind === 'cta')) return aurora(sc, k, k * sc.dur);
     if (sc.generatedImage && ph?.img) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.015 + 0.035 * k, 0.5, 0.5);
     if (sc.visual === 'detail' && ph) return framed(sc, ph, k, true);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
@@ -1520,9 +1520,10 @@ function makeRenderer(cv, job) {
       const r = product(ph, box, local, clamp(local / sc.dur), true);
       if (plan.price) pill(plan.price, Math.min(W - pad - 70, r.x + r.w * 0.85), Math.max(box.y + 20, r.y + r.h * 0.1), local - 0.3, 34);
     } else {
-      ctx.fillStyle = 'rgba(8,6,18,.66)'; ctx.fillRect(0, 0, W, H);
+      // SaaS : l'aurore de marque reste visible (voile léger) ; e-commerce sans détourage : voile plus dense sur la photo
+      ctx.fillStyle = plan.type === 'saas' ? 'rgba(8,6,18,.18)' : 'rgba(8,6,18,.66)'; ctx.fillRect(0, 0, W, H);
       g = ctx.createLinearGradient(0, H * 0.35, 0, H);
-      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, P + 'cc');
+      g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, plan.type === 'saas' ? 'rgba(0,0,0,.55)' : P + 'cc');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       if (plan.price) pill(plan.price, W / 2, H * 0.2, local - 0.3, 34);
     }
@@ -1551,6 +1552,14 @@ function makeRenderer(cv, job) {
       ctx.shadowColor = 'rgba(0,0,0,.4)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
       ctx.fillStyle = A; rr(-bwid / 2, -bh / 2, bwid, bh, bh / 2); ctx.fill();
       ctx.shadowColor = 'transparent';
+      // halo qui respire et reflet qui balaie le bouton : l'œil va au bouton
+      ctx.strokeStyle = A; ctx.lineWidth = 3; ctx.globalAlpha = clamp(k3) * (0.5 - 0.5 * ((local * 1.4) % 1));
+      const grow = 10 + 26 * ((local * 1.4) % 1); rr(-bwid / 2 - grow, -bh / 2 - grow, bwid + grow * 2, bh + grow * 2, bh / 2 + grow); ctx.stroke();
+      ctx.globalAlpha = clamp(k3);
+      ctx.save(); rr(-bwid / 2, -bh / 2, bwid, bh, bh / 2); ctx.clip();
+      const sx = -bwid / 2 + ((local * 0.8) % 1.6) * bwid * 1.2 - bwid * 0.4, sh = ctx.createLinearGradient(sx, 0, sx + 70, 0);
+      sh.addColorStop(0, 'rgba(255,255,255,0)'); sh.addColorStop(0.5, 'rgba(255,255,255,.45)'); sh.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = sh; ctx.fillRect(-bwid / 2, -bh / 2, bwid, bh); ctx.restore();
       ctx.fillStyle = onColor(A); ctx.fillText(sc.headline, 0, 13, bwid - 40);
       ctx.restore();
     }
@@ -1623,6 +1632,12 @@ function makeRenderer(cv, job) {
       ctx.restore();
       if (kind === 'flash') { ctx.fillStyle = `rgba(255,255,255,${0.55 * Math.sin(Math.PI * clamp(local / TRANS))})`; ctx.fillRect(0, 0, W, H); }
       if (kind === 'wipe' && e < 1) { ctx.strokeStyle = A; ctx.lineWidth = 10 * (1 - e) + 2; ctx.beginPath(); ctx.arc(W / 2, H * 0.55, e * Math.hypot(W, H) * 0.62, 0, 7); ctx.stroke(); }
+    } else if (idx === 0 && local < 0.5) {
+      // ouverture « stop-scroll » : coup de zoom et éclair blanc dans la première demi-seconde (la toute première image reste nette)
+      const e = easeOut(local / 0.5);
+      ctx = layer.getContext('2d'); full(sc, local); ctx = main;
+      ctx.save(); ctx.translate(W / 2, H / 2); ctx.scale(1.2 - 0.2 * e, 1.2 - 0.2 * e); ctx.translate(-W / 2, -H / 2); ctx.drawImage(layer, 0, 0, W, H); ctx.restore();
+      if (local < 0.32) { ctx.fillStyle = `rgba(255,255,255,${0.6 * Math.sin(Math.PI * local / 0.32)})`; ctx.fillRect(0, 0, W, H); }
     } else { ctx = main; full(sc, local); }
     if (plan.type === 'saas') finish(t);
     chrome(t, idx);
@@ -1660,9 +1675,10 @@ const FPS = 30;
 
 // Durées des scènes. Avec une durée imposée, le total tombe juste à l'image près :
 // on étire les scènes s'il reste du temps, sinon on accélère un peu la voix (30 % au plus).
-function timeline(scenes, target) {
+function timeline(scenes, target, snappy = false) {
   const min = (s) => (s.kind === 'cta' ? 2.6 : 2.2);
-  let rate = 1, durs = scenes.map((s) => Math.max(s.kind === 'cta' ? 3.2 : 2.6, s.speech + 0.8));
+  // « snappy » : pub SaaS en durée automatique, coupes plus serrées pour garder le rythme des réseaux sociaux
+  let rate = 1, durs = scenes.map((s) => (snappy ? Math.max(s.kind === 'cta' ? 2.8 : 2.0, s.speech + 0.45) : Math.max(s.kind === 'cta' ? 3.2 : 2.6, s.speech + 0.8)));
   let sum = durs.reduce((a, b) => a + b, 0);
   if (target) {
     if (sum > target) {
@@ -2053,14 +2069,14 @@ async function produce(actx) {
     const first = blobs.findIndex(Boolean), firstStill = stills.find(Boolean) || null;
     if (offline) {
       const opened = await Promise.all(blobs.map((b) => (b ? openClip(job.MB, b, cv.width, cv.height) : null)));
-      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? opened[i] || opened[first] || null : opened[i]; });
+      scenes.forEach((s, i) => { s.clip = s.kind === 'cta' ? (plan.type === 'saas' ? null : opened[i] || opened[first] || null) : opened[i]; });
     }
     scenes[scenes.length - 1].still = first < 0 ? firstStill : null;
     scenes.forEach((s, i) => {
       s.voice = voices[i];
       s.speech = s.voice ? s.voice.duration : s.voiceover ? s.voiceover.split(/\s+/).length * 0.36 : 0;
     });
-    const tl = timeline(scenes, target);
+    const tl = timeline(scenes, target, !target && plan.type === 'saas');
     job.total = tl.total; job.rate = tl.rate;
     scenes.forEach((s) => { s.words = s.voiceover && s.kind !== 'cta' ? karaoke(s.voiceover, s.speech / tl.rate, 0.3) : []; });
     // logos : chacun apparaît quand son nom est dit (à défaut, à intervalles réguliers)
@@ -2079,7 +2095,7 @@ async function produce(actx) {
     if (job.cancelled) return;
     if (!blob) {
       const vids = await Promise.all(blobs.map((b) => (b ? loadVideoEl(b) : null)));
-      scenes.forEach((s, i) => { s.frame = null; s.video = s.kind === 'cta' ? vids[i] || vids[first] || null : vids[i]; });
+      scenes.forEach((s, i) => { s.frame = null; s.video = s.kind === 'cta' ? (plan.type === 'saas' ? null : vids[i] || vids[first] || null) : vids[i]; });
       blob = await exportRealtime(job, cv, draw);
     }
     if (job.cancelled) return;

@@ -56,6 +56,9 @@ Icon: give a scene one pictogram only when it makes the idea clearer at a glance
 Logos: whenever a scene's sentence names a real outside product or platform (ChatGPT, Slack, Shopify, Google…), list it in "logos" (up to 3), as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content AND mentioned by the scene's own headline or voice-over (write them in the sentence so viewers hear what they see): never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
 Narrative and footage rules:
 - Exactly four scenes, each with a different purpose and a distinct real-world shot. The first scene must be an immediate human/customer hook, not a generic computer close-up.
+- Write like a performance marketer for TikTok and Reels: the whole ad lasts about 15 seconds, every voiceover is ONE punchy line of 4 to 8 words, second person ("you"), active verbs, no filler.
+- The hook must stop the scroll in the first second: a direct question about the viewer's pain or a bold, provocative statement (e.g. "Still invisible on Google?"), headline max 4 words. Never open with the brand name or a soft introduction.
+- The closing line (ctaVoiceover) pushes to act now with urgency, without inventing offers, discounts, figures or deadlines that are not on the page.
 - Use "site" for exactly two scenes, preferably scenes 2 and 3, to show the real captured website inside the phone. Do not invent a dashboard or fabricate UI.
 - Use "footage" for the hook and the other real-world context/outcome scenes. Match the actual customer's industry, job and situation.
 - Avoid repeated office-meeting/laptop shots. Vary shot type, person, action and setting (wide, close-up, over-the-shoulder, in-use, collaboration).

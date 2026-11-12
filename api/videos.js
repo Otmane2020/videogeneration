@@ -226,6 +226,7 @@ async function findScene(list, { kind = 'video', safe = [], loose = false, until
 
 // ce que reçoit le navigateur : `rel` dit à quel point le plan répond à la scène (3 = exactement, 0 = plan de secours),
 // `g` identifie son auteur (deux plans du même auteur se ressemblent souvent)
+const NEGATIVE = /\b(stress\w*|tired|sad|sadness|worr\w*|headache|frustrat\w*|anxi\w*|angry|anger|cry\w*|tears?|depress\w*|problem\w*|exhaust\w*|upset|fail\w*|lonely|pain|sick|despair|overwork\w*|burnout|confus\w*|annoy\w*)\b/i;
 const out = (x, hd) => {
   const pick = hd && x.full && x.kind === 'video' ? x.full : x.std;
   return { id: x.id, g: x.g, kind: x.kind, url: pick.url, lite: x.lite, w: pick.width, h: pick.height, hd: !!x.full, thumb: x.thumb, ...(x.kind === 'video' ? { duration: x.duration } : {}), ...(x.cr ? { cr: true, au: x.au || '', lic: x.lic || '' } : {}), rel: x.rel };
@@ -233,14 +234,18 @@ const out = (x, hd) => {
 
 module.exports = handler('POST', async (req, res) => {
   if (!pixabayKeys().length && !pexelsKey() && !coverrKey()) throw httpError(500, 'Stock library is not configured');
-  const { scenes, fallback, hd, kind, loose } = await readJson(req);
+  const { scenes, fallback, hd, kind, loose, moods } = await readJson(req);
   if (!Array.isArray(scenes) || !scenes.length || scenes.length > 8) throw httpError(400, 'Invalid queries');
   const safe = SAFE[fallback] || [], until = Date.now() + 25000;
   const results = await Promise.all(scenes.map(async (list, i) => {
     // chaque scène commence la liste de secours à un endroit différent : deux scènes n'héritent pas du même plan
     const mine = safe.map((_, k) => safe[(i + k) % safe.length]);
     // `null` : la scène n'a pas besoin de plan (elle montre une photo produit)
-    return list === null ? [] : (await findScene(list, { kind: kind === 'photo' ? 'photo' : 'video', safe: mine, loose: !!loose, until })).map((x) => out(x, !!hd));
+    if (list === null) return [];
+    const found = await findScene(list, { kind: kind === 'photo' ? 'photo' : 'video', safe: mine, loose: !!loose, until });
+    // scène de résultat (« trouvé partout », « gagnez du temps ») : pas de personne stressée, triste ou en échec à l'écran
+    const calm = Array.isArray(moods) && moods[i] === 'positive' ? found.filter((x) => !NEGATIVE.test(`${x.tags || ''} ${[].concat(x.k || []).join(' ')}`)) : found;
+    return (calm.length ? calm : found).map((x) => out(x, !!hd));
   }));
   send(res, 200, { results, library: source });
 });

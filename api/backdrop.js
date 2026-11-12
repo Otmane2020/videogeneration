@@ -42,12 +42,15 @@ async function cfFlux(prompt, ratio) {
              : /* 16:9 */         { width: 1024, height: 576 };
   for (const model of models) {
     try {
-      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${id}/ai/run/${model}`, {
-        method: 'POST',
-        signal: AbortSignal.timeout(45000),
-        headers: { authorization: `Bearer ${tok}`, 'content-type': 'application/json' },
-        body: JSON.stringify({ prompt, ...dims, num_inference_steps: 8 }),
-      });
+      // FLUX.2 Klein : multipart (largeur et hauteur libres) ; FLUX.1 Schnell : JSON, image carrée seulement
+      const klein = model.includes('flux-2');
+      let init;
+      if (klein) {
+        const fd = new FormData();
+        fd.append('prompt', prompt); fd.append('width', String(dims.width)); fd.append('height', String(dims.height));
+        init = { body: fd, headers: { authorization: `Bearer ${tok}` } };
+      } else init = { body: JSON.stringify({ prompt, steps: 8 }), headers: { authorization: `Bearer ${tok}`, 'content-type': 'application/json' } };
+      const r = await fetch(`https://api.cloudflare.com/client/v4/accounts/${id}/ai/run/${model}`, { method: 'POST', signal: AbortSignal.timeout(45000), ...init });
       if (!r.ok) { const t = await r.text().catch(() => ''); console.warn('CF AI', model, r.status, t.slice(0, 200)); continue; }
       const ct = r.headers.get('content-type') || '';
       if (ct.startsWith('image/')) {
@@ -59,7 +62,7 @@ async function cfFlux(prompt, ratio) {
       const b64 = j.result?.image || j.result?.images?.[0] || '';
       if (b64) {
         const buf = Buffer.from(b64, 'base64');
-        return { type: 'image/png', buf };
+        return { type: buf[0] === 0xff && buf[1] === 0xd8 ? 'image/jpeg' : 'image/png', buf };
       }
     } catch (e) { console.warn('CF AI error', model, e.message); }
   }

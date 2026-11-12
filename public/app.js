@@ -2008,7 +2008,7 @@ async function produce(actx) {
       const product = page.product || {}, story = scenes.filter((x) => !x.kind);
       const shot = async (role, sc) => {
         const response = await api('/api/backdrop?a=muse-scene', {
-          type: 'ecom', format: state.fmt, role, sceneBrief: role === 'hook' ? plan.backdrop : '',
+          type: 'ecom', format: state.fmt, role, sceneBrief: plan.visualConcepts?.[role === 'hook' ? 0 : 1] || (role === 'hook' ? plan.backdrop : ''),
           headline: sc?.headline || '', voiceover: sc?.voiceover || '', category: plan.category,
           productName: product.name || page.title || plan.tagline,
           productDescription: product.description || plan.summary || page.description,

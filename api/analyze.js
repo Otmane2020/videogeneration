@@ -80,6 +80,7 @@ ${SHAPE_HEAD}
  "category": string,                  // product category, 1-3 words
  "decor": "studio"|"warm"|"dark"|"pastel",  // backdrop that suits the category: furniture/home → warm, watches/tech/luxury → dark, cosmetics/kids → pastel, otherwise studio
  "backdrop": string,                  // ENGLISH, max 25 words: a premium, cinematic ad setting tailored to this product (place, materials, light, mood). Describe the empty setting only, never the product
+ "visual_concepts": [string, string], // ENGLISH, 20-40 words each: TWO very different, scroll-stopping advertising key visuals for THIS exact product, invented for its domain (product alone as the hero, no person): setting, props, materials, light, colours, camera angle. Be creative and specific to the category, never generic. Inspiration — perfume: bottle on wet black stone, golden liquid splash frozen mid-air, floating petals of its notes; furniture: the piece in a sunlit minimalist loft, long window shadows, travertine floor, architectural-magazine look; sneakers: shoe levitating over a neon-lit wet street, blue and violet rim light, water splash; skincare: jar on rippling water with fresh botanicals, soft pastel light; jewellery: piece on black velvet with sparkling caustics and a golden spotlight; watch: on a black mirror with a golden light arc and floating gold dust; headphones: floating inside a glowing purple-blue neon ring; handbag: on a marble pedestal in a luxury boutique under soft spotlights; food or drink: ingredients flying around it, splash, vivid colours
  "photos": [{"index": number, "shows": string, "kind": "packshot"|"lifestyle"|"detail"|"accessory"|"other", "usable": boolean}],  // FIRST look at each photo and say in "shows" (max 8 words) what it really shows. packshot = the product alone on a plain background; lifestyle = the product worn or used in a real setting; detail = a close-up of a part of the product; accessory = packaging, gift box, case, bag, certificate, warranty card, size chart or any object that is NOT the product itself; usable=false for accessory, banners, logos, text-only and unrelated images (an advert must never promote a box or an accessory in place of the product, unless that box or accessory is itself the item sold)
  "ads": [                             // exactly 1 ad, built for the goal given below
   {"angle": string,
@@ -402,6 +403,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
     templateStyle: TEMPLATE_RENDER[VIDEO_TEMPLATES.includes(d.videoTemplate) ? d.videoTemplate : autoTemplate(type, intent, [d.category, d.summary, d.audience, page.title, page.description].join(' '))] || 'cinematic',
     decor: DECORS.includes(d.decor) ? d.decor : 'studio',
     backdrop: type === 'ecom' ? str(d.backdrop, 220) : '',
+    visualConcepts: type === 'ecom' && Array.isArray(d.visual_concepts) ? d.visual_concepts.map((v) => str(v, 320)).filter((v) => v.length > 20).slice(0, 2) : [],
     price,
     photos,
     palette: {

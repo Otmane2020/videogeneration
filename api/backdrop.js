@@ -225,27 +225,28 @@ module.exports = handler('POST', async (req, res) => {
     // Deux familles de plans : le « key visual » qui arrête le pouce (produit seul en héros, lumière spectaculaire)
     // et le plan d'usage (produit porté ou utilisé). L'accroche, le deuxième plan et l'écran final sont des key visuals.
     const hero = role !== 'context' && role !== 'demo';
-    const mood = /watch|montre|jewel|bijou|ring|bague|necklace|collier|bracelet|perfume|parfum|luxury|luxe|leather|cuir/i.test(`${category} ${productName} ${description}`)
-      ? 'luxury'
-      : /sneaker|shoe|chaussure|basket|headphone|casque|audio|earbud|speaker|phone|tech|gaming|console|laptop|camera/i.test(`${category} ${productName} ${description}`) ? 'tech' : 'premium';
-    const look = {
-      hook: {
-        tech: 'Ultra-dramatic studio key visual: the product alone, low-angle three-quarter view, on a glossy black reflective floor with a mirror reflection; electric blue and violet neon rim lights; a glowing neon light ring or arc behind it; deep night background of blurred blue and purple city-light bokeh; light haze; razor-sharp product, crisp specular highlights, high contrast, saturated cinematic colour grade.',
-        luxury: 'Ultra-dramatic luxury studio key visual: the product alone as a precious object, low three-quarter angle, standing on a black mirror-glass surface with a perfect reflection; a single warm golden spotlight from above, golden rim light, a thin glowing golden light arc behind it, floating gold dust in a dark background; deep shadows, rich contrast, razor-sharp details, high-end jewellery-campaign colour grade. No rocks, no outdoor scenery.',
-        premium: 'Ultra-dramatic studio key visual: the product alone, low-angle three-quarter view, on a glossy reflective surface with a soft mirror reflection; vivid rim lights in the brand colours; a glowing light arc behind it; dark gradient background with soft coloured bokeh; razor-sharp product, crisp highlights, high contrast, saturated cinematic colour grade.',
-      },
-      outcome: {
-        tech: 'Second eye-catching key visual, different from the first: the product alone floating slightly above a glossy surface at a dynamic angle, surrounded by sweeping light trails and a purple-to-blue gradient glow, subtle particles in the air, sharp reflections, energetic and futuristic.',
-        luxury: 'Second eye-catching luxury key visual, different from the first: the product alone in a natural premium setting (dark rocks, polished marble or rich wood) at golden hour, warm sunlight rays and glowing bokeh, an amber crystal or glinting highlights nearby, dramatic shallow depth of field, opulent and cinematic.',
-        premium: 'Second eye-catching key visual, different from the first: the product alone in a beautiful premium setting that suits it, dramatic directional light, glowing bokeh, shallow depth of field, rich saturated colours, editorial and aspirational.',
-      },
-      cta: {
-        tech: 'Final hero key visual: the product alone, centred, glowing neon rim light in blue and violet, glossy reflective floor, clean dark space above for the call to action.',
-        luxury: 'Final hero key visual: the product alone, centred, warm golden glow and bokeh, dark luxurious background, clean space above for the call to action.',
-        premium: 'Final hero key visual: the product alone, centred, glowing rim light in the brand colours, glossy floor, clean dark space above for the call to action.',
-      },
-    }[role === 'hook' || role === 'cta' ? role : 'outcome'][mood];
-    const direction = hero ? look : {
+    const text = `${category} ${productName} ${description}`;
+    const DOMAINS = [
+      ['perfume', /perfume|parfum|fragrance|eau de|cologne/i, ['the bottle on wet black stone, a golden liquid splash frozen mid-air around it, floating petals and ingredients of its notes, warm backlight through the glass, dark luxurious background', 'the bottle on a mirror pool reflecting a pastel sunset sky, soft mist and drifting petals, glowing caustics through the glass, dreamy and sensual']],
+      ['furniture', /\b(sofa|canap\w*|chair|chaise|fauteuil|tables?|bed|lit|meubles?|furniture|armoire|cabinet|shelf|étagère|desk|bureau|lamp|lampe|rug|tapis|commode|buffet|console)\b/i, ['the piece alone in a sunlit minimalist loft, long shadows from tall windows, travertine floor, a few curated objects, warm golden-hour light, architectural-magazine photography', 'the piece in a dramatic gallery-like space with a curved plaster wall, sculptural spotlight, deep warm tones, a single plant casting shadows, editorial interior campaign']],
+      ['watch', /watch|montre|chrono/i, ['the watch standing on a black mirror-glass surface with a perfect reflection, a single warm golden spotlight, a thin glowing golden light arc behind it, floating gold dust', 'the watch on dark rocks at golden hour, warm sun rays and glowing bokeh, amber crystals glinting nearby, dramatic shallow depth of field']],
+      ['jewellery', /jewel|bijou|ring|bague|necklace|collier|earring|boucle d|pendant|pendentif|bracelet|diamond|diamant/i, ['the piece on black velvet with sparkling caustics, a single golden spotlight, tiny floating light sparkles, extreme macro detail', 'the piece resting on a polished dark marble plinth beside a glowing crystal, warm golden bokeh, refined and precious']],
+      ['shoes', /sneaker|shoe|chaussure|basket|boot|botte|sandal|trainer/i, ['the shoe levitating above a wet neon-lit street at night, electric blue and violet rim lights, a frozen water splash, glossy reflections', 'the shoe bursting through a cloud of coloured powder on a dark stage, dynamic angle, energetic rim light, motion and power']],
+      ['tech', /headphone|casque|earbud|écouteur|speaker|enceinte|phone|téléphone|laptop|tablet|camera|console|gaming|keyboard|mouse|smartwatch/i, ['the product floating inside a glowing purple-blue neon ring, glossy black floor reflections, light haze, futuristic studio', 'the product on a dark glass pedestal with sweeping light trails and sound-wave or data-like glowing lines around it, sleek and premium']],
+      ['beauty', /skin|cream|crème|serum|sérum|lotion|makeup|maquillage|lipstick|rouge|mascara|shampoo|shampooing|soin|cosmetic|cosmétique/i, ['the product on a rippling water surface with fresh botanicals and droplets, soft pastel light, clean and luminous', 'the product among sculptural pastel shapes and silky fabric waves, soft gradient light, glossy highlights, modern beauty campaign']],
+      ['bag', /bag|sac|handbag|backpack|wallet|portefeuille|purse|tote|valise|luggage/i, ['the bag on a marble pedestal in a luxury boutique under soft spotlights, warm reflections, elegant shadows', 'the bag on a sun-drenched Riviera terrace ledge, bright Mediterranean light, blue sea bokeh, chic summer campaign']],
+      ['fashion', /dress|robe|shirt|chemise|t-shirt|jacket|veste|coat|manteau|jean|pant|pantalon|sweat|hoodie|pull|skirt|jupe|clothing|vêtement/i, ['the garment floating in mid-air as if worn by an invisible body, fabric flowing, bold coloured studio backdrop, dramatic fashion lighting', 'the garment neatly styled on a sculptural chair in a sunlit concrete studio, strong graphic shadows, editorial fashion magazine look']],
+      ['food', /coffee|café|tea|thé|chocolate|chocolat|wine|vin|beer|bière|juice|jus|snack|food|sauce|honey|miel|olive oil|huile/i, ['the product surrounded by its ingredients flying in mid-air, a dynamic splash, vivid saturated colours, dark backdrop, high-speed photography', 'the product on a rustic wooden table in warm morning light with steam or droplets, fresh ingredients around it, appetising close-up']],
+      ['sport', /fitness|yoga|gym|sport|bike|vélo|ball|ballon|racket|raquette|dumbbell|haltère|tent|camping/i, ['the product on a dark stage hit by dramatic rim light, chalk dust exploding around it, intense and powerful', 'the product in a breathtaking outdoor landscape at sunrise, mountain or ocean in the background, epic and adventurous']],
+      ['home', /\b(candles?|bougies?|vases?|decor|déco\w*|kitchen|cuisine|pans?|casseroles?|knife|couteaux?|mugs?|tasses?|plates?|assiettes?|towels?|serviettes?|bedding|linge|sheets?|draps?)\b/i, ['the product in a warm Scandinavian interior at golden hour, soft linen textures, natural wood, cosy glow', 'the product on a stone counter with dramatic side light, minimal props, deep shadows, premium lifestyle magazine look']],
+    ];
+    const dom = DOMAINS.find(([, re]) => re.test(text));
+    const look = role === 'cta'
+      ? `Final hero key visual: the product alone, centred, ${dom ? dom[2][0].split(',').slice(1).join(',').trim() || 'glowing rim light' : 'glowing rim light in the brand colours, glossy floor'}, clean space above for the call to action.`
+      : dom ? `Eye-catching advertising key visual: ${dom[2][role === 'hook' ? 0 : 1]}. Low or dynamic camera angle, razor-sharp product.`
+        : `Eye-catching advertising key visual: the product alone ${role === 'hook' ? 'on a glossy reflective surface with vivid rim lights in the brand colours and a glowing light arc behind it, dark background with coloured bokeh' : 'in a beautiful premium setting that suits it, dramatic directional light, glowing bokeh, shallow depth of field'}.`;
+    // le concept créatif écrit par l'IA pour ce produit (vu sur ses photos) prime ; sinon l'ambiance de son domaine
+    const direction = hero ? (sceneBrief ? `Eye-catching advertising key visual: ${sceneBrief}. Low or dynamic camera angle, razor-sharp product.` : look) : {
       context: 'Show the product naturally worn, held, installed or used in the real situation it was designed for, with cinematic light. Make the use instantly understandable.',
       demo: 'A close, tactile commercial shot that makes a real product detail, material, finish or useful feature desirable and visible, dramatic light.',
     }[role];
@@ -269,7 +270,7 @@ ${placement}
 
 SHOT DIRECTION
 Scene role: ${role}.
-Creative direction: ${direction}${sceneBrief && !hero ? ` ${sceneBrief}` : ''}.
+Creative direction: ${direction}${sceneBrief && !hero ? ` ${sceneBrief}` : ''}
 Headline concept (do not print it): ${headline || 'Product-focused visual hook'}.
 Voice-over context (do not print it): ${voiceover || 'Show why this product is desirable'}.
 

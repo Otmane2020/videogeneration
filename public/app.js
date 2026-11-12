@@ -1968,8 +1968,12 @@ async function produce(actx) {
         status('Muse image unavailable. Continuing with the original product gallery.');
       }
     }
+    // l'écran final montre le produit de l'accroche : détouré s'il l'est ; sinon, quand sa photo est cadrée trop serré pour être
+    // détourée (bracelet coupé par les bords), la photo elle-même plutôt qu'un autre détourage (boîte, emballage…)
+    const hookPh = byId.get(scenes.find((x) => !x.kind)?.photo);
+    const ctaPh = hookPh?.cut || (hookPh?.info?.plain && hookPh.info.touch >= 2) ? hookPh : best;
     scenes.forEach((s, i) => {
-      if (s.kind === 'cta') s.ph = best;
+      if (s.kind === 'cta') s.ph = ctaPh;
       else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;
       s.still = stills[i] || null;
     });

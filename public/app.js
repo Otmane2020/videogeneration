@@ -723,11 +723,13 @@ function photoInfo(img) {
   const span = (a) => { let lo = 0, hi = a.length - 1, acc = 0; for (; lo < a.length && (acc += a[lo]) < total * 0.005; lo++); acc = 0; for (; hi > 0 && (acc += a[hi]) < total * 0.005; hi--); return [lo, Math.max(lo, hi)]; };
   const [x0, x1] = total ? span(cols) : [0, w - 1], [y0, y1] = total ? span(rows) : [0, h - 1];
   // bords coupés par le cadrage de la photo (bracelet de montre, pied de meuble…)
-  let touch = 0;
+  let touch = 0, sides = { t: false, b: false, l: false, r: false };
   if (plain) {
     const edge = (list) => list.filter((i) => !back[i]).length > list.length * 0.04;
     const line = (f, len) => Array.from({ length: len }, (_, k) => f(k));
-    touch = [line((k) => k, w), line((k) => (h - 1) * w + k, w), line((k) => k * w, h), line((k) => k * w + w - 1, h)].filter(edge).length;
+    const hit = [line((k) => k, w), line((k) => (h - 1) * w + k, w), line((k) => k * w, h), line((k) => k * w + w - 1, h)].map(edge);
+    sides = { t: hit[0], b: hit[1], l: hit[2], r: hit[3] };
+    touch = hit.filter(Boolean).length;
   }
   // détails : contraste local de luminance sur le produit, sommé par fenêtres de la taille d'un gros plan
   const L = new Float32Array(n);
@@ -756,7 +758,7 @@ function photoInfo(img) {
     if (focus.length === 3) break;
   }
   if (!focus.length) focus.push({ x: (x0 + x1 + 1) / 2 / w, y: (y0 + y1 + 1) / 2 / h });
-  return { w, h, bg, plain, clear, back, d, touch, focus, box: [x0 / w, y0 / h, (x1 + 1) / w, (y1 + 1) / h] };
+  return { w, h, bg, plain, clear, back, d, touch, sides, focus, box: [x0 / w, y0 / h, (x1 + 1) / w, (y1 + 1) / h] };
 }
 
 // Un détourage n'est gardé que s'il ne retire rien du produit. Sur fond uni, chaque pixel nettement différent
@@ -765,8 +767,6 @@ function cutKeepsProduct(cut, info) {
   if (!cut) return false;
   if (!info || info.clear) return true;
   const { w, h, back, d, bg } = info;
-  // produit coupé par les bords de la photo : une fois détouré il flotterait, tronqué net
-  if (info.plain && info.touch >= 2) return false;
   const m = Object.assign(document.createElement('canvas'), { width: w, height: h });
   const g = m.getContext('2d', { willReadFrequently: true });
   const [bx0, by0, bx1, by1] = cut.box || info.box;
@@ -1161,7 +1161,39 @@ function makeRenderer(cv, job) {
     ? { x: W * 0.56, y: 84, w: W * 0.44 - pad, h: H - 150 }
     : { x: pad, y: 122, w: W - pad * 2, h: textTop - 122 - 30 });
 
-  function product(ph, box, local, k) {
+  // Produit coupé par le cadre de la photo (bracelet de montre, rideau, tapis…) : une fois détouré, il déborde de l'écran
+  // par ces mêmes côtés au lieu de flotter tronqué net. À l'écran final, il descend du haut et s'efface en bas.
+  function productBleed(ph, box, local, k, cta) {
+    const c = ph.cut, sd = ph.info.sides, e = easeOut((local - 0.05) / 0.6), z = 1 + 0.05 * k;
+    let w, h, x, y;
+    if (sd.t && sd.b) {
+      h = (cta ? box.y + box.h + H * 0.05 : H * 1.05) * z; w = (c.width * h) / c.height;
+      if (w > W * 1.05) { w = W * 1.05; h = (c.height * w) / c.width; }
+      x = box.x + (box.w - w) / 2 + (k - 0.5) * 12; y = cta ? -H * 0.05 : (H - h) / 2;
+    } else {
+      w = (wide ? box.w + pad * 2 : W * 1.05) * z; h = (c.height * w) / c.width;
+      x = wide ? box.x - pad : (W - w) / 2; y = box.y + (box.h - h) / 2;
+    }
+    y += (1 - e) * 30;
+    ctx.save();
+    ctx.globalAlpha = clamp((local - 0.05) / 0.3);
+    ctx.imageSmoothingQuality = 'high';
+    if (cta && sd.b) {
+      tmp.width = Math.ceil(w * S); tmp.height = Math.ceil(h * S);
+      const t = tmp.getContext('2d');
+      t.drawImage(c, 0, 0, tmp.width, tmp.height);
+      t.globalCompositeOperation = 'destination-in';
+      const fade = t.createLinearGradient(0, 0, 0, tmp.height);
+      fade.addColorStop(0, '#000'); fade.addColorStop(0.62, '#000'); fade.addColorStop(1, 'rgba(0,0,0,0)');
+      t.fillStyle = fade; t.fillRect(0, 0, tmp.width, tmp.height);
+      ctx.drawImage(tmp, x, y, w, h);
+    } else ctx.drawImage(c, x, y, w, h);
+    ctx.restore();
+    return { x, y, w, h };
+  }
+  function product(ph, box, local, k, cta = false) {
+    const sd = ph.info?.sides;
+    if (sd && ((sd.t && sd.b) || (sd.l && sd.r))) return productBleed(ph, box, local, k, cta);
     const c = ph.cut, f = Math.min(box.w / c.width, box.h / c.height) * 0.94;
     const e = backOut((local - 0.1) / 0.6), z = (1 + 0.08 * k) * (0.86 + 0.14 * e);
     const w = c.width * f * z, h = c.height * f * z;
@@ -1485,8 +1517,8 @@ function makeRenderer(cv, job) {
       g.addColorStop(0, wide ? 'rgba(8,10,12,.5)' : 'rgba(8,10,12,0)'); g.addColorStop(wide ? 1 : 0.42, 'rgba(8,10,12,.9)'); g.addColorStop(1, 'rgba(8,10,12,.96)');
       ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
       const box = wide ? { x: pad, y: 90, w: W * 0.42, h: H - 190 } : { x: pad, y: 110, w: W - pad * 2, h: H * 0.5 - 130 };
-      const r = product(ph, box, local, clamp(local / sc.dur));
-      if (plan.price) pill(plan.price, r.x + r.w * 0.85, r.y + r.h * 0.1, local - 0.3, 34);
+      const r = product(ph, box, local, clamp(local / sc.dur), true);
+      if (plan.price) pill(plan.price, Math.min(W - pad - 70, r.x + r.w * 0.85), Math.max(box.y + 20, r.y + r.h * 0.1), local - 0.3, 34);
     } else {
       ctx.fillStyle = 'rgba(8,6,18,.66)'; ctx.fillRect(0, 0, W, H);
       g = ctx.createLinearGradient(0, H * 0.35, 0, H);
@@ -1868,8 +1900,8 @@ async function produce(actx) {
       if (!img) continue;
       const info = (cache['info' + state.photoUrls[id]] ||= photoInfo(img));
       if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null, info }); continue; }
-      // produit coupé par les bords de la photo (bracelet, pieds de meuble…) : pas de détourage, la photo est cadrée telle quelle
-      if (!cache[key] && info?.plain && info.touch >= 2) cache[key] = { img, cut: null, info };
+      // photo d'ambiance (produit porté, main, décor) : on la garde entière, un détourage y laisserait des morceaux de bras ou de décor
+      if (!cache[key] && info && !info.plain) cache[key] = { img, cut: null, info };
       if (!cache[key]) {
         status('Cutting out your product…');
         // 1. Essai côté serveur (ClearBackdrop / Clipdrop / remove.bg), sinon modèle du navigateur

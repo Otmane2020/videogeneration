@@ -76,8 +76,8 @@ dialog#account::backdrop { background: #000b; }
 #account label { margin-top: 10px; } #account input { font-size: 16px; padding: 13px; }
 .hint { font-size: 13px; color: var(--mute); margin-bottom: 10px; }
 .pro-label { display: inline-flex; align-items: center; vertical-align: middle; margin-left: 5px; padding: 2px 6px; border: 1px solid #a98bff66; border-radius: 6px; background: #7c5cff24; color: #c9a5ff; font-size: 9px; line-height: 1.35; font-weight: 800; letter-spacing: .06em; }
-.quality-note { color: var(--text); margin-top: -5px; }
-.quality-note-detail { color: var(--mute); margin-left: 4px; font-size: 12px; }
+.pro-feature { grid-template-columns: 1fr; margin: 0 0 16px; }
+.pro-feature-option { min-height: 44px; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 10px 8px; border-radius: 10px; background: var(--card); color: var(--text); font-size: 13px; font-weight: 600; }
 .photos { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-bottom: 4px; }
 .photos button { position: relative; padding: 0; border: 2px solid transparent; border-radius: 12px; background: #fff; overflow: hidden; cursor: pointer; aspect-ratio: 1; opacity: .5; }
 .photos button[aria-pressed="true"] { border-color: var(--brand-hi); opacity: 1; }

@@ -44,7 +44,8 @@ Return ONLY JSON: {"scores":[{"i":1,"relevance":8,"beauty":7}]}` }];
       const batch = batches[next++];
       for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          await Promise.all(batch.map(async (c) => { c.img = await thumb(c.th).catch(() => null); }));
+          // Coverr n'est pas joignable d'ici : le modèle va chercher la vignette lui-même
+          await Promise.all(batch.map(async (c) => { c.img = c.src === 'coverr' ? c.th : await thumb(c.th).catch(() => null); }));
           const ok = batch.filter((c) => c.img);
           const scores = await judge(ok);
           scores.forEach((s) => { const c = ok[s.i - 1]; if (c) { c.rl = +s.relevance; c.rb = +s.beauty; } });

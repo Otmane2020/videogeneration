@@ -41,7 +41,7 @@ function render() {
     const meta = el('div', { className: 'meta' });
     meta.append(el('strong', { textContent: (c.s || []).join(', ') }), el('span', { textContent: (c.k || []).slice(0, 3).join(' · ') }), el('span', { textContent: c.tags.slice(0, 90) }));
     const links = el('div', { className: 'links' });
-    links.append(el('a', { href: c.hd || c.sd, target: '_blank', rel: 'noopener', textContent: 'MP4 ' + (c.hd ? 'HD' : '') }), el('a', { href: `https://pixabay.com/videos/id-${c.id}/`, target: '_blank', rel: 'noopener', textContent: 'Pixabay #' + c.id }));
+    links.append(el('a', { href: c.hd || c.sd, target: '_blank', rel: 'noopener', textContent: 'MP4 ' + (c.hd ? 'HD' : '') }), el('a', { href: c.p || `https://pixabay.com/videos/id-${c.id}/`, target: '_blank', rel: 'noopener', textContent: c.p ? 'Coverr' : 'Pixabay #' + c.id }));
     meta.append(links); card.append(box, meta); return card;
   }));
   $('#chips').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.s === sector)));

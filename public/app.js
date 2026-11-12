@@ -2,7 +2,7 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
-const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: '', templateStyle: '', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
+const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: '', templateStyle: '', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], icons: {}, visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 const media = (u) => '/api/media?u=' + encodeURIComponent(u);
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
@@ -237,6 +237,22 @@ $('#files').addEventListener('change', async (e) => {
   renderPhotos();
 });
 
+/* ---------- logos de marques (Iconify) ---------- */
+async function loadIcons(names) {
+  if (!names.length) return {};
+  try {
+    const { icons } = await (await api('/api/icons', { names })).json();
+    const out = {};
+    await Promise.all(Object.entries(icons || {}).map(([name, { svg }]) => new Promise((ok) => {
+      const im = new Image();
+      im.onload = () => { out[name] = im; ok(); };
+      im.onerror = () => ok();
+      im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+    })));
+    return out;
+  } catch { return {}; } // sans logos, la pub se monte quand même
+}
+
 /* ---------- 4. génération directe, puis retouches ---------- */
 const newAudio = () => new (window.AudioContext || window.webkitAudioContext)(); // à créer dans le geste utilisateur (iOS)
 function cancelJob() { if (state.job) state.job.cancelled = true; stopPreview(); $('#result').pause(); }
@@ -266,6 +282,8 @@ $('#b-gen').addEventListener('click', async () => {
     // Déterminer la qualité avant la recherche de footage afin de demander des sources HD pour les exports Pro.
     $('#res').value = String(autoResolution());
     setMusic(ecom ? 'm6' : 'm1');
+    // vrais logos des marques citées dans la pub (Iconify), pour les animations « logo → flèche → logo »
+    state.icons = ecom ? {} : await loadIcons([...new Set(state.ad.scenes.flatMap((s) => s.logos || []))].slice(0, 8));
     status('Finding the right visuals…', 10);
     // Plans d'illustration : sans eux, la pub se monte quand même. Chaque scène SaaS reçoit les siens, quel que soit
     // son visuel (le réglage « Stock clips » peut en faire une scène vidéo au montage) ; une fiche produit n'en a
@@ -898,6 +916,53 @@ function makeRenderer(cv, job) {
     return w;
   }
 
+  // Logos de marques reliés par des flèches qui se dessinent : « ChatGPT → Slack → votre produit ».
+  function iconFlow(sc, local, box, hero) {
+    const imgs = sc.icons || [];
+    if (!imgs.length || sc.kind === 'cta') return;
+    const items = [];
+    imgs.slice(0, 3).forEach((im, i) => { if (i) items.push({ arrow: true }); items.push({ img: im }); });
+    if (imgs.length === 1 && logo) items.push({ arrow: true }, { brand: true });
+    const size = Math.min(W, H) * (wide ? 0.15 : 0.17), slot = size * 0.72, bw = size * (logoWide ? Math.min(logoRatio, 2.8) : 1);
+    const widthOf = (it) => (it.arrow ? slot : it.brand ? bw : size);
+    const total = items.reduce((a, it) => a + widthOf(it), 0);
+    const cx = wide ? (hero ? box.x + box.w / 2 : pad + textW / 2) : W / 2;
+    const y = hero ? box.y + 6 : wide ? H * 0.3 : H * 0.34;
+    let x = cx - total / 2, n = 0;
+    for (const it of items) {
+      const t0 = 0.3 + n * 0.2, e = clamp((local - t0) / 0.45);
+      if (it.arrow) {
+        const p = easeOut(clamp((local - t0) / 0.4)), x0 = x + slot * 0.14, x1 = x + slot * 0.86, mid = y + size / 2, xe = lerp(x0, x1, p);
+        if (p > 0) {
+          ctx.save();
+          ctx.strokeStyle = A; ctx.fillStyle = A; ctx.lineWidth = size * 0.075; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+          ctx.shadowColor = 'rgba(0,0,0,.45)'; ctx.shadowBlur = size * 0.2;
+          ctx.beginPath(); ctx.moveTo(x0, mid); ctx.lineTo(xe, mid); ctx.stroke();
+          if (p > 0.85) { const h = size * 0.17; ctx.beginPath(); ctx.moveTo(x1 - h, mid - h); ctx.lineTo(x1, mid); ctx.lineTo(x1 - h, mid + h); ctx.stroke(); }
+          ctx.restore();
+        }
+        x += slot;
+      } else if (e > 0) {
+        const sc2 = backOut(e);
+        ctx.save();
+        ctx.globalAlpha = clamp(e * 2.2);
+        ctx.translate(x + size / 2, y + size / 2); ctx.scale(sc2, sc2); ctx.translate(-(x + size / 2), -(y + size / 2));
+        if (it.brand) logoTile(x, y, size);
+        else {
+          ctx.shadowColor = 'rgba(0,0,0,.35)'; ctx.shadowBlur = size * 0.3; ctx.shadowOffsetY = size * 0.08;
+          ctx.fillStyle = '#fff'; rr(x, y, size, size, size * 0.24); ctx.fill();
+          ctx.shadowColor = 'transparent';
+          const iw = it.img.naturalWidth || size, ih = it.img.naturalHeight || size, f = Math.min(size * 0.64 / iw, size * 0.64 / ih);
+          ctx.imageSmoothingQuality = 'high';
+          ctx.drawImage(it.img, x + (size - iw * f) / 2, y + (size - ih * f) / 2, iw * f, ih * f);
+        }
+        ctx.restore();
+        x += widthOf(it);
+      } else x += widthOf(it);
+      n++;
+    }
+  }
+
   /* ----- scènes ----- */
   function scene(sc, local) {
     const k = clamp(local / sc.dur), ph = sc.ph;
@@ -913,6 +978,7 @@ function makeRenderer(cv, job) {
     const top = bottom - 78 - lines.length * lh;
     const box = heroBox(top);
     if (sc.visual === 'site' && shot) phone(box, local, sc.dur, sc.variant);
+    iconFlow(sc, local, box, sc.visual === 'site' && shot);
     if (onDecor) { const r = product(ph, box, local, k); pill(sc.badge, r.x + r.w * 0.82, Math.max(box.y + 30, r.y + r.h * 0.12), local); }
     else if (sc.badge) pill(sc.badge, W / 2, wide ? H * 0.3 : H * 0.36, local, 30);
 
@@ -1280,7 +1346,7 @@ async function produce(actx) {
 
   // formats courts : moins de scènes, pour que chacune reste lisible
   const keep = target && target <= 10 ? 2 : target && target <= 15 ? 3 : ad.scenes.length;
-  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
+  const scenes = (job.scenes = [...ad.scenes.slice(0, keep).map((s) => ({ ...s, icons: (s.logos || []).map((n) => state.icons?.[n]).filter(Boolean) })), { kind: 'cta', visual: 'cta', photo: -1, headline: ad.cta, voiceover: ad.ctaVoiceover }]);
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });

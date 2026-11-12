@@ -17,7 +17,7 @@ const PUBLIC = path.join(__dirname, 'public');
 http.createServer((req, res) => {
   const { pathname } = new URL(req.url, 'http://x');
   // mêmes réécritures que vercel.json
-  const op = /^\/api\/(track|admin|inbound|report|push|footage)$/.exec(pathname);
+  const op = /^\/api\/(track|admin|inbound|report|push|footage|icons)$/.exec(pathname);
   if (op) { req.url = `/api/ops?a=${op[1]}${req.url.includes('?') ? '&' + req.url.split('?')[1] : ''}`; return api['/api/ops'](req, res); }
   if (api[pathname]) return api[pathname](req, res);
   // comme sur Vercel (cleanUrls) : /blog/ -> index.html, /blog/guide -> guide.html

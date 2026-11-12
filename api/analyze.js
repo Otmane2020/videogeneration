@@ -144,6 +144,19 @@ const GOALS = {
   problem: 'Problem → solution: open on the customer\'s pain, then show how the product solves it.',
   offer: 'Conversion: push the viewer to act now. Mention a price or an offer ONLY if it appears in the page content.',
 };
+// Marques reconnues dans les textes : leurs vrais logos sont ensuite cherchés sur Iconify (lib/ops/icons.js).
+// `safe` : sans ambiguïté, repérées quelle que soit la casse. `capitalised` : mots courants, repérés seulement avec une majuscule.
+const BRANDS_SAFE = 'chatgpt openai gpt-4 claude anthropic gemini copilot slack github gitlab notion stripe shopify zapier hubspot salesforce figma jira trello asana discord whatsapp instagram tiktok youtube facebook linkedin twitter paypal mailchimp wordpress woocommerce bigcommerce aws microsoft dropbox airtable canva intercom zendesk twilio supabase vercel openrouter telegram spotify netflix airbnb android sentry datadog postgres mongodb docker kubernetes react python javascript typescript nodejs gmail outlook snowflake tableau mixpanel amplitude webflow wix squarespace klaviyo calendly miro freshdesk quickbooks xero oracle ibm cloudflare firebase paddle pinterest reddit twitch snapchat telegram signal messenger'.split(' ');
+const BRANDS_CAP = 'Google Meta Loom Looker'.split(' ');
+const BRAND_RE = new RegExp(`\\b(${BRANDS_SAFE.map((b) => b.replace(/[-]/g, '[- ]?')).join('|')})\\b`, 'gi');
+const BRAND_CAP_RE = new RegExp(`\\b(${BRANDS_CAP.join('|')})\\b`, 'g');
+function brandsIn(text) {
+  const out = [];
+  const add = (m) => { const n = m.toLowerCase().replace(/[- ]+/g, '-'); if (!out.includes(n)) out.push(n); };
+  String(text || '').replace(BRAND_RE, add).replace(BRAND_CAP_RE, add).replace(/\bZoom (?=meeting|call|webinar)/gi, () => { add('zoom'); return ''; });
+  return out;
+}
+
 // requêtes de banque d'images : lettres simples uniquement (les accents sont repliés, pas supprimés)
 const cleanQ = (v) => str(v, 50).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^\w\s-]/g, ' ').replace(/\s+/g, ' ').trim();
 // Mots qu'aucune caméra ne filme (interface, notions abstraites) : dans une banque d'images ils ramènent des nuages, des insectes ou des tableaux de bord de voiture.
@@ -215,6 +228,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
   const brands = [d.brand, page.siteName, String(page.url).replace(/^https?:\/\//, '').split(/[/:?#]/)[0].split('.').slice(-2)[0]].map((n) => cleanQ(n)).filter((n) => n.length > 2)
     .map((n) => new RegExp('\\b' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/ /g, '\\s*') + '\\b', 'gi'));
   let adsSceneIndex = 0;
+  const pageBrands = type === 'saas' ? brandsIn([page.title, page.description, ...page.h1, ...page.h2, page.text].join(' ')).filter((n) => !brandsIn(page.siteName).includes(n)).slice(0, 4) : [];
   const ads = (Array.isArray(d.ads) ? d.ads : []).map((ad, a) => ({
     angle: str(ad.angle, 40) || fb.ads[a % 3].angle,
     scenes: (Array.isArray(ad.scenes) ? ad.scenes : []).slice(0, 5).map((s, si) => {
@@ -229,6 +243,7 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
       return {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
+        logos: type !== 'saas' ? [] : (() => { const own = brandsIn([s.headline, s.voiceover].join(' ')).slice(0, 3); return own.length ? own : (s.role === 'demo' || (!s.role && visual === 'site')) && si === (ad.scenes || []).findIndex((x) => x.role === 'demo' || x.visual === 'site') ? pageBrands.slice(0, 2) : []; })(),
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries,
       };

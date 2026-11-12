@@ -51,7 +51,7 @@ $('#dlg').addEventListener('click', (e) => { if (e.target === $('#dlg')) $('#dlg
 fetch('/api/footage').then((r) => r.json()).then((j) => {
   data = j;
   $('#stats').textContent = `${j.total} clips · ${j.hd} in HD · loaded from ${j.source === 'file' ? 'the code file (database not reached)' : 'the database'}`;
-  const mk = (label, s, n) => el('button', { type: 'button', dataset: { s }, textContent: n ? `${label} (${n})` : label, onclick: () => { sector = s; render(); } });
+  const mk = (label, s, n) => { const b = el('button', { type: 'button', textContent: n ? `${label} (${n})` : label, onclick: () => { sector = s; render(); } }); b.dataset.s = s; return b; };
   $('#chips').replaceChildren(mk('All', '', j.total), ...Object.entries(j.sectors).sort((a, b) => b[1] - a[1]).map(([s, n]) => mk(s, s, n)));
   render();
 }).catch(() => { $('#stats').textContent = 'Could not load the library.'; });

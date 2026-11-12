@@ -244,11 +244,11 @@ async function loadIcons(brands) {
   try {
     const { icons } = await (await api('/api/icons', { brands })).json();
     const out = {};
-    await Promise.all(Object.entries(icons || {}).map(([name, { svg }]) => new Promise((ok) => {
+    await Promise.all(Object.entries(icons || {}).map(([name, { src }]) => new Promise((ok) => {
       const im = new Image();
       im.onload = () => { out[name] = im; ok(); };
       im.onerror = () => ok();
-      im.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg);
+      im.src = src;
     })));
     return out;
   } catch { return {}; } // sans logos, la pub se monte quand même

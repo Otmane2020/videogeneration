@@ -272,6 +272,7 @@ $('#b-gen').addEventListener('click', async () => {
   status(ecom ? 'Reviewing your product photos and writing the script…' : 'Studying your brand and writing the script…', 4);
   try {
     const list = ecom ? photoList() : [];
+    if (ecom && !list.length) throw new Error('No product photos were found. Add at least one product photo from the page gallery or upload one.');
     state.photoUrls = list.map((p) => p.show);
     state.photoSources = list.map((p) => p.source);
     // la variante choisie fixe le prix affiché et le texte de la pub
@@ -295,8 +296,9 @@ $('#b-gen').addEventListener('click', async () => {
     // besoin que pour ses scènes vidéo. Derrière le téléphone : un fond sobre, pas une scène qui distrait.
     // SaaS : au moins 5 plans (une par scène + l'écran final), choisis automatiquement
     const closing = ['team collaborating office', 'small business owner working', 'professional team celebrating'];
-    const wanted = state.ad.scenes.map((s) => (ecom && s.visual !== 'footage' ? null : s.queries || []));
-    const lists = await api('/api/videos', { scenes: [...wanted, ecom ? null : closing], fallback: ecom ? 'lifestyle' : 'saas', hd: !ecom || $('#res').value === '1080' })
+    // E-commerce visuals come only from the product page gallery. Never fill gaps with generic stock clips.
+    const wanted = ecom ? state.ad.scenes.map(() => null) : state.ad.scenes.map((s) => s.queries || []);
+    const lists = ecom ? [] : await api('/api/videos', { scenes: [...wanted, closing], fallback: 'saas', hd: $('#res').value === '1080' })
       .then((r) => r.json()).then(({ results }) => results).catch(() => []);
     state.clipLists = wanted.map((_, i) => lists[i] || []);
     state.ctaList = lists[wanted.length] || [];
@@ -332,7 +334,7 @@ function buildEditor(used) {
     const card = Object.assign(document.createElement('div'), { className: 'edscene' });
     const swap = s.visual === 'footage' || s.visual === 'site';
     const t = Object.assign(document.createElement('button'), { type: 'button', className: 'thumb', disabled: !swap });
-    const src = s.pick?.thumb || (s.photo >= 0 && s.visual !== 'footage' ? state.photoUrls[s.photo] : used[i]?.thumb);
+    const src = s.generatedThumb || s.pick?.thumb || (s.photo >= 0 && s.visual !== 'footage' ? state.photoUrls[s.photo] : used[i]?.thumb);
     if (src) t.append(Object.assign(new Image(), { src, alt: '' }));
     t.append(Object.assign(document.createElement('em'), { textContent: swap ? 'Change' : VISUAL[s.visual] }));
     if (swap) { t.setAttribute('aria-label', `Scene ${i + 1}: change visual`); t.addEventListener('click', () => openPicker(i)); }
@@ -784,6 +786,7 @@ function makeRenderer(cv, job) {
       ctx.fillStyle = 'rgba(6,6,14,.42)'; ctx.fillRect(0, 0, W, H); // le téléphone reste le sujet
       return;
     }
+    if (sc.generatedImage && ph?.img) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.015 + 0.035 * k, 0.5, 0.5);
     if (sc.visual === 'detail' && ph) return coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.22 + 0.16 * k, lerp(0.4, 0.6, easeInOut(k)), lerp(0.44, 0.56, easeInOut(k)));
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph && ph.cut && job.backdrop) return coverDraw(job.backdrop, job.backdrop.naturalWidth, job.backdrop.naturalHeight, 1.02 + 0.07 * k, 0.5 + 0.1 * (k - 0.5), 0.6);
     if ((sc.visual === 'product' || (sc.kind === 'cta' && plan.type === 'ecom')) && ph) return ph.cut ? studio(k, k * sc.dur) : coverDraw(ph.img, ph.img.naturalWidth, ph.img.naturalHeight, 1.04 + 0.1 * k, 0.5, lerp(0.42, 0.58, k));
@@ -1440,7 +1443,7 @@ async function produce(actx) {
   // le téléphone n'apparaît que deux fois : une démo bien droite, puis une vue inclinée
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
-  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site' || s.kind === 'cta') || (plan.type === 'ecom' && s.visual === 'footage' && !photoIds.length);
+  const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site' || s.kind === 'cta');
   const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
@@ -1541,11 +1544,10 @@ async function produce(actx) {
       byId.set(id, cache[key]);
     }
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
-    // décor sur mesure généré par IA, seulement s'il y a un produit détouré à poser dessus
-    if (best?.cut && $('#bgai').value === '1') {
-      status('Creating your one-off product backdrop with Meta Muse Image…');
-      // Une référence JPEG légère suffit pour communiquer la catégorie et les couleurs du produit.
-      // L'image produit ne sera jamais remplacée : seul le fond est généré.
+    // Muse generates exactly ONE complete lifestyle/product-placement image per ad.
+    // Every other e-commerce scene remains a real image selected from the product page gallery.
+    if (best?.img && $('#bgai').value === '1') {
+      status('Generating one product-in-use image with Meta Muse…');
       let referenceImage = null;
       try {
         const maxSide = 768, scale = Math.min(1, maxSide / Math.max(best.img.naturalWidth, best.img.naturalHeight));
@@ -1555,14 +1557,17 @@ async function produce(actx) {
         const refCtx = refCanvas.getContext('2d');
         refCtx.fillStyle = '#11121e'; refCtx.fillRect(0, 0, rw, rh);
         refCtx.drawImage(best.img, 0, 0, rw, rh);
-        referenceImage = refCanvas.toDataURL('image/jpeg', 0.78);
+        referenceImage = refCanvas.toDataURL('image/jpeg', 0.82);
       } catch (error) { console.warn('Could not prepare Muse reference image', error); }
       try {
-        const product = page.product || {};
-        const response = await api('/api/backdrop?a=muse', {
+        const product = page.product || {}, hook = scenes.find((s) => !s.kind);
+        const response = await api('/api/backdrop?a=muse-scene', {
           type: 'ecom',
           format: state.fmt,
-          scene: plan.backdrop,
+          role: 'hook',
+          sceneBrief: plan.backdrop,
+          headline: hook?.headline || '',
+          voiceover: hook?.voiceover || '',
           category: plan.category,
           productName: product.name || page.title || plan.tagline,
           productDescription: product.description || plan.summary || page.description,
@@ -1572,14 +1577,21 @@ async function produce(actx) {
         });
         const imageBlob = await response.blob();
         const objectUrl = URL.createObjectURL(imageBlob);
-        job.backdrop = await loadImage(objectUrl);
-        URL.revokeObjectURL(objectUrl);
-        job.backdropModel = job.backdrop ? (response.headers.get('x-image-model') || 'meta/muse-image') : null;
+        try { job.museImage = await loadImage(objectUrl); }
+        finally { URL.revokeObjectURL(objectUrl); }
+        if (job.museImage) {
+          const tw = 360, th = Math.round(tw * job.museImage.naturalHeight / job.museImage.naturalWidth);
+          const thumb = Object.assign(document.createElement('canvas'), { width: tw, height: th });
+          thumb.getContext('2d').drawImage(job.museImage, 0, 0, tw, th);
+          job.museThumb = thumb.toDataURL('image/jpeg', 0.76);
+          job.backdropModel = response.headers.get('x-image-model') || 'meta/muse-image';
+        } else throw new Error('Muse returned an unreadable image');
       } catch (error) {
-        job.backdrop = null;
+        job.museImage = null;
+        job.museThumb = null;
         job.backdropModel = null;
-        console.warn('Meta Muse backdrop unavailable; using the built-in studio background', error);
-        status('Meta Muse is unavailable right now. Using the built-in studio background.');
+        console.warn('Meta Muse product image unavailable; using the product gallery only', error);
+        status('Muse image unavailable. Continuing with the original product gallery.');
       }
     }
     scenes.forEach((s, i) => {
@@ -1587,9 +1599,21 @@ async function produce(actx) {
       else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;
       s.still = stills[i] || null;
     });
-    // e-commerce : une scène prévue en vidéo de stock devient une scène produit dès qu'une photo existe
-    if (plan.type === 'ecom' && best) scenes.forEach((s, i) => { if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; } });
-    // sans photo, la scène retombe sur la vidéo ou le dégradé
+    // Never substitute stock footage into an e-commerce ad. If Muse is enabled, only the opening hook is AI-generated.
+    if (plan.type === 'ecom' && best) scenes.forEach((s, i) => {
+      if (!s.kind && s.visual === 'footage') { s.visual = i % 2 ? 'detail' : 'product'; s.ph = ready[i % ready.length] || best; if (s.visual === 'product' && !s.ph.cut) s.ph = best; }
+    });
+    if (plan.type === 'ecom' && job.museImage) {
+      const hook = scenes.find((s) => !s.kind);
+      if (hook) {
+        hook.visual = 'detail';
+        hook.photo = -1;
+        hook.ph = { img: job.museImage, cut: null };
+        hook.generatedImage = true;
+        hook.generatedThumb = job.museThumb;
+      }
+    }
+    // A missing gallery photo is never replaced by unrelated stock footage.
     scenes.forEach((s) => { if (!s.ph && (s.visual === 'product' || s.visual === 'detail')) s.visual = 'footage'; });
 
     const offline = !!job.MB;

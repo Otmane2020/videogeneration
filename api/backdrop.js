@@ -222,47 +222,62 @@ module.exports = handler('POST', async (req, res) => {
     const description = clean(b.productDescription, 420);
     const variant = clean(b.variant, 120);
     const palette = clean(b.brandPalette, 100);
-    const direction = {
-      hook: 'A scroll-stopping hero shot: show the product immediately, with strong perspective and a compelling real-world setting.',
-      context: 'Show the product naturally worn, held, installed or used in the real situation it was designed for. Make the use instantly understandable.',
-      demo: 'A close, tactile commercial shot that makes a real product detail, material, finish, fit or useful feature desirable and visible.',
-      outcome: 'An aspirational but believable lifestyle moment showing the product as part of the customer’s life.',
-      cta: 'A memorable final hero shot of the same exact product, in a beautiful real-world setting, with clean visual space for the call to action.',
+    // Deux familles de plans : le « key visual » qui arrête le pouce (produit seul en héros, lumière spectaculaire)
+    // et le plan d'usage (produit porté ou utilisé). L'accroche, le deuxième plan et l'écran final sont des key visuals.
+    const hero = role !== 'context' && role !== 'demo';
+    const mood = /watch|montre|jewel|bijou|ring|bague|necklace|collier|bracelet|perfume|parfum|luxury|luxe|leather|cuir/i.test(`${category} ${productName} ${description}`)
+      ? 'luxury'
+      : /sneaker|shoe|chaussure|basket|headphone|casque|audio|earbud|speaker|phone|tech|gaming|console|laptop|camera/i.test(`${category} ${productName} ${description}`) ? 'tech' : 'premium';
+    const look = {
+      hook: {
+        tech: 'Ultra-dramatic studio key visual: the product alone, low-angle three-quarter view, on a glossy black reflective floor with a mirror reflection; electric blue and violet neon rim lights; a glowing neon light ring or arc behind it; deep night background of blurred blue and purple city-light bokeh; light haze; razor-sharp product, crisp specular highlights, high contrast, saturated cinematic colour grade.',
+        luxury: 'Ultra-dramatic luxury studio key visual: the product alone as a precious object, low three-quarter angle, standing on a black mirror-glass surface with a perfect reflection; a single warm golden spotlight from above, golden rim light, a thin glowing golden light arc behind it, floating gold dust in a dark background; deep shadows, rich contrast, razor-sharp details, high-end jewellery-campaign colour grade. No rocks, no outdoor scenery.',
+        premium: 'Ultra-dramatic studio key visual: the product alone, low-angle three-quarter view, on a glossy reflective surface with a soft mirror reflection; vivid rim lights in the brand colours; a glowing light arc behind it; dark gradient background with soft coloured bokeh; razor-sharp product, crisp highlights, high contrast, saturated cinematic colour grade.',
+      },
+      outcome: {
+        tech: 'Second eye-catching key visual, different from the first: the product alone floating slightly above a glossy surface at a dynamic angle, surrounded by sweeping light trails and a purple-to-blue gradient glow, subtle particles in the air, sharp reflections, energetic and futuristic.',
+        luxury: 'Second eye-catching luxury key visual, different from the first: the product alone in a natural premium setting (dark rocks, polished marble or rich wood) at golden hour, warm sunlight rays and glowing bokeh, an amber crystal or glinting highlights nearby, dramatic shallow depth of field, opulent and cinematic.',
+        premium: 'Second eye-catching key visual, different from the first: the product alone in a beautiful premium setting that suits it, dramatic directional light, glowing bokeh, shallow depth of field, rich saturated colours, editorial and aspirational.',
+      },
+      cta: {
+        tech: 'Final hero key visual: the product alone, centred, glowing neon rim light in blue and violet, glossy reflective floor, clean dark space above for the call to action.',
+        luxury: 'Final hero key visual: the product alone, centred, warm golden glow and bokeh, dark luxurious background, clean space above for the call to action.',
+        premium: 'Final hero key visual: the product alone, centred, glowing rim light in the brand colours, glossy floor, clean dark space above for the call to action.',
+      },
+    }[role === 'hook' || role === 'cta' ? role : 'outcome'][mood];
+    const direction = hero ? look : {
+      context: 'Show the product naturally worn, held, installed or used in the real situation it was designed for, with cinematic light. Make the use instantly understandable.',
+      demo: 'A close, tactile commercial shot that makes a real product detail, material, finish or useful feature desirable and visible, dramatic light.',
     }[role];
-    const prompt = `Create ONE finished, photorealistic, premium E-COMMERCE AD CAMPAIGN IMAGE. This must be a complete photograph with the actual product integrated into a believable scene — NOT an empty background, NOT a packshot on a podium, NOT a collage, and NOT a graphic.
+    const placement = hero
+      ? `PRODUCT AS THE HERO — THIS IS ESSENTIAL
+Show the product ALONE as the star of a high-end advertising key visual, like a flagship campaign poster: no person, no hands, no packaging, no other product. It fills a large part of the frame, perfectly lit, sharp and instantly recognisable. The scene must stop the scroll: bold light, depth, glow and colour.`
+      : `REAL-WORLD PRODUCT PLACEMENT — THIS IS ESSENTIAL
+Place the product the way a customer genuinely wears, holds, applies, installs or uses it (watch on a realistic adult wrist, shoes or clothing worn, bag carried, furniture installed, cosmetics applied, headphones or eyewear worn, equipment used for its purpose). If the product is not wearable, do not invent a person holding it.`;
+    const prompt = `Create ONE finished, photorealistic, premium E-COMMERCE ADVERTISING IMAGE with the actual product — NOT an empty background, NOT a plain packshot, NOT a collage.
 
 EXACT PRODUCT — USE THE ATTACHED PHOTO AS THE IDENTITY REFERENCE
 Product: ${productName || 'Identify the exact product in the reference photo'}.
 Category: ${category || 'Infer the category from the reference photo'}.
 Description: ${description || 'Use only details visible in the reference photo'}.
 Selected variant: ${variant || 'The exact visible variant in the reference photo'}.
-Brand colours, only as subtle styling guidance: ${palette || 'Choose a palette that complements the real product'}.
+Brand colours, as lighting accents: ${palette || 'Choose colours that make the real product pop'}.
 
-The attached reference is the customer's real SKU. Reproduce THAT product as faithfully as possible: same silhouette, proportions, construction, colour, material, finish, distinctive details and visible markings. Do not substitute a similar product, invent a different variant, redesign it, simplify it, or add features. Keep it immediately recognisable as the photographed item. Show one hero product only unless the reference clearly depicts a set.
+The attached reference is the customer's real SKU. Reproduce THAT product faithfully: same silhouette, proportions, construction, colour, material, finish, dial or face details, distinctive parts and visible markings. Do not substitute a similar product, do not change its colour or design, do not add parts.
 
-REAL-WORLD PRODUCT PLACEMENT — THIS IS ESSENTIAL
-Place the product in the way a customer would genuinely wear, hold, apply, install or use it. Infer the correct usage from the actual item:
-- watch or bracelet: correctly worn on a realistic adult wrist, with the watch face and strap clearly visible;
-- shoes or clothing: genuinely worn by an adult model, with the product clearly visible;
-- handbag or backpack: naturally carried or worn, not floating beside a person;
-- furniture or home decor: correctly installed in a beautifully styled, believable lived-in interior;
-- cosmetics or skincare: naturally held or applied in a tasteful beauty setting;
-- headphones or eyewear: correctly worn by an adult model;
-- kitchen, sport or electronic equipment: shown being used for its real purpose.
-If the product is not wearable, do not invent a person holding it. Choose a context that makes physical sense for this exact item.
+${placement}
 
 SHOT DIRECTION
 Scene role: ${role}.
-Creative direction: ${sceneBrief || direction}.
-On-screen headline concept: ${headline || 'Product-focused visual hook'}.
-Voice-over context: ${voiceover || 'Show why this product is desirable'}.
-Interpret the direction visually; do not print any of this copy inside the image. Make each scene feel like a different camera shot in the same coherent campaign, not the same composition repeated.
+Creative direction: ${direction}${sceneBrief && !hero ? ` ${sceneBrief}` : ''}.
+Headline concept (do not print it): ${headline || 'Product-focused visual hook'}.
+Voice-over context (do not print it): ${voiceover || 'Show why this product is desirable'}.
 
 ART DIRECTION
 ${framing}
-Premium real commercial photography, natural human anatomy and believable contact between people and product, realistic shadows and reflections, tactile materials, considered lens choice, depth, lighting and colour grading. Product is the unmistakable hero and occupies a substantial part of the frame. The environment must support the product rather than compete with it. Use a distinctive setting tailored to this category; avoid generic purple neon, floating rings, empty studio walls and stock-photo clichés.
+Top-tier commercial product photography and CGI-quality lighting: dramatic rim light, specular highlights, reflections, glow, depth of field, cinematic colour grade, 8k detail. Eye-catching and premium, like a Nike, Apple, Beats or Rolex campaign visual.
 
-No text, no captions, no price, no labels, no added logo, no watermark, no borders, no UI, no split screen, no collage, no duplicated product, no floating product, no extra fingers, no malformed hands. Preserve existing genuine product branding only when it is visible in the reference.
+No text, no captions, no price, no labels, no added logo, no watermark, no borders, no UI, no split screen, no collage, no duplicated product, no extra fingers, no malformed hands. Keep the genuine logos and markings that are on the real product.
 Return only the finished advertising photograph.`;
     const generated = await museBackdrop({ prompt, referenceImage: b.referenceImage || null });
     return send(res, 200, generated.image, {

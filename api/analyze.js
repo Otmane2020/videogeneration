@@ -39,6 +39,7 @@ ${SHAPE_HEAD}
       "voiceover": string,
       "spoken": string,               // the same sentence as it must be READ ALOUD: every number, price, unit, symbol and abbreviation written out in full words in the ad language (French: "110 cm" → "cent dix centimètres", "79,99 €" → "soixante-dix-neuf euros quatre-vingt-dix-neuf", "5 ans" → "cinq ans"; English: "24/7" → "twenty-four seven")
       "english_queries": [string, string, string],  // stock-footage searches, English words only
+      "icon": string,                  // optional pictogram name from the allowed list, or ""
       "logos_layout": "flow"|"group",  // "flow" only when the sentence describes data or actions going from one tool to another (arrows are drawn); otherwise "group" (a set of platforms, no arrows)
       "logos": [{"name": string, "domain": string}],  // real outside brands shown as logos joined by arrows, in the order of the sentence; [] when none
       "visual": "footage"|"site"}     // stock footage, or a phone showing the real website
@@ -50,7 +51,8 @@ ${SHAPE_HEAD}
 Choose ONE videoTemplate that fits the product and audience: "product-demo", "problem-solution", "feature-showcase", "startup-launch", "customer-story", or "corporate". Do not use the same generic story for every SaaS.
 Choose ONE captionStyle for this audience: "karaoke", "bold-pop", "typewriter", "neon", "minimal", "highlight", "editorial", "boxed", "word", or "clean". Prefer readable, restrained captions; avoid neon unless the brand genuinely calls for it.
 Make captionStyle format-aware: vertical 9:16 needs large, short, safe-area captions; square 1:1 needs compact balanced captions; horizontal 16:9 should prefer clean lower-third or editorial treatments that do not obstruct the footage.
-Logos are RARE and OPTIONAL: leave "logos" as [] for almost every scene and every video. Only when a scene's own sentence is explicitly about connecting, integrating or appearing on specific named tools or platforms (e.g. "connects Slack and GitHub"), list up to 3 REAL products or companies in "logos", as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content AND mentioned by the scene's own headline or voice-over (write them in the sentence so viewers hear what they see): never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
+Icon: give a scene one pictogram only when it makes the idea clearer at a glance (speed → "zap", security → "shield-check", growth → "trending-up"…); otherwise "". Use ONLY one of: zap clock timer trending-up chart-column chart-line shield-check lock users user-check message-circle mail bell calendar-check credit-card wallet shopping-cart rocket sparkles bot brain search globe link workflow layers settings target award star heart circle-check file-text folder database cloud smartphone monitor code gauge megaphone handshake headphones video image wand-sparkles mouse-pointer-click.
+Logos: whenever a scene's sentence names a real outside product or platform (ChatGPT, Slack, Shopify, Google…), list it in "logos" (up to 3), as the flow the sentence describes (source first, destination last), each as {"name": official brand name, "domain": its official website domain}. Only brands named in the page content AND mentioned by the scene's own headline or voice-over (write them in the sentence so viewers hear what they see): never invent one, never the advertised brand itself, and leave [] when no outside brand helps the scene.
 Narrative and footage rules:
 - Exactly four scenes, each with a different purpose and a distinct real-world shot. The first scene must be an immediate human/customer hook, not a generic computer close-up.
 - Use "site" for exactly two scenes, preferably scenes 2 and 3, to show the real captured website inside the phone. Do not invent a dashboard or fabricate UI.
@@ -160,19 +162,40 @@ function cleanLogos(list, own) {
   return out.slice(0, 3).map(({ name, domain }) => ({ name, domain }));
 }
 
-// Une scène de logos par vidéo (les autres gardent le mockup du site ou le plan filmé), et seulement des marques qui concernent la scène :
-// citées dans sa phrase, ou, pour la scène de démonstration, présentes sur la page.
-function limitLogos(scenes, pageText) {
-  const hay = (t) => String(t || '').toLowerCase();
-  const page = hay(pageText);
-  const first = (n) => hay(n).split(/[^a-z0-9]+/).filter((w) => w.length >= 3)[0] || '';
-  scenes.forEach((sc) => {
-    const text = hay(`${sc.headline} ${sc.voiceover}`);
-    const cue = /\b(connect\w*|integrat\w*|sync\w*|works? with|plugs? (in|into)|import\w*|export\w*|link\w*|compatible|available on|appear\w* (in|on)|visib\w* on|found on|int.gr\w*|synchronis\w*|relie\w*)\b/i.test(text);
-    sc.logos = cue ? (sc.logos || []).filter((l) => { const w = first(l.name); return w && text.includes(w); }) : [];
+// Logos : toute marque connue (pack de logos livré avec l'app) citée dans la phrase d'une scène est affichée, en plus de celles choisies par l'IA.
+// Repérage prudent : nom propre (majuscule hors début de phrase) ou forme typée marque (ChatGPT, HubSpot, GPT-4).
+let LOGO_KEYS = null;
+const nkey = (x) => String(x || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+const KEY_ALIAS = { chatgpt: 'openai', gpt4: 'openai', gpt: 'openai', gemini: 'googlegemini', claude: 'claude', copilot: 'githubcopilot' };
+const COMMON_WORDS = new Set('the your our you get start try free book meet with and for new now more best fast easy smart today every team teams work grow sales data cloud apple linear target square'.split(' '));
+function logoKeys() {
+  if (LOGO_KEYS) return LOGO_KEYS;
+  try { LOGO_KEYS = new Set(require('../data/logo-index.json').filter((e) => !e.m).flatMap((e) => e.k)); } catch { LOGO_KEYS = new Set(); }
+  return LOGO_KEYS;
+}
+function mentionedBrands(text, own) {
+  const keys = logoKeys(), out = [];
+  const words = String(text || '').split(/\s+/);
+  words.forEach((raw, i) => {
+    const w = raw.replace(/^[^A-Za-z0-9]+|[^A-Za-z0-9+-]+$/g, '');
+    if (w.length < 3) return;
+    const branded = /[a-z][A-Z]|[A-Z]{2,}[a-z]|\d/.test(w); // ChatGPT, HubSpot, GPT-4
+    const proper = /^[A-Z]/.test(w) && i > 0 && !/[.!?:]$/.test(words[i - 1] || '');
+    const k = nkey(w), key = KEY_ALIAS[k] || k;
+    if (!(branded || proper) || (!branded && COMMON_WORDS.has(k)) || own.includes(k)) return;
+    if ((keys.has(key) || keys.has(k)) && !out.some((o) => nkey(o.name) === k)) out.push({ name: w, domain: '' });
   });
-  const best = scenes.reduce((b, sc, i) => (sc.logos.length > (scenes[b]?.logos.length || 0) ? i : b), -1);
-  scenes.forEach((sc, i) => { if (i !== best) sc.logos = []; });
+  return out;
+}
+function limitLogos(scenes, pageText, own) {
+  const ownKeys = own.map(nkey).filter(Boolean);
+  scenes.forEach((sc) => {
+    const text = `${sc.headline} ${sc.voiceover}`, low = text.toLowerCase();
+    const first = (n) => String(n || '').toLowerCase().split(/[^a-z0-9]+/).filter((w) => w.length >= 3)[0] || '';
+    const chosen = (sc.logos || []).filter((l) => { const w = first(l.name); return w && low.includes(w); });
+    const seen = new Set(chosen.map((l) => nkey(l.name)));
+    sc.logos = [...chosen, ...mentionedBrands(text, ownKeys).filter((l) => !seen.has(nkey(l.name)))].slice(0, 3);
+  });
   return scenes;
 }
 
@@ -263,11 +286,12 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
         logos: type !== 'saas' ? [] : cleanLogos(s.logos, [d.brand, page.siteName]),
         // flèches seulement si le modèle annonce un flux ET que la phrase décrit un transfert (une simple liste de plateformes reste un groupe)
+        icon: 'zap clock timer trending-up chart-column chart-line shield-check lock users user-check message-circle mail bell calendar-check credit-card wallet shopping-cart rocket sparkles bot brain search globe link workflow layers settings target award star heart circle-check file-text folder database cloud smartphone monitor code gauge megaphone handshake headphones video image wand-sparkles mouse-pointer-click'.split(' ').includes(s.icon) ? s.icon : '',
         logosLayout: s.logos_layout === 'flow' && /\b(to|into|from|sync\w*|connect\w*|send\w*|push\w*|between|pipe\w*|vers|depuis|entre|synchronis\w*|envo\w*|relie\w*)\b/i.test(`${s.headline} ${s.voiceover}`) ? 'flow' : 'group',
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries,
       };
-    }).filter((s) => s.headline), [page.title, page.description, ...page.h1, ...page.h2, page.text].join(' ')),
+    }).filter((s) => s.headline), [page.title, page.description, ...page.h1, ...page.h2, page.text].join(' '), [d.brand, page.siteName]),
     cta: str(ad.cta, 30) || fb.ads[0].cta,
     ctaVoiceover: str(ad.ctaVoiceover, 120) || fb.ads[0].ctaVoiceover,
   })).filter((ad) => ad.scenes.length >= 2).slice(0, 1);

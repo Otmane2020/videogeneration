@@ -315,6 +315,74 @@ async function shopify(page, html) {
   } catch { /* fiche JSON indisponible : on garde ce que la page a donné */ }
 }
 
+// Salesforce Commerce Cloud (Demandware : Histoire d'Or…) : les attributs de variation sont dans le JSON de la page,
+// et chaque valeur a un point d'accès JSON (Product-Variation) qui donne la galerie et le prix de cette variation.
+const VISUAL_ATTR = /colou?r|couleur|coloris|farbe|finition|finish|teinte|mati[eè]re|material|m[ée]tal|bracelet|cadran|motif|pattern/i;
+function jsonArrayAt(html, start) {
+  let depth = 0, inStr = false;
+  for (let i = start; i < Math.min(html.length, start + 600000); i++) {
+    const c = html[i];
+    if (inStr) { if (c === '\\') i++; else if (c === '"') inStr = false; continue; }
+    if (c === '"') inStr = true;
+    else if (c === '[' || c === '{') depth++;
+    else if (c === ']' || c === '}') { depth--; if (!depth) { try { return JSON.parse(html.slice(start, i + 1)); } catch { return null; } } }
+  }
+  return null;
+}
+async function demandware(page, html) {
+  if (!/demandware\.(static|store)|\/Sites-[\w-]+-Site\//i.test(html)) return;
+  let attrs = [];
+  for (const m of html.matchAll(/"variationAttributes"\s*:\s*\[/g)) {
+    const arr = jsonArrayAt(html, m.index + m[0].length - 1);
+    if (Array.isArray(arr) && arr.length) { attrs = arr; break; }
+  }
+  attrs = attrs.filter((a) => a && Array.isArray(a.values) && a.values.length).slice(0, 4);
+  if (!attrs.length) return;
+  const host = new URL(page.url).hostname;
+  const label = (v) => String(v.displayValue ?? v.value ?? v.id ?? '').trim().slice(0, 40);
+  const orderable = (v) => v.selectable !== 0 && v.selectable !== false && v.variantOrderable?.orderable !== false;
+  const visual = attrs.find((a) => a.swatchable || VISUAL_ATTR.test(`${a.displayName} ${a.attributeId}`));
+  const gallery = async (v) => {
+    // image de la pastille dans la page, sinon galerie de la variation via son point d'accès JSON
+    let urls = [], price = '', ok = true;
+    try {
+      const u = new URL(String(v.url).replace(/quantity=undefined/, 'quantity=1'));
+      if (u.hostname === host && /Product-Variation/.test(u.pathname)) {
+        const r = await safeFetch(u.href, { headers: { accept: 'application/json', 'x-requested-with': 'XMLHttpRequest' } }, 7000);
+        if (r.ok) {
+          const { buf } = await readCapped(r, 2e6);
+          const pr = JSON.parse(buf.toString('utf8')).product || {};
+          const g = pr.images || {};
+          const set = g['product-details-main-desktop'] || g.large || g['hi-res'] || g[Object.keys(g)[0]] || [];
+          urls = set.map((x) => x.url || x.absURL).filter(Boolean);
+          price = pr.price?.sales?.value != null ? String(pr.price.sales.value) : '';
+          ok = pr.available !== false;
+        }
+      }
+    } catch { /* variation illisible : on garde la pastille */ }
+    const sw = v.images?.swatch?.[0]?.url || v.images?.large?.[0]?.url || v.images?.small?.[0]?.url || '';
+    return { urls: urls.length ? urls : sw ? [sw] : [], price, ok };
+  };
+  const out = {};
+  if (visual) {
+    const vals = visual.values.filter(orderable).slice(0, 8);
+    const got = await Promise.all(vals.map(gallery));
+    const list = vals.map((v, i) => ({
+      options: { [String(visual.displayName || 'Option').slice(0, 30)]: label(v) },
+      price: got[i].price, image: got[i].urls[0] ? new URL(got[i].urls[0].replace(/^\/\//, 'https://'), page.url).href : '',
+      gallery: got[i].urls.slice(0, 4).map((u) => new URL(u.replace(/^\/\//, 'https://'), page.url).href), available: got[i].ok, selected: !!v.selected,
+    }));
+    // la variation affichée sur la page passe en premier
+    list.sort((a, b) => (b.selected ? 1 : 0) - (a.selected ? 1 : 0));
+    out.variants = list.map(({ selected, ...x }) => x);
+  }
+  page.product ||= { name: '', description: '', brand: '', price: '', currency: '', options: [], variants: [] };
+  page.product.options = attrs.map((a) => ({ name: String(a.displayName || a.attributeId || 'Option').slice(0, 30), values: a.values.filter(orderable).map(label).filter(Boolean).slice(0, 30) }));
+  if (out.variants?.length) page.product.variants = out.variants;
+  if (!page.product.price) page.product.price = out.variants?.find((v) => v.price)?.price || '';
+  page.source = page.source || 'demandware';
+}
+
 // Requête telle qu'un navigateur l'envoie : beaucoup de boutiques refusent (403) les requêtes sans ces en-têtes.
 const CHROME = {
   'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
@@ -386,7 +454,9 @@ module.exports = handler('POST', async (req, res) => {
   const page = extract(html, r.url || url);
   console.log(`inspect parsed ${html.length} chars in ${Date.now() - t1} ms, ${page.images.length} images`);
   await shopify(page, html);
+  await demandware(page, html);
   if (!page.title && !page.description && page.text.length < 40) throw httpError(422, 'Empty or protected page: nothing to analyse. You can still add photos by hand.');
   send(res, 200, page);
 });
 module.exports.extract = extract;
+module.exports.demandware = demandware;

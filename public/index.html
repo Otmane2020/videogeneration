@@ -238,6 +238,10 @@
     <div id="opt-bg"><h3>Product visuals</h3>
     <div class="seg two" role="radiogroup" aria-label="Product visuals" data-for="bgai"><button type="button" role="radio" data-v="0">Product gallery</button><button type="button" role="radio" data-v="1">AI Scene <span class="pro-label">PRO</span></button></div>
     <p class="hint">Generate one lifestyle product image with Meta Muse. Every other scene uses photos from your product page gallery.</p></div>
+    <div id="opt-vars" hidden><h3>Variations</h3>
+    <div class="seg two" role="radiogroup" aria-label="Product variations" data-for="vars"><button type="button" role="radio" data-v="0">Main product</button><button type="button" role="radio" data-v="1">Add variations</button></div>
+    <p class="hint" id="vars-hint">Adds a scene that picks every colour of the product one after the other.</p></div>
+    <select id="vars" hidden><option value="0">Off</option><option value="1">On</option></select>
     <select id="dur" hidden><option value="0">Auto</option><option value="10">10</option><option value="15">15</option><option value="20">20</option><option value="30">30</option></select>
     <select id="res" hidden><option value="720">720p</option><option value="1080">1080p</option></select>
     <select id="bgai" hidden><option value="0">Studio</option><option value="1">AI</option></select>

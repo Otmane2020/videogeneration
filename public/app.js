@@ -116,6 +116,7 @@ function setType(t) {
   $('#card-product').hidden = t !== 'ecom';
   $('#card-brand').hidden = t === 'ecom';
   $('#opt-bg').hidden = t !== 'ecom';
+  syncVariationsOption();
   setIntent(t === 'ecom' ? 'launch' : 'problem');
   renderPhotos();
 }
@@ -149,6 +150,28 @@ $('#b-prev').addEventListener('click', () => show('s-type', 3));
 
 /* ----- variantes (couleur, taille…) et choix des photos ----- */
 const MAX_PHOTOS = 6;
+// Coloris proposés par la fiche : une photo distincte par valeur d'une option de type couleur / finition.
+const COLOR_OPT = /colou?r|couleur|coloris|farbe|finition|finish|teinte|mati[eè]re|material|m[ée]tal|motif|pattern/i;
+function colorVariants() {
+  const pr = state.page?.product;
+  if (!pr?.variants?.length) return [];
+  const key = (pr.options || []).find((o) => COLOR_OPT.test(o.name))?.name;
+  if (!key) return [];
+  const byName = new Map(), imgs = new Set(), list = [];
+  for (const v of pr.variants) if (v.options[key] && v.image && v.available !== false && !byName.has(v.options[key])) byName.set(v.options[key], v);
+  for (const [name, v] of byName) {
+    const k = v.image.split('?')[0];
+    if (!imgs.has(k)) { imgs.add(k); list.push({ name, key, image: v.image }); }
+  }
+  return list.length >= 2 ? list.slice(0, 8) : [];
+}
+function syncVariationsOption() {
+  const n = state.type === 'ecom' ? colorVariants().length : 0;
+  $('#opt-vars').hidden = !n;
+  $('#vars').value = '0';
+  $$('.seg[data-for=vars] button').forEach((x) => x.setAttribute('aria-checked', String(x.dataset.v === '0')));
+  if (n) $('#vars-hint').textContent = `This product comes in ${n} colours (${colorVariants().map((c) => c.name).join(', ')}). Adds a scene that picks each one after the other.`;
+}
 const variantOf = () => (state.page.product?.variants || []).find((v) => Object.entries(state.variant).every(([k, val]) => v.options[k] === val)) || null;
 function initVariant() {
   const pr = state.page.product, first = pr?.variants.find((v) => v.available) || pr?.variants[0];
@@ -243,6 +266,40 @@ $('#files').addEventListener('change', async (e) => {
   renderPhotos();
 });
 
+/* ---------- scène « coloris » : chaque variation de la fiche passe à l'écran, avec sa pastille ---------- */
+const COLORS_COPY = {
+  fr: { head: (n) => `${n} coloris au choix`, say: (l) => `Disponible en plusieurs coloris : ${l}.`, and: 'et' , more: "et bien d'autres" },
+  en: { head: (n) => `${n} colours to choose`, say: (l) => `Available in several colours: ${l}.`, and: 'and' , more: 'and more' },
+  es: { head: (n) => `${n} colores a elegir`, say: (l) => `Disponible en varios colores: ${l}.`, and: 'y' , more: 'y más' },
+  de: { head: (n) => `${n} Farben zur Wahl`, say: (l) => `In mehreren Farben erhältlich: ${l}.`, and: 'und' , more: 'und mehr' },
+  it: { head: (n) => `${n} colori tra cui scegliere`, say: (l) => `Disponibile in diversi colori: ${l}.`, and: 'e' , more: 'e altri' },
+  nl: { head: (n) => `${n} kleuren naar keuze`, say: (l) => `Verkrijgbaar in meerdere kleuren: ${l}.`, and: 'en' , more: 'en meer' },
+  pt: { head: (n) => `${n} cores à escolha`, say: (l) => `Disponível em várias cores: ${l}.`, and: 'e' , more: 'e mais' },
+  ar: { head: (n) => `${n} ألوان للاختيار`, say: (l) => `متوفر بعدة ألوان: ${l}.`, and: 'و' , more: 'والمزيد' },
+  ja: { head: (n) => `${n}色から選べます`, say: (l) => `複数のカラーをご用意しています：${l}。`, and: 'と' , more: 'など' },
+};
+function addColorsScene(plan, ad) {
+  const colors = colorVariants();
+  if (colors.length < 2) return;
+  const copy = COLORS_COPY[plan.language] || COLORS_COPY.en;
+  const names = colors.map((c) => c.name);
+  // la voix cite quatre coloris au plus ; l'image les montre tous
+  const said = names.length > 4 ? [...names.slice(0, 3), copy.more] : names;
+  const list = `${said.slice(0, -1).join(', ')} ${said.length > 3 && names.length > 4 ? '' : copy.and + ' '}${said[said.length - 1]}`.replace(/\s+/g, ' ');
+  // les photos des variations rejoignent celles du produit : chargées et lues comme les autres
+  const first = state.photoUrls.length;
+  colors.forEach((c, i) => {
+    state.photoUrls.push(media(c.image)); state.photoSources.push(c.image);
+    plan.photos.push({ index: first + i, kind: 'other', usable: true });
+    c.idx = first + i;
+  });
+  const line = copy.say(list);
+  ad.scenes.splice(Math.min(2, ad.scenes.length), 0, {
+    role: 'colors', headline: copy.head(colors.length), voiceover: line, spoken: line, visual: 'colors', photo: colors[0].idx, badge: '', colors,
+    queries: [], logos: [], icon: '', logosLayout: 'group',
+  });
+}
+
 /* ---------- logos de marques (Iconify) ---------- */
 async function loadIcons(brands) {
   if (!brands.length) return {};
@@ -287,6 +344,7 @@ $('#b-gen').addEventListener('click', async () => {
     if (brand?.colors) Object.assign(plan.palette, brand.colors);
     plan.palette = safePalette(plan.palette);
     state.ad = plan.ads[0];
+    if (ecom && $('#vars').value === '1') addColorsScene(plan, state.ad);
     // Déterminer la qualité avant la recherche de footage afin de demander des sources HD pour les exports Pro.
     $('#res').value = String(autoResolution());
     setMusic(ecom ? 'm6' : 'm1');
@@ -321,7 +379,7 @@ $('#b-update').addEventListener('click', () => { const actx = newAudio(); cancel
 $('#b-again').addEventListener('click', () => { cancelJob(); show('s-opts', 4); });
 
 // Retouches : texte de chaque scène, visuel, musique.
-const VISUAL = { site: 'Site demo', product: 'Product', detail: 'Close-up', footage: 'Clip' };
+const VISUAL = { site: 'Site demo', product: 'Product', detail: 'Close-up', footage: 'Clip', colors: 'Colours' };
 function buildEditor(used) {
   const ad = state.ad, box = $('#ed-scenes');
   box.textContent = '';
@@ -817,6 +875,45 @@ const DECOR = {
 const TRANSITIONS = ['flash', 'whip', 'zoom', 'slideU', 'wipe'];
 const TRANS = 0.38;
 
+// « Color pick-up » : la pastille d'un coloris prend la couleur de son nom quand on la connaît, sinon celle prélevée
+// sur la photo de la variation (teinte dominante la plus saturée du produit, reflets blancs ignorés).
+const COLOR_NAMES = [
+  ['or jaune', '#e2b341'], ['or rose', '#d9a08f'], ['or blanc', '#dcdcd2'], ['rose gold', '#d9a08f'], ['yellow gold', '#e2b341'], ['white gold', '#dcdcd2'],
+  ['noir', '#111111'], ['black', '#111111'], ['schwarz', '#111111'], ['negro', '#111111'], ['nero', '#111111'], ['zwart', '#111111'], ['preto', '#111111'],
+  ['blanc', '#f4f4f2'], ['white', '#f4f4f2'], ['weiss', '#f4f4f2'], ['blanco', '#f4f4f2'], ['bianco', '#f4f4f2'], ['wit', '#f4f4f2'], ['branco', '#f4f4f2'],
+  ['gris', '#8e9196'], ['grey', '#8e9196'], ['gray', '#8e9196'], ['grau', '#8e9196'], ['grigio', '#8e9196'], ['grijs', '#8e9196'], ['cinza', '#8e9196'], ['anthracite', '#3a3d40'],
+  ['argent', '#c4c8cc'], ['silver', '#c4c8cc'], ['silber', '#c4c8cc'], ['plata', '#c4c8cc'], ['argento', '#c4c8cc'], ['acier', '#9aa0a6'], ['steel', '#9aa0a6'],
+  ['dore', '#d4a63a'], ['gold', '#d4a63a'], ['dorado', '#d4a63a'], ['oro', '#d4a63a'], ['or', '#d4a63a'], ['champagne', '#e6d3a8'], ['cuivre', '#b8693d'], ['copper', '#b8693d'], ['bronze', '#9a6a3a'],
+  ['rouge', '#d1342f'], ['red', '#d1342f'], ['rojo', '#d1342f'], ['rot', '#d1342f'], ['rosso', '#d1342f'], ['rood', '#d1342f'], ['vermelho', '#d1342f'], ['bordeaux', '#6d1f2f'], ['burgundy', '#6d1f2f'],
+  ['bleu', '#2f5fd0'], ['blue', '#2f5fd0'], ['azul', '#2f5fd0'], ['blau', '#2f5fd0'], ['blu', '#2f5fd0'], ['blauw', '#2f5fd0'], ['marine', '#1d2b53'], ['navy', '#1d2b53'], ['turquoise', '#25b7b0'],
+  ['vert', '#2f9a57'], ['green', '#2f9a57'], ['verde', '#2f9a57'], ['gruen', '#2f9a57'], ['groen', '#2f9a57'], ['kaki', '#7a7a3c'], ['khaki', '#7a7a3c'],
+  ['jaune', '#f2c81d'], ['yellow', '#f2c81d'], ['amarillo', '#f2c81d'], ['gelb', '#f2c81d'], ['giallo', '#f2c81d'], ['geel', '#f2c81d'], ['amarelo', '#f2c81d'], ['orange', '#f08a1c'],
+  ['rose', '#ec7fb0'], ['pink', '#ec7fb0'], ['violet', '#7c4dbd'], ['purple', '#7c4dbd'], ['lila', '#7c4dbd'], ['morado', '#7c4dbd'], ['viola', '#7c4dbd'], ['paars', '#7c4dbd'], ['roxo', '#7c4dbd'],
+  ['marron', '#7a4a2b'], ['brown', '#7a4a2b'], ['braun', '#7a4a2b'], ['marrone', '#7a4a2b'], ['bruin', '#7a4a2b'], ['chocolat', '#5a3622'], ['beige', '#d8c3a1'], ['creme', '#f3ead2'], ['cream', '#f3ead2'], ['ivoire', '#f3ead2'], ['ivory', '#f3ead2'],
+].sort((a, b) => b[0].length - a[0].length);
+function colorOfName(name) {
+  const t = ` ${String(name).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ')} `;
+  const hit = COLOR_NAMES.find(([n]) => t.includes(` ${n} `));
+  return hit ? hit[1] : null;
+}
+function pickColor(info) {
+  if (!info) return null;
+  const { d, back, w, h } = info, buckets = new Map();
+  for (let i = 0; i < w * h; i++) {
+    if (back[i] || d[i * 4 + 3] < 100) continue;
+    const r = d[i * 4], g = d[i * 4 + 1], b = d[i * 4 + 2], mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+    if ((r + g + b) / 3 > 238 && (mx - mn) / (mx || 1) < 0.08) continue; // reflets blancs
+    const key = ((r >> 5) << 6) | ((g >> 5) << 3) | (b >> 5), e = buckets.get(key) || [0, 0, 0, 0];
+    e[0] += r; e[1] += g; e[2] += b; e[3]++; buckets.set(key, e);
+  }
+  let best = null, top = 0;
+  for (const e of buckets.values()) {
+    const r = e[0] / e[3], g = e[1] / e[3], b = e[2] / e[3], sat = (Math.max(r, g, b) - Math.min(r, g, b)) / Math.max(r, g, b, 1), sc = e[3] * (1 + 2.5 * sat);
+    if (sc > top) { top = sc; best = [r, g, b]; }
+  }
+  return best ? '#' + best.map((v) => Math.round(v).toString(16).padStart(2, '0')).join('') : null;
+}
+
 function makeRenderer(cv, job) {
   const S = job.scale, main = cv.getContext('2d');
   const [W, H] = job.size;
@@ -1009,8 +1106,44 @@ function makeRenderer(cv, job) {
     floor.addColorStop(0, 'rgba(0,0,0,0)'); floor.addColorStop(1, rgbaOf(mixHex(c1, '#000000', 0.6), 0.65));
     ctx.fillStyle = floor; ctx.fillRect(0, H * 0.72, W, H * 0.28);
   }
+  // scène « coloris » : une photo par variation, enchaînées en fondu ; les pastilles suivent
+  const colorSlot = (sc, local) => { const t0 = sc.dur * 0.2, n = sc.colors.length, per = (sc.dur - t0) / n; return { t0, per, i: local < t0 ? -1 : Math.min(n - 1, Math.floor((local - t0) / per)) }; };
+  function colorsBg(sc, k) {
+    const local = k * sc.dur, { t0, per, i } = colorSlot(sc, local), n = sc.colors.length, cur = Math.max(0, i);
+    const f = i < 0 ? clamp(local / Math.max(0.1, t0)) * 0.5 : clamp((local - t0 - i * per) / per);
+    const frame = { variant: 0 };
+    framed(frame, sc.colors[cur].ph, f, false);
+    const fade = i >= 0 && i < n - 1 ? clamp((local - t0 - (i + 1) * per + 0.28) / 0.28) : 0;
+    if (fade > 0) { ctx.save(); ctx.globalAlpha = fade; framed(frame, sc.colors[i + 1].ph, 0, false); ctx.restore(); }
+  }
+  function colorsRow(sc, local, top) {
+    const n = sc.colors.length, { t0, per, i } = colorSlot(sc, local), appear = backOut((local - 0.15) / 0.5);
+    if (appear <= 0) return;
+    const r = Math.min(24, (W - pad * 2) / n / 2.7), gap = r * 2.75, y = top - r - 52, x0 = W / 2 - (gap * (n - 1)) / 2;
+    ctx.save();
+    ctx.globalAlpha = clamp(appear);
+    sc.colors.forEach((c, j) => {
+      const on = j === i, pop = on ? 1 + 0.3 * backOut((local - t0 - j * per) / 0.28) : 1, x = x0 + j * gap, rr = r * pop * appear;
+      ctx.save();
+      ctx.shadowColor = c.hex; ctx.shadowBlur = on ? 28 * S : 0;
+      ctx.fillStyle = c.hex; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill();
+      ctx.restore();
+      ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,.35)'; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.stroke();
+      ctx.lineWidth = on ? 4 : 2; ctx.strokeStyle = on ? '#fff' : 'rgba(255,255,255,.5)';
+      ctx.beginPath(); ctx.arc(x, y, rr + (on ? 8 : 4), 0, 7); ctx.stroke();
+    });
+    if (i >= 0) {
+      const lab = sc.colors[i].name, e = backOut((local - t0 - i * per) / 0.25);
+      ctx.font = `700 ${Math.round(headSize * 0.46)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.globalAlpha = clamp(e);
+      ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 8;
+      ctx.fillStyle = '#fff'; ctx.fillText(lab, W / 2, y - r - 34 - (1 - clamp(e)) * 10, W - pad * 2);
+    }
+    ctx.restore();
+  }
   function background(sc, k) {
     const ph = sc.ph;
+    if (sc.colors) return colorsBg(sc, k);
     // Pour une scène de démonstration SaaS, le vrai screenshot du site doit rester lisible.
     // On utilise un décor de marque derrière le téléphone, pas un second footage concurrent.
     if (plan.type === 'saas' && sc.visual === 'site' && shot) return aurora(sc, k, k * sc.dur);
@@ -1278,6 +1411,7 @@ function makeRenderer(cv, job) {
     if (stage) iconStage(sc, local, box);
     if (row) iconStage(sc, local, { ...box, h: rowH }, true);
     if (sc.iconImg) proIcon(sc, local, top);
+    if (sc.colors) colorsRow(sc, local, top);
     if (onDecor) { const r = product(ph, box, local, k); pill(sc.badge, r.x + r.w * 0.82, Math.max(box.y + 30, r.y + r.h * 0.12), local); }
     else if (sc.badge) pill(sc.badge, W / 2, wide ? H * 0.3 : H * 0.36, local, 30);
 
@@ -1673,7 +1807,7 @@ async function produce(actx) {
   let site = 0;
   scenes.forEach((s) => { if (s.visual === 'site') { if (site < 2) s.variant = site++; else s.visual = 'footage'; } });
   const needClip = (s) => plan.type !== 'ecom' && (s.visual === 'footage' || s.visual === 'site' || s.kind === 'cta');
-  const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 5);
+  const photoIds = [...new Set(plan.type === 'ecom' ? [...scenes.map((s) => s.photo), ...plan.photos.filter((p) => p.usable).map((p) => p.index)].filter((i) => i >= 0) : [])].slice(0, 16);
   let done = 0;
   const tasks = scenes.length * 2 + photoIds.length + 3;
   const MSG = plan.type === 'ecom' ? 'Preparing product photos and voice-over…' : 'Preparing visuals and voice-over…';
@@ -1834,6 +1968,12 @@ async function produce(actx) {
       if (s.kind === 'cta') s.ph = best;
       else if (s.visual === 'product' || s.visual === 'detail') s.ph = byId.get(s.photo) || best;
       s.still = stills[i] || null;
+    });
+    // scène « coloris » : chaque variation reçoit sa photo et sa couleur (nom connu, sinon prélevée sur la photo)
+    scenes.forEach((s) => {
+      if (!s.colors) return;
+      s.colors = s.colors.map((c) => { const ph = byId.get(c.idx); return ph?.img ? { ...c, ph, hex: colorOfName(c.name) || pickColor(ph.info) || plan.palette.accent } : null; }).filter(Boolean);
+      if (s.colors.length < 2) { s.colors = null; s.visual = 'product'; s.ph = best; } else s.ph = s.colors[0].ph;
     });
     // Never substitute stock footage into an e-commerce ad. If Muse is enabled, only the opening hook is AI-generated.
     if (plan.type === 'ecom' && best) scenes.forEach((s, i) => {

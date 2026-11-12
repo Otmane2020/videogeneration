@@ -228,7 +228,7 @@ async function findScene(list, { kind = 'video', safe = [], loose = false, until
 // `g` identifie son auteur (deux plans du même auteur se ressemblent souvent)
 const out = (x, hd) => {
   const pick = hd && x.full && x.kind === 'video' ? x.full : x.std;
-  return { id: x.id, g: x.g, kind: x.kind, url: pick.url, lite: x.lite, w: pick.width, h: pick.height, hd: !!x.full, thumb: x.thumb, ...(x.kind === 'video' ? { duration: x.duration } : {}), rel: x.rel };
+  return { id: x.id, g: x.g, kind: x.kind, url: pick.url, lite: x.lite, w: pick.width, h: pick.height, hd: !!x.full, thumb: x.thumb, ...(x.kind === 'video' ? { duration: x.duration } : {}), ...(x.cr ? { cr: true, au: x.au || '', lic: x.lic || '' } : {}), rel: x.rel };
 };
 
 module.exports = handler('POST', async (req, res) => {

@@ -261,7 +261,8 @@ function normalize(d, page, type, seen, intent, total = seen.length) {
         headline: str(s.headline, 60), voiceover: str(s.voiceover, 180), spoken: str(s.spoken, 240), visual, photo,
         role: ['hook', 'context', 'demo', 'outcome'].includes(s.role) ? s.role : '',
         logos: type !== 'saas' ? [] : cleanLogos(s.logos, [d.brand, page.siteName]),
-        logosLayout: s.logos_layout === 'flow' ? 'flow' : 'group',
+        // flèches seulement si le modèle annonce un flux ET que la phrase décrit un transfert (une simple liste de plateformes reste un groupe)
+        logosLayout: s.logos_layout === 'flow' && /\b(to|into|from|sync\w*|connect\w*|send\w*|push\w*|between|pipe\w*|vers|depuis|entre|synchronis\w*|envo\w*|relie\w*)\b/i.test(`${s.headline} ${s.voiceover}`) ? 'flow' : 'group',
         badge: type === 'ecom' ? str(s.badge, 34) : '',
         queries,
       };

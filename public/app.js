@@ -4,7 +4,9 @@ const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const FORMATS = { '9:16': [720, 1280], '1:1': [720, 720], '16:9': [1280, 720] };
 const state = { page: null, type: null, plan: null, fmt: '9:16', job: null, music: '', captionStyle: '', templateStyle: '', uploads: [], photoUrls: [], photoSources: [], logo: null, variant: {}, picked: [], intent: 'launch', ad: null, clipLists: [], ctaList: [], icons: {}, visuals: [], used: [], cache: { blob: new Map(), voice: new Map(), shot: null } };
 // adresses du site (médias de la bibliothèque) : directes ; les autres passent par le proxy (CORS pour le canvas)
-const media = (u) => (String(u).startsWith('/') ? u : '/api/media?u=' + encodeURIComponent(u));
+// médias de la bibliothèque (site, ou fichiers du dépôt GitHub public, qui autorisent le CORS) : directs ; les autres passent par le proxy
+const DIRECT = /^https:\/\/raw\.githubusercontent\.com\/Otmane2020\/videogeneration\//;
+const media = (u) => (String(u).startsWith('/') || DIRECT.test(String(u)) ? u : '/api/media?u=' + encodeURIComponent(u));
 
 // IndexedDB : stockage local des vidéos générées (jusqu'à 15, par ID de génération)
 const vidIdb = (() => {
@@ -490,6 +492,7 @@ const fetchBlob = async (url) => {
 function loadImage(src, min = 80) {
   return new Promise((res) => {
     const im = new Image();
+    if (DIRECT.test(String(src))) im.crossOrigin = 'anonymous'; // sans cela le canvas serait « souillé » et l'export impossible
     im.onload = () => res(im.naturalWidth >= min ? im : null);
     im.onerror = () => res(null);
     im.src = src;
@@ -1168,6 +1171,16 @@ function makeRenderer(cv, job) {
       if (kind === 'wipe' && e < 1) { ctx.strokeStyle = A; ctx.lineWidth = 10 * (1 - e) + 2; ctx.beginPath(); ctx.arc(W / 2, H * 0.55, e * Math.hypot(W, H) * 0.62, 0, 7); ctx.stroke(); }
     } else { ctx = main; full(sc, local); }
     chrome(t, idx);
+    if (job.credits?.length && idx === scenes.length - 1) {
+      // mention d'auteur (CC BY) en bas de l'écran final
+      ctx.save();
+      ctx.font = `500 ${Math.round(Math.min(W, H) * 0.026)}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+      ctx.fillStyle = 'rgba(255,255,255,.78)'; ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 6;
+      let line = 'Footage: ' + job.credits.join(', ');
+      while (ctx.measureText(line).width > W - 56 && line.length > 12) line = line.slice(0, -2);
+      ctx.fillText(line.length < ('Footage: ' + job.credits.join(', ')).length ? line + '…' : line, W / 2, H - Math.max(14, H * 0.018));
+      ctx.restore();
+    }
     if (job.watermark) {
       // offre gratuite : filigrane en oblique, répété sur toute l'image
       ctx.save();
@@ -1386,7 +1399,10 @@ async function produce(actx) {
     state.visuals = scenes.map((s) => s.visual);
     const auto = await pickClips(scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? state.ctaList : []) : state.clipLists[i]) || []), W / H);
     if (job.cancelled) return;
+    // licences à mention d'auteur (CC BY) : les plans utilisés sont crédités sur l'écran final
+    const credit = (list) => { job.credits = [...new Set(list.filter((u) => u?.cr).map((u) => `${u.au || 'Unknown author'} (${u.lic})`))]; };
     const used = (state.used = scenes.map((s, i) => (s.kind ? (plan.type === 'saas' ? auto[i] || null : null) : s.pick || auto[i] || null)));
+    credit(used);
     const voice = (text) => (text ? cached(cache.voice, plan.language + '|' + text, () => loadVoice(text, plan.language)) : Promise.resolve(null));
     const [blobs, stills, voices, shot, brand, photos] = await Promise.all([
       Promise.all(scenes.map((s, i) => tick(used[i]?.kind === 'video' && needClip(s) ? cached(cache.blob, used[i].url, () => fetchBlob(media(lite ? used[i].lite : used[i].url))) : Promise.resolve(null)))),

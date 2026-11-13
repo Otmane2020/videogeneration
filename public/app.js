@@ -1103,33 +1103,30 @@ function makeRenderer(cv, job) {
     ? { x: W * 0.56, y: 84, w: W * 0.44 - pad, h: H - 150 }
     : { x: pad, y: 122, w: W - pad * 2, h: textTop - 122 - 30 });
 
-  // Produit coupé par le cadre de la photo (bracelet de montre, rideau, tapis…) : une fois détouré, il déborde de l'écran
-  // par ces mêmes côtés au lieu de flotter tronqué net. À l'écran final, il descend du haut et s'efface en bas.
+  // Produit coupé par le cadre de SA photo (bracelet de montre, rideau…) : il reste ENTIER à l'écran, jamais rogné par
+  // les bords de la vidéo ; seuls les côtés déjà coupés sur la photo d'origine s'estompent en douceur.
   function productBleed(ph, box, local, k, cta) {
-    const c = ph.cut, sd = ph.info.sides, e = easeOut((local - 0.05) / 0.6), z = 1 + 0.05 * k;
-    let w, h, x, y;
-    if (sd.t && sd.b) {
-      h = (cta ? box.y + box.h + H * 0.05 : H * 1.05) * z; w = (c.width * h) / c.height;
-      if (w > W * 1.05) { w = W * 1.05; h = (c.height * w) / c.width; }
-      x = box.x + (box.w - w) / 2 + (k - 0.5) * 12; y = cta ? -H * 0.05 : (H - h) / 2;
-    } else {
-      w = (wide ? box.w + pad * 2 : W * 1.05) * z; h = (c.height * w) / c.width;
-      x = wide ? box.x - pad : (W - w) / 2; y = box.y + (box.h - h) / 2;
-    }
-    y += (1 - e) * 30;
+    const c = ph.cut, sd = ph.info.sides, e = easeOut((local - 0.05) / 0.6), z = 1 + 0.04 * k;
+    const maxW = (wide ? box.w : W - pad * 2) * 0.94, maxH = cta ? box.h + 40 : H * (wide ? 0.86 : 0.8);
+    const f = Math.min(maxW / c.width, maxH / c.height) * z, w = c.width * f, h = c.height * f;
+    const x = (wide ? box.x + box.w / 2 : W / 2) - w / 2 + (k - 0.5) * 10;
+    const y = (cta ? box.y + (box.h - h) / 2 + 20 : Math.max(H * 0.04, H * (wide ? 0.5 : 0.44) - h / 2)) + (1 - e) * 30;
+    tmp.width = Math.max(1, Math.ceil(w * S)); tmp.height = Math.max(1, Math.ceil(h * S));
+    const t = tmp.getContext('2d');
+    t.clearRect(0, 0, tmp.width, tmp.height);
+    t.imageSmoothingQuality = 'high';
+    t.drawImage(c, 0, 0, tmp.width, tmp.height);
+    t.globalCompositeOperation = 'destination-out';
+    const fade = (x0, y0, x1, y1, rx, ry, rw, rh) => { const g = t.createLinearGradient(x0, y0, x1, y1); g.addColorStop(0, 'rgba(0,0,0,1)'); g.addColorStop(1, 'rgba(0,0,0,0)'); t.fillStyle = g; t.fillRect(rx, ry, rw, rh); };
+    const fh = tmp.height * 0.2, fw = tmp.width * 0.2;
+    if (sd.t) fade(0, 0, 0, fh, 0, 0, tmp.width, fh);
+    if (sd.b) fade(0, tmp.height, 0, tmp.height - fh, 0, tmp.height - fh, tmp.width, fh);
+    if (sd.l) fade(0, 0, fw, 0, 0, 0, fw, tmp.height);
+    if (sd.r) fade(tmp.width, 0, tmp.width - fw, 0, tmp.width - fw, 0, fw, tmp.height);
+    t.globalCompositeOperation = 'source-over';
     ctx.save();
     ctx.globalAlpha = clamp((local - 0.05) / 0.3);
-    ctx.imageSmoothingQuality = 'high';
-    if (cta && sd.b) {
-      tmp.width = Math.ceil(w * S); tmp.height = Math.ceil(h * S);
-      const t = tmp.getContext('2d');
-      t.drawImage(c, 0, 0, tmp.width, tmp.height);
-      t.globalCompositeOperation = 'destination-in';
-      const fade = t.createLinearGradient(0, 0, 0, tmp.height);
-      fade.addColorStop(0, '#000'); fade.addColorStop(0.62, '#000'); fade.addColorStop(1, 'rgba(0,0,0,0)');
-      t.fillStyle = fade; t.fillRect(0, 0, tmp.width, tmp.height);
-      ctx.drawImage(tmp, x, y, w, h);
-    } else ctx.drawImage(c, x, y, w, h);
+    ctx.drawImage(tmp, x, y, w, h);
     ctx.restore();
     return { x, y, w, h };
   }

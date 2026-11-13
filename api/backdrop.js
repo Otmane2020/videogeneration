@@ -1,6 +1,6 @@
 // Deux actions :
 //   POST /api/backdrop           → génère un décor publicitaire (CF Workers AI gratuit ou OpenRouter payant)
-//   POST /api/backdrop?a=removebg → détourage serveur (ClearBackdrop uniquement)
+//   POST /api/backdrop?a=removebg → détourage serveur (ClearBackdrop ou BiRefNet, au choix — jamais en secours)
 //
 // Le vrai produit détouré est toujours posé côté client par-dessus le décor,
 // donc sa forme, son logo et ses détails ne sont jamais altérés.
@@ -92,7 +92,7 @@ async function orBackdrop(prompt, ratio) {
 }
 
 // ─── Détourage serveur ────────────────────────────────────────────────────────
-// ClearBackdrop uniquement. Sans résultat, la photo n'est pas détourée (pas de service de secours).
+// Un seul service par détourage (choisi par REMOVEBG_ENGINE). Sans résultat, la photo n'est pas détourée.
 // L'image est une adresse publique (récupérée sans jamais atteindre le réseau interne) ou une image envoyée en data URL.
 async function loadSource(src) {
   const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(src);
@@ -110,8 +110,51 @@ async function loadSource(src) {
   return { buf, type };
 }
 
-// Un seul service : ClearBackdrop. Aucun service de secours, aucun détourage dans le navigateur.
-async function removeBg(src) {
+// Deux services au choix, jamais l'un en secours de l'autre : REMOVEBG_ENGINE=clearbackdrop (défaut) ou birefnet.
+// Aucun détourage dans le navigateur.
+async function removeBg(src, engine) {
+  return (engine || process.env.REMOVEBG_ENGINE) === 'birefnet' ? birefnet(src) : clearBackdrop(src);
+}
+
+// BiRefNet (licence MIT), via sa démo officielle sur Hugging Face Spaces (API Gradio). Gratuit ; HF_TOKEN facultatif
+// augmente le quota GPU quotidien. Le modèle « General » à 1024 px est celui recommandé par ses auteurs.
+const BIREFNET = 'https://zhengpeng7-birefnet-demo.hf.space';
+async function birefnet(src) {
+  const auth = process.env.HF_TOKEN ? { authorization: `Bearer ${process.env.HF_TOKEN}` } : {};
+  let api = 'URL', input = src;
+  if (!/^https?:/i.test(src)) {
+    // image envoyée en data URL : déposée sur le Space, puis traitée par l'onglet « image »
+    const { buf, type } = await loadSource(src);
+    const fd = new FormData();
+    fd.append('files', new Blob([buf], { type }), 'product.' + type.split('/')[1]);
+    const up = await fetch(`${BIREFNET}/gradio_api/upload`, { method: 'POST', headers: auth, body: fd, signal: AbortSignal.timeout(20000) });
+    const paths = await up.json().catch(() => null);
+    if (!up.ok || !Array.isArray(paths) || !paths[0]) throw httpError(502, 'BiRefNet upload failed');
+    api = 'image'; input = { path: paths[0], meta: { _type: 'gradio.FileData' } };
+  }
+  const start = await fetch(`${BIREFNET}/gradio_api/call/${api}`, {
+    method: 'POST', headers: { ...auth, 'content-type': 'application/json' },
+    body: JSON.stringify({ data: [input, '1024x1024', 'General'] }), signal: AbortSignal.timeout(20000),
+  });
+  const { event_id: id } = await start.json().catch(() => ({}));
+  if (!start.ok || !id) throw httpError(502, `BiRefNet unavailable (${start.status})`);
+  // le résultat arrive en flux (SSE) : « event: complete » puis la paire [original, détouré]
+  const stream = await fetch(`${BIREFNET}/gradio_api/call/${api}/${id}`, { headers: auth, signal: AbortSignal.timeout(55000) });
+  const text = await stream.text();
+  const done = text.lastIndexOf('event: complete');
+  if (done < 0) { console.warn('BiRefNet removebg', text.slice(-300).replace(/\s+/g, ' ')); throw httpError(502, 'BiRefNet could not remove the background'); }
+  const line = text.slice(done).split('\n').find((l) => l.startsWith('data:'));
+  const result = JSON.parse(line.slice(5).trim());
+  const file = [].concat(result?.[0] || [])[1];
+  const url = file?.url || (file?.path && `${BIREFNET}/gradio_api/file=${file.path}`);
+  if (!url || !url.startsWith(BIREFNET)) throw httpError(502, 'BiRefNet returned no image');
+  const img = await fetch(url, { headers: auth, signal: AbortSignal.timeout(20000) });
+  const out = Buffer.from(await img.arrayBuffer());
+  if (img.ok && out.subarray(1, 4).toString() === 'PNG') return out;
+  throw httpError(502, 'BiRefNet returned an invalid image');
+}
+
+async function clearBackdrop(src) {
   const key = process.env.CLEARBACKDROP_API_KEY;
   if (!key) throw httpError(503, 'CLEARBACKDROP_API_KEY is not configured');
   const { buf, type } = await loadSource(src);
@@ -176,7 +219,7 @@ module.exports = handler('POST', async (req, res) => {
     const b = await readJson(req);
     if (!b.url || typeof b.url !== 'string') throw httpError(400, 'url required');
     if (!/^(https?:\/\/|data:image\/)/i.test(b.url)) throw httpError(400, 'invalid url');
-    const png = await removeBg(b.url);
+    const png = await removeBg(b.url, ['clearbackdrop', 'birefnet'].includes(b.engine) ? b.engine : '');
     return send(res, 200, png, { 'content-type': 'image/png', 'cache-control': 'private, max-age=3600' });
   }
 

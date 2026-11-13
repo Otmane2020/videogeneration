@@ -1021,11 +1021,20 @@ function makeRenderer(cv, job) {
   const colorSlot = (sc, local) => { const t0 = sc.dur * 0.2, n = sc.colors.length, per = (sc.dur - t0) / n; return { t0, per, i: local < t0 ? -1 : Math.min(n - 1, Math.floor((local - t0) / per)) }; };
   function colorsBg(sc, k) {
     const local = k * sc.dur, { t0, per, i } = colorSlot(sc, local), n = sc.colors.length, cur = Math.max(0, i);
+    // coloris détouré par l'API : décor studio, le produit est posé dessus au premier plan (colorsProduct)
+    if (sc.colors[cur].ph.cut) return studio(k, k * sc.dur);
     const f = i < 0 ? clamp(local / Math.max(0.1, t0)) * 0.5 : clamp((local - t0 - i * per) / per);
     const frame = { variant: 0 };
     framed(frame, sc.colors[cur].ph, f, false);
     const fade = i >= 0 && i < n - 1 ? clamp((local - t0 - (i + 1) * per + 0.28) / 0.28) : 0;
     if (fade > 0) { ctx.save(); ctx.globalAlpha = fade; framed(frame, sc.colors[i + 1].ph, 0, false); ctx.restore(); }
+  }
+  function colorsProduct(sc, local, box) {
+    const { t0, per, i } = colorSlot(sc, local), c = sc.colors[Math.max(0, i)];
+    if (!c.ph.cut) return;
+    // chaque coloris arrive avec sa petite animation d'entrée, au rythme des pastilles
+    // même taille pour tous les coloris : un produit coupé par sa photo descend du haut et s'efface en bas (mode écran final)
+    product(c.ph, box, i < 0 ? local : local - t0 - i * per + 0.15, clamp(local / sc.dur), true);
   }
   function colorsRow(sc, local, top) {
     const n = sc.colors.length, { t0, per, i } = colorSlot(sc, local), appear = backOut((local - 0.15) / 0.5);
@@ -1377,7 +1386,7 @@ function makeRenderer(cv, job) {
     if (stage) iconStage(sc, local, box);
     if (row) iconStage(sc, local, { ...box, h: rowH }, true);
     if (sc.iconImg) proIcon(sc, local, top);
-    if (sc.colors) colorsRow(sc, local, top);
+    if (sc.colors) { colorsProduct(sc, local, box); colorsRow(sc, local, top); }
     if (onDecor) product(ph, box, local, k);
     if (plan.type === 'ecom' && plan.offer) saleSticker(sc, local);
 
@@ -1957,11 +1966,49 @@ async function produce(actx) {
 
     // photos produit : détourage quand le fond est uni, sinon la photo est utilisée telle quelle
     const byId = new Map();
-    // détourage par modèle de segmentation (dans le navigateur) ; en cas d'échec, méthode par couleur
     const kinds = new Map(plan.photos.map((p) => [p.index, p.kind]));
-    // seules les photos montrées « en vedette » sont détourées (le calcul prend quelques secondes par photo)
+    // Photos détourées par l'API : celles des scènes « produit », le meilleur packshot et chaque coloris de la scène
+    // « coloris » (tout le produit sur le même décor). Les gros plans gardent leur photo (on y zoome sur une matière).
     const hero = new Set(scenes.filter((x) => x.visual === 'product').map((x) => x.photo));
     hero.add(photoIds.find((i) => kinds.get(i) === 'packshot') ?? photoIds[0]);
+    scenes.forEach((x) => (x.colors || []).forEach((c) => hero.add(c.idx)));
+    const cutOne = async (img, id) => {
+      let srcUrl = state.photoSources?.[id];
+      if (!/^https?:/i.test(srcUrl || '')) {
+        // photo importée par l'utilisateur : envoyée à l'API en JPEG (1600 px au plus)
+        try {
+          const k2 = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c3 = Object.assign(document.createElement('canvas'), { width: Math.round(img.naturalWidth * k2), height: Math.round(img.naturalHeight * k2) });
+          const g3 = c3.getContext('2d'); g3.fillStyle = '#fff'; g3.fillRect(0, 0, c3.width, c3.height); g3.drawImage(img, 0, 0, c3.width, c3.height);
+          srcUrl = c3.toDataURL('image/jpeg', 0.86);
+        } catch { srcUrl = ''; }
+      }
+      const cut = srcUrl
+        ? await api('/api/backdrop?a=removebg', { url: srcUrl })
+            .then(async (r) => {
+              if (!r.ok) throw new Error(r.status);
+              const bUrl = URL.createObjectURL(await r.blob());
+              const bImg = await loadImage(bUrl).finally(() => URL.revokeObjectURL(bUrl));
+              const cv2 = Object.assign(document.createElement('canvas'), { width: bImg.naturalWidth, height: bImg.naturalHeight });
+              const g2 = cv2.getContext('2d', { willReadFrequently: true });
+              g2.drawImage(bImg, 0, 0);
+              const d2 = g2.getImageData(0, 0, cv2.width, cv2.height).data, w2 = cv2.width, h2 = cv2.height;
+              // rogné aux contours opaques ; un résultat presque vide est ignoré
+              let x0 = w2, y0 = h2, x1 = 0, y1 = 0, on = 0, seen = 0;
+              for (let y = 0; y < h2; y += 2) for (let x = 0; x < w2; x += 2) {
+                seen++;
+                if (d2[(y * w2 + x) * 4 + 3] > 40) { on++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+              }
+              if (x1 - x0 < 20 || y1 - y0 < 20 || on < seen * 0.01) return null;
+              const out2 = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 1, height: y1 - y0 + 1 });
+              out2.getContext('2d').drawImage(cv2, x0, y0, out2.width, out2.height, 0, 0, out2.width, out2.height);
+              out2.box = [x0 / w2, y0 / h2, (x1 + 1) / w2, (y1 + 1) / h2];
+              return out2;
+            })
+            .catch((e) => { console.warn('background removal API unavailable', e); return null; })
+        : null;
+      return cut;
+    };
+    const pending = [];
     for (let n = 0; n < photos.length; n++) {
       const img = photos[n], id = photoIds[n], key = 'cut' + state.photoUrls[id];
       if (!img) continue;
@@ -1969,47 +2016,19 @@ async function produce(actx) {
       if (!hero.has(id)) { byId.set(id, cache[key] || { img, cut: null, info }); continue; }
       // photo d'ambiance (produit porté, main, décor) : on la garde entière, un détourage y laisserait des morceaux de bras ou de décor
       if (!cache[key] && info && !info.plain) cache[key] = { img, cut: null, info };
-      if (!cache[key]) {
-        status('Cutting out your product…');
-        // Détourage par API uniquement (ClearBackdrop → Clipdrop → remove.bg côté serveur). Pas de repli dans le navigateur :
-        // sans résultat de l'API, la photo reste entière et cadrée proprement.
-        let srcUrl = state.photoSources?.[id];
-        if (!/^https?:/i.test(srcUrl || '')) {
-          // photo importée par l'utilisateur : envoyée à l'API en JPEG (1600 px au plus)
-          try {
-            const k2 = Math.min(1, 1600 / Math.max(img.naturalWidth, img.naturalHeight)), c3 = Object.assign(document.createElement('canvas'), { width: Math.round(img.naturalWidth * k2), height: Math.round(img.naturalHeight * k2) });
-            const g3 = c3.getContext('2d'); g3.fillStyle = '#fff'; g3.fillRect(0, 0, c3.width, c3.height); g3.drawImage(img, 0, 0, c3.width, c3.height);
-            srcUrl = c3.toDataURL('image/jpeg', 0.86);
-          } catch { srcUrl = ''; }
-        }
-        const cut = srcUrl
-          ? await api('/api/backdrop?a=removebg', { url: srcUrl })
-              .then(async (r) => {
-                if (!r.ok) throw new Error(r.status);
-                const bUrl = URL.createObjectURL(await r.blob());
-                const bImg = await loadImage(bUrl).finally(() => URL.revokeObjectURL(bUrl));
-                const cv2 = Object.assign(document.createElement('canvas'), { width: bImg.naturalWidth, height: bImg.naturalHeight });
-                const g2 = cv2.getContext('2d', { willReadFrequently: true });
-                g2.drawImage(bImg, 0, 0);
-                const d2 = g2.getImageData(0, 0, cv2.width, cv2.height).data, w2 = cv2.width, h2 = cv2.height;
-                // rogné aux contours opaques ; un résultat presque vide est ignoré
-                let x0 = w2, y0 = h2, x1 = 0, y1 = 0, on = 0, seen = 0;
-                for (let y = 0; y < h2; y += 2) for (let x = 0; x < w2; x += 2) {
-                  seen++;
-                  if (d2[(y * w2 + x) * 4 + 3] > 40) { on++; if (x < x0) x0 = x; if (x > x1) x1 = x; if (y < y0) y0 = y; if (y > y1) y1 = y; }
-                }
-                if (x1 - x0 < 20 || y1 - y0 < 20 || on < seen * 0.01) return null;
-                const out2 = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 1, height: y1 - y0 + 1 });
-                out2.getContext('2d').drawImage(cv2, x0, y0, out2.width, out2.height, 0, 0, out2.width, out2.height);
-                out2.box = [x0 / w2, y0 / h2, (x1 + 1) / w2, (y1 + 1) / h2];
-                return out2;
-              })
-              .catch((e) => { console.warn('background removal API unavailable', e); return null; })
-          : null;
-        if (job.cancelled) return;
+      if (cache[key]) { byId.set(id, cache[key]); continue; }
+      pending.push({ img, id, key, info });
+    }
+    // Détourage par API uniquement (ClearBackdrop → Clipdrop → remove.bg), 4 photos à la fois.
+    // Pas de repli dans le navigateur : sans résultat de l'API, la photo reste entière et cadrée proprement.
+    if (pending.length) status(`Removing the background of ${pending.length} photo${pending.length > 1 ? 's' : ''}…`);
+    for (let n = 0; n < pending.length; n += 4) {
+      await Promise.all(pending.slice(n, n + 4).map(async ({ img, id, key, info }) => {
+        const cut = await cutOne(img, id);
         cache[key] = { img, cut, info };
-      }
-      byId.set(id, cache[key]);
+        byId.set(id, cache[key]);
+      }));
+      if (job.cancelled) return;
     }
     const ready = [...byId.values()], best = ready.find((p) => p.cut) || ready[0] || null;
     // Meta Muse (option Pro) : deux images « produit en situation » générées en parallèle, l'accroche (plan héros)

@@ -2016,7 +2016,7 @@ async function produce(actx) {
       if (cache[key]) { byId.set(id, cache[key]); continue; }
       pending.push({ img, id, key, info });
     }
-    // Détourage par API uniquement (ClearBackdrop → Clipdrop → remove.bg), 4 photos à la fois.
+    // Détourage par l'API ClearBackdrop uniquement, 4 photos à la fois.
     // Pas de repli dans le navigateur : sans résultat de l'API, la photo reste entière et cadrée proprement.
     if (pending.length) status(`Removing the background of ${pending.length} photo${pending.length > 1 ? 's' : ''}…`);
     for (let n = 0; n < pending.length; n += 4) {

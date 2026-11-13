@@ -1,6 +1,6 @@
 // Deux actions :
 //   POST /api/backdrop           → génère un décor publicitaire (CF Workers AI gratuit ou OpenRouter payant)
-//   POST /api/backdrop?a=removebg → détourage serveur (ClearBackdrop, Clipdrop ou remove.bg)
+//   POST /api/backdrop?a=removebg → détourage serveur (ClearBackdrop uniquement)
 //
 // Le vrai produit détouré est toujours posé côté client par-dessus le décor,
 // donc sa forme, son logo et ses détails ne sont jamais altérés.
@@ -92,7 +92,7 @@ async function orBackdrop(prompt, ratio) {
 }
 
 // ─── Détourage serveur ────────────────────────────────────────────────────────
-// Chaîne : ClearBackdrop (80/jour gratuits) → Clipdrop (100/jour) → remove.bg (50/mois). Si tout échoue, le navigateur détoure lui-même.
+// ClearBackdrop uniquement. Sans résultat, la photo n'est pas détourée (pas de service de secours).
 // L'image est une adresse publique (récupérée sans jamais atteindre le réseau interne) ou une image envoyée en data URL.
 async function loadSource(src) {
   const m = /^data:(image\/(?:png|jpeg|webp));base64,([A-Za-z0-9+/=]+)$/.exec(src);
@@ -110,39 +110,19 @@ async function loadSource(src) {
   return { buf, type };
 }
 
-const PROVIDERS = [
-  ['ClearBackdrop', () => process.env.CLEARBACKDROP_API_KEY, ({ buf, type }, key) => {
-    const fd = new FormData();
-    fd.append('image', new Blob([buf], { type }), 'product.jpg');
-    return fetch('https://clearbackdrop.com/api/v1/remove-background', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
-  }],
-  ['Clipdrop', () => process.env.CLIPDROP_API_KEY, ({ buf, type }, key) => {
-    const fd = new FormData();
-    fd.append('image_file', new Blob([buf], { type }), 'product.jpg');
-    return fetch('https://clipdrop-api.co/remove-background/v1', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
-  }],
-  ['remove.bg', () => process.env.REMOVEBG_API_KEY, ({ buf, type }, key) => {
-    const fd = new FormData();
-    fd.append('image_file', new Blob([buf], { type }), 'product.jpg');
-    fd.append('size', 'auto'); fd.append('type', 'product'); fd.append('format', 'png');
-    return fetch('https://api.remove.bg/v1.0/removebg', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
-  }],
-];
-
+// Un seul service : ClearBackdrop. Aucun service de secours, aucun détourage dans le navigateur.
 async function removeBg(src) {
-  const on = PROVIDERS.filter(([, key]) => key());
-  if (!on.length) throw httpError(503, 'No background removal API key configured');
-  const img = await loadSource(src);
-  for (const [name, key, call] of on) {
-    try {
-      const r = await call(img, key());
-      const out = Buffer.from(await r.arrayBuffer());
-      // un vrai PNG uniquement (une page d'erreur ou un quota dépassé passe au fournisseur suivant)
-      if (r.ok && out.subarray(1, 4).toString() === 'PNG') return out;
-      console.warn(name, 'removebg', r.status, out.subarray(0, 120).toString('utf8').replace(/\s+/g, ' '));
-    } catch (e) { console.warn(name, 'removebg', e.message); }
-  }
-  throw httpError(502, 'Background removal unavailable');
+  const key = process.env.CLEARBACKDROP_API_KEY;
+  if (!key) throw httpError(503, 'CLEARBACKDROP_API_KEY is not configured');
+  const { buf, type } = await loadSource(src);
+  const fd = new FormData();
+  fd.append('image', new Blob([buf], { type }), 'product.jpg');
+  const r = await fetch('https://clearbackdrop.com/api/v1/remove-background', { method: 'POST', headers: { 'x-api-key': key }, body: fd, signal: AbortSignal.timeout(30000) });
+  const out = Buffer.from(await r.arrayBuffer());
+  // un vrai PNG uniquement : une page d'erreur ou un quota dépassé n'est jamais renvoyé comme image
+  if (r.ok && out.subarray(1, 4).toString() === 'PNG') return out;
+  console.warn('ClearBackdrop removebg', r.status, out.subarray(0, 120).toString('utf8').replace(/\s+/g, ' '));
+  throw httpError(502, 'ClearBackdrop could not remove the background');
 }
 
 // ─── Meta Muse Image via OpenRouter ───────────────────────────────────────────

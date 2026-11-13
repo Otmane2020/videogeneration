@@ -634,6 +634,58 @@ async function loadVoice(text, lang, voice) {
   return new Promise((ok, ko) => new OfflineAudioContext(1, 1, 48000).decodeAudioData(buf, ok, ko));
 }
 
+// Le détourage par API vide aussi les zones où le fond de la photo se voit À TRAVERS le produit (cadran squelette,
+// verre, ajours). Ces petites zones fermées reprennent les pixels de la photo d'origine : le produit reste tel qu'il
+// est photographié. Le nom du produit indique s'il a de vrais trous (bague, anse de sac, monture…) : on les garde alors.
+const REAL_HOLES = /\b(bagues?|rings?|anneaux?|alliances?|jonc|bangles?|cr[ée]oles?|hoops?|sacs?|bags?|handbags?|totes?|mugs?|tasses?|chaises?|chairs?|tabourets?|stools?|v[ée]los?|bikes?|lunettes?|glasses|sunglasses|ciseaux|scissors|cadres?|frames?|porte-cl[ée]s|keyrings?)\b/i;
+function fillHoles(cut, img, context) {
+  try {
+    const w = cut.width, h = cut.height, s = Math.min(1, 360 / Math.max(w, h));
+    const sw = Math.max(8, Math.round(w * s)), sh = Math.max(8, Math.round(h * s)), n = sw * sh;
+    const m = Object.assign(document.createElement('canvas'), { width: sw, height: sh }), mg = m.getContext('2d', { willReadFrequently: true });
+    mg.drawImage(cut, 0, 0, sw, sh);
+    const a = mg.getImageData(0, 0, sw, sh).data, clear = (i) => a[i * 4 + 3] < 128;
+    // transparent relié aux bords = vrai fond ; le reste du transparent = trous à l'intérieur du produit
+    const outside = new Uint8Array(n), stack = [];
+    for (let x = 0; x < sw; x++) for (const i of [x, (sh - 1) * sw + x]) if (clear(i) && !outside[i]) { outside[i] = 1; stack.push(i); }
+    for (let y = 0; y < sh; y++) for (const i of [y * sw, y * sw + sw - 1]) if (clear(i) && !outside[i]) { outside[i] = 1; stack.push(i); }
+    while (stack.length) {
+      const i = stack.pop(), x = i % sw;
+      for (const j of [i - sw, i + sw, x > 0 ? i - 1 : -1, x < sw - 1 ? i + 1 : -1]) if (j >= 0 && j < n && !outside[j] && clear(j)) { outside[j] = 1; stack.push(j); }
+    }
+    let opaque = 0;
+    for (let i = 0; i < n; i++) if (!clear(i)) opaque++;
+    const limit = opaque * (REAL_HOLES.test(context) ? 0.003 : 0.03), seen = new Uint8Array(n), fill = new ImageData(sw, sh);
+    let any = false;
+    for (let st = 0; st < n; st++) {
+      if (!clear(st) || outside[st] || seen[st]) continue;
+      const region = [st]; seen[st] = 1;
+      for (let k = 0; k < region.length; k++) {
+        const i = region[k], x = i % sw;
+        for (const j of [i - sw, i + sw, x > 0 ? i - 1 : -1, x < sw - 1 ? i + 1 : -1]) if (j >= 0 && j < n && !seen[j] && !outside[j] && clear(j)) { seen[j] = 1; region.push(j); }
+      }
+      if (region.length > limit) continue; // grande ouverture : un vrai vide du produit
+      any = true;
+      for (const i of region) fill.data[i * 4 + 3] = 255;
+    }
+    if (!any) return cut;
+    // pixels d'origine sous ces zones (masque agrandi en douceur), posés derrière le détourage
+    const mk = Object.assign(document.createElement('canvas'), { width: sw, height: sh });
+    mk.getContext('2d').putImageData(fill, 0, 0);
+    const iw = img.naturalWidth, ih = img.naturalHeight, [bx0, by0, bx1, by1] = cut.box;
+    const patch = Object.assign(document.createElement('canvas'), { width: w, height: h }), pg = patch.getContext('2d');
+    pg.drawImage(img, bx0 * iw, by0 * ih, (bx1 - bx0) * iw, (by1 - by0) * ih, 0, 0, w, h);
+    pg.globalCompositeOperation = 'destination-in';
+    pg.imageSmoothingQuality = 'high';
+    pg.drawImage(mk, 0, 0, w, h);
+    const cg = cut.getContext('2d');
+    cg.globalCompositeOperation = 'destination-over';
+    cg.drawImage(patch, 0, 0);
+    cg.globalCompositeOperation = 'source-over';
+    return cut;
+  } catch (e) { console.warn('hole filling skipped', e); return cut; }
+}
+
 // Lecture d'une photo produit à petite échelle : couleur et uniformité du fond, emprise du produit,
 // bords de l'image qu'il touche, et zones riches en détails (cadran, logo, couture…) pour viser les gros plans.
 function photoInfo(img) {
@@ -1999,7 +2051,7 @@ async function produce(actx) {
               const out2 = Object.assign(document.createElement('canvas'), { width: x1 - x0 + 1, height: y1 - y0 + 1 });
               out2.getContext('2d').drawImage(cv2, x0, y0, out2.width, out2.height, 0, 0, out2.width, out2.height);
               out2.box = [x0 / w2, y0 / h2, (x1 + 1) / w2, (y1 + 1) / h2];
-              return out2;
+              return fillHoles(out2, img, `${page.product?.name || page.title || ''} ${plan.category || ''}`);
             })
             .catch((e) => { console.warn('background removal API unavailable', e); return null; })
         : null;

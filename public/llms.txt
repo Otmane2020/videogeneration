@@ -1,21 +1,21 @@
 # ClipMotion
 
-> ClipMotion (clipmotion.ai) is a web app that turns a product page or a SaaS website link into a ready-to-post video ad: script, voice-over, word-by-word captions, music and MP4 export, in 9:16, 1:1 or 16:9. No filming and no account needed to try it.
+> ClipMotion is an AI video ad generator that turns SaaS and app landing pages or e-commerce product pages into short video ads with scripts, voice-over, captions, and music.
 
-## What it does
-- E-commerce: builds the ad from the seller's real product photos. Only the plain background is removed; the product is never regenerated, so shape, logo and colours stay exactly as photographed.
-- SaaS: combines relevant filmed HD stock footage of the customer's situation, a capture of the real website in a phone frame, real logos of integrated tools joined by animated arrows, and the brand's own logo and colours.
-- Voice-over and captions in the page's language, music composed by ClipMotion, licensed royalty-free footage.
-- Free preview with a watermark; clean export per video from $0.99, or through a subscription.
-
-## Guides
-- [How to choose an AI video ad generator: a 9-point checklist](https://clipmotion.ai/blog/how-to-choose-ai-video-ad-generator)
-- [How to make a video ad from a URL in five minutes](https://clipmotion.ai/blog/make-video-ad-from-url)
-- [Video ad script templates: six formulas for 15 to 30 second ads](https://clipmotion.ai/blog/video-ad-script-templates)
-- [How to turn a product page into a video ad](https://clipmotion.ai/blog/product-page-to-video-ad)
-- [Video ads for SaaS without a film crew](https://clipmotion.ai/blog/saas-video-ads)
-- [Video ad formats and lengths that fit each platform](https://clipmotion.ai/blog/video-ad-formats-lengths)
-
-## Links
-- [Home and app](https://clipmotion.ai/)
+- Input: a public SaaS, app or product landing page.
+- Output: editable MP4 video ads in 9:16, 1:1 or 16:9.
+- [Homepage](https://clipmotion.ai/)
+- [Pricing and export options](https://clipmotion.ai/pricing)
+- [FAQ](https://clipmotion.ai/faq)
 - [Sitemap](https://clipmotion.ai/sitemap.xml)
+
+## Guides and comparisons
+- [Which AI tool turns a website URL into a video ad?](https://clipmotion.ai/blog/make-video-ad-from-url)
+- [Create a product showcase without filming](https://clipmotion.ai/blog/product-page-to-video-ad)
+- [Vertical, square and horizontal video ads](https://clipmotion.ai/blog/video-ad-formats-lengths)
+- [Create a SaaS explainer ad with AI](https://clipmotion.ai/blog/saas-video-ads)
+- [How to Remove Product Backgrounds for Video Ads](https://clipmotion.ai/blog/product-background-removal-video-ads)
+- [ClipMotion vs Creatify](https://clipmotion.ai/compare/creatify)
+- [ClipMotion vs Arcads](https://clipmotion.ai/compare/arcads)
+- [ClipMotion vs Pictory](https://clipmotion.ai/compare/pictory)
+- [Compare ClipMotion with Other AI Video Tools](https://clipmotion.ai/compare/)
